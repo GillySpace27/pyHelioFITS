@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "heliad"
+version = "0.0.1"
+description = "Find solar data, download it and keep it in one library."
+requires-python = ">=3.10"
+dependencies = ["astropy>=6", "numpy"]
+
+[project.optional-dependencies]
+archives = ["sunpy[net]>=6", "drms"]
+test = ["pytest"]
+
+[project.scripts]
+heliad = "heliad.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
