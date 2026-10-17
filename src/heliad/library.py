@@ -11,6 +11,7 @@ import json
 import os
 import shutil
 import stat
+import sys
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -36,6 +37,24 @@ def sha256_of(path: Path, chunk: int = 1 << 20) -> str:
         while block := fh.read(chunk):
             digest.update(block)
     return digest.hexdigest()
+
+
+def clone_or_copy(src: Path, dst: Path) -> str:
+    """Copy a file, as an APFS clone when the platform allows it.
+
+    A clone shares the source's blocks until either file changes, so importing an
+    80 GB event folder costs no extra disk. Returns "clone" or "copy".
+    """
+    if sys.platform == "darwin":
+        try:
+            import ctypes
+            libc = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True)
+            if libc.clonefile(os.fsencode(src), os.fsencode(dst), 0) == 0:
+                return "clone"
+        except (OSError, AttributeError):
+            pass
+    shutil.copyfile(src, dst)
+    return "copy"
 
 
 class LibraryLocked(RuntimeError):
@@ -193,10 +212,11 @@ class Library:
             dest = self.root / relpath
             dest.parent.mkdir(parents=True, exist_ok=True)
             tmp = dest.with_name(dest.name + ".part")
+            tmp.unlink(missing_ok=True)
             if consume:
                 shutil.move(str(path), tmp)
             else:
-                shutil.copyfile(path, tmp)
+                clone_or_copy(path, tmp)
             os.chmod(tmp, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
             os.replace(tmp, dest)
 
