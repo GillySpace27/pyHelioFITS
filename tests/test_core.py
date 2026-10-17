@@ -16,7 +16,7 @@ def test_ingest_aia_lands_once_read_only(lib, src):
     r = lib.ingest(path)
     assert r.status == "added"
     stored = lib.abspath(r.relpath)
-    assert r.relpath.startswith("store/sdo/aia-3/1/193/2025/09/21/")
+    assert r.relpath.startswith("store/sdo/aia/1/193/2025/09/21/")
     assert not os.stat(stored).st_mode & stat.S_IWUSR
     assert path.exists()  # copied, the user's file is untouched
     assert [f for f in r.findings if f.severity != "info"] == []
@@ -24,7 +24,7 @@ def test_ingest_aia_lands_once_read_only(lib, src):
     assert again.status == "duplicate" and again.file_id == r.file_id
     assert lib.stats()["files"] == 1
     (d,) = lib.datasets()
-    assert d["label"] == "SDO AIA_3 193 Å L1"
+    assert d["label"] == "SDO AIA 193 Å L1"
 
 
 def test_versions_are_one_observation_newest_current(lib, src):
@@ -161,3 +161,35 @@ def test_rpc(lib, src):
     assert by_id[4]["error"]["code"] == -32601
     assert by_id[5]["error"]["code"] == -32602
     assert by_id[None]["error"]["code"] == -32700
+
+
+def test_unparsable_card_is_repaired_and_reported(lib, src):
+    # JSOC AIA level 1 files carry OSCNMEAN = nan, which astropy refuses to parse.
+    path = write_fits(src / "aia.lev1.193A_2025_09_21T16_01_04.84Z.image_lev1.fits",
+                      aia_header(date="2025-09-21T16:01:04.84", OSCNMEAN=0.0))
+    raw = path.read_bytes()
+    card = b"OSCNMEAN= " + b"0.0".rjust(20)
+    assert card in raw
+    path.write_bytes(raw.replace(card, b"OSCNMEAN= " + b"nan".rjust(20)))
+    r = lib.ingest(path)
+    assert r.status == "added"
+    assert [f.code for f in r.findings if f.severity == "warning"] == ["unparsable_card"]
+
+
+def test_detector_repeating_the_mission_does_not_split_a_dataset(src):
+    with_det = write_fits(src / "PUNCH_L3_CTM_20250921170000_v0l.fits", punch_header(DETECTOR="PUNCH"))
+    without = write_fits(src / "PUNCH_L3_CTM_20250921171600_v0k.fits",
+                         punch_header(date="2025-09-21T17:16:00.000", version="0k"))
+    assert fitsmeta.read(with_det).dataset_key == fitsmeta.read(without).dataset_key
+
+
+def test_aspiics_products_are_separate_datasets(src):
+    base = {"OBSRVTRY": "Proba-3", "INSTRUME": "ASPIICS", "DETECTOR": "ASPIICS", "LEVEL": "L3",
+            "WAVELNTH": 5513, "WAVEUNIT": "Angstrom", "DATE-OBS": "2025-09-21T18:20:34.056"}
+    pb = write_fits(src / "aspiics_pb_l3_20250921T182034_163060040001_v03.fits",
+                    {**base, "BTYPE": "Polarized brightness"})
+    pa = write_fits(src / "aspiics_pa_l3_20250921T182034_163060040001_v03.fits",
+                    {**base, "BTYPE": "Polarization angle"})
+    a, b = fitsmeta.read(pb), fitsmeta.read(pa)
+    assert a.obs_key != b.obs_key
+    assert a.label == "Proba-3 ASPIICS 5513 Å Polarized brightness L3"
