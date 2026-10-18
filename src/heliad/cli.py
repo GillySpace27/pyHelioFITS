@@ -5,6 +5,7 @@
     heliad stats | datasets | collisions
     heliad files [--dataset KEY] [--start T] [--end T]
     heliad versions OBSERVATION_ID
+    heliad thumb FILE_ID [--size N]  path of a PNG preview, made on first request
     heliad verify
     heliad view create NAME [--dataset KEY ...] [--start T] [--end T]
     heliad view build NAME | rebuild
@@ -31,7 +32,7 @@ from . import config, jobs, views
 from .library import Library
 from .query import Query
 
-READ_ONLY = {"stats", "datasets", "files", "verify", "collisions", "versions", "jobs"}
+READ_ONLY = {"stats", "datasets", "files", "verify", "collisions", "versions", "jobs", "thumb"}
 NO_LIBRARY = {"search", "settings"}
 
 
@@ -80,8 +81,11 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("collisions")
     p = sub.add_parser("versions")
     p.add_argument("observation_id", type=int)
+    p = sub.add_parser("thumb")
+    p.add_argument("file_id", type=int)
+    p.add_argument("--size", type=int, default=256)
     p = sub.add_parser("jobs")
-    p.add_argument("--status", choices=["queued", "active", "done", "failed", "cancelled"])
+    p.add_argument("--status", choices=["queued", "active", "done", "partial", "failed", "cancelled"])
     p.add_argument("--limit", type=int, default=50)
     p = sub.add_parser("reindex")
     p.add_argument("--dry-run", action="store_true")
@@ -171,6 +175,8 @@ def _run(lib: Library, ns) -> int:
         _print(lib.collisions())
     elif ns.cmd == "versions":
         _print(lib.versions(ns.observation_id))
+    elif ns.cmd == "thumb":
+        print(lib.thumbnail(ns.file_id, ns.size))
     elif ns.cmd == "jobs":
         _print(jobs.list_jobs(lib, status=ns.status, limit=ns.limit))
     elif ns.cmd == "reindex":

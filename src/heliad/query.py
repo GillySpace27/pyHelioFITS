@@ -8,7 +8,12 @@ to_fido() rebuilds the sunpy search from it whenever it is needed.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
+from urllib.parse import parse_qsl, urlencode, urlsplit
+
+URL_SCHEME = "heliad"
+URL_ACTIONS = ("search", "get")  # open the app's search filled in, or also start the download
+_NUMBERS = {"wavelength", "wavelength_max", "sample_s"}
 
 
 @dataclass(frozen=True)
@@ -36,6 +41,38 @@ class Query:
     def from_json(cls, text: str | dict) -> "Query":
         data = json.loads(text) if isinstance(text, str) else dict(text)
         return cls(**data)
+
+    def to_url(self, action: str = "search") -> str:
+        """A heliad:// link to this query, which Studio opens to hand a search to the app:
+        heliad://search?start=2025-09-21T16:00:00&end=...&instrument=AIA&wavelength=193"""
+        if action not in URL_ACTIONS:
+            raise ValueError(f"action must be one of {URL_ACTIONS}")
+        data = json.loads(self.to_json())
+        if data.pop("extra", None):
+            raise ValueError("a query with extra attributes has no heliad:// form")
+        return f"{URL_SCHEME}://{action}?{urlencode(sorted((k, _plain(v)) for k, v in data.items()))}"
+
+    @classmethod
+    def from_url(cls, url: str) -> tuple[str, "Query"]:
+        """The action and query in a heliad:// link. Unknown parameters are refused, not dropped."""
+        parts = urlsplit(url)
+        if parts.scheme != URL_SCHEME:
+            raise ValueError(f"not a {URL_SCHEME}:// link: {url!r}")
+        action = parts.netloc or parts.path.strip("/")
+        if action not in URL_ACTIONS:
+            raise ValueError(f"unknown action {action!r} (known: {', '.join(URL_ACTIONS)})")
+        known = {f.name for f in fields(cls)} - {"extra"}
+        data: dict = {}
+        for key, value in parse_qsl(parts.query, keep_blank_values=False, strict_parsing=False):
+            if key not in known:
+                raise ValueError(f"unknown query parameter {key!r}")
+            if key in data:
+                raise ValueError(f"{key!r} given twice")
+            data[key] = float(value) if key in _NUMBERS else value
+        for key in ("start", "end"):
+            if key not in data:
+                raise ValueError(f"a heliad:// link needs {key}")
+        return action, cls(**data)
 
     def to_fido(self, email: str | None = None) -> list:
         """The sunpy attrs for Fido.search(*query.to_fido()). Imports sunpy lazily.
@@ -69,3 +106,10 @@ class Query:
             if email:
                 attrs.append(a.jsoc.Notify(email))
         return attrs
+
+
+def _plain(value) -> str:
+    """Numbers as written by a person: 193.0 becomes 193."""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)

@@ -56,6 +56,8 @@ class Server:
             "download.get": lambda job_id: next(iter(jobs.list_jobs(lib, job_id=job_id)), None),
             "download.cancel": lambda job_id: self._jobs().cancel(job_id),
             "download.retry": lambda job_id: self._jobs().retry(job_id),
+            "library.thumbnail": lambda file_id, size=256: {"path": str(lib.thumbnail(file_id, size))},
+            "query.from_url": self.query_from_url,
             "settings.get": lambda: config.load_settings(),
             "settings.set": lambda key, value=None: config.save_setting(key, value),
             "ingest.path": self.ingest_path,
@@ -150,6 +152,13 @@ class Server:
     def search(self, query: dict, source: str = "fido") -> dict:
         from . import sources  # sunpy and drms are optional; imported only when searching
         return sources.get(source).search(Query.from_json(query), settings=config.load_settings())
+
+    def query_from_url(self, url: str) -> dict:
+        try:
+            action, q = Query.from_url(url)
+        except ValueError as exc:
+            raise RpcError(INVALID_PARAMS, str(exc))
+        return {"action": action, "query": json.loads(q.to_json())}
 
     def _jobs(self) -> jobs.JobRunner:
         if self.jobs is None:
