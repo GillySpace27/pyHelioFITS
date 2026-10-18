@@ -24,6 +24,7 @@ class Query:
     level: str | None = None
     physobs: str | None = None
     sample_s: float | None = None    # cadence; one record per this many seconds
+    jsoc_series: str | None = None   # e.g. "aia.lev1_euv_12s"; JSOC export instead of VSO
     extra: dict = field(default_factory=dict)
 
     def to_json(self) -> str:
@@ -36,8 +37,12 @@ class Query:
         data = json.loads(text) if isinstance(text, str) else dict(text)
         return cls(**data)
 
-    def to_fido(self) -> list:
-        """The sunpy attrs for Fido.search(*query.to_fido()). Imports sunpy lazily."""
+    def to_fido(self, email: str | None = None) -> list:
+        """The sunpy attrs for Fido.search(*query.to_fido()). Imports sunpy lazily.
+
+        A JSOC series sends the search to sunpy's JSOC client, which needs the
+        email address registered with JSOC for the export.
+        """
         import astropy.units as u
         from sunpy.net import attrs as a
 
@@ -59,4 +64,8 @@ class Query:
             attrs.append(a.Physobs(self.physobs))
         if self.sample_s:
             attrs.append(a.Sample(self.sample_s * u.s))
+        if self.jsoc_series:
+            attrs.append(a.jsoc.Series(self.jsoc_series))
+            if email:
+                attrs.append(a.jsoc.Notify(email))
         return attrs

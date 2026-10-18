@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..library import Library, is_fits
+from ..library import is_fits
 from ..query import Query
 
 
@@ -22,10 +22,10 @@ def _jsonable(value):
     return str(value)
 
 
-def search(query: Query, limit: int = 2000) -> dict:
+def search(query: Query, *, settings: dict | None = None, limit: int = 2000) -> dict:
     from sunpy.net import Fido
 
-    result = Fido.search(*query.to_fido())
+    result = Fido.search(*query.to_fido((settings or {}).get("jsoc_email")))
     providers = []
     for block in result:
         rows = []
@@ -41,25 +41,20 @@ def search(query: Query, limit: int = 2000) -> dict:
             "providers": providers}
 
 
-def download(lib: Library, query: Query, *, progress=None, max_conn: int = 4) -> dict:
-    """Search, fetch into the staging area, ingest everything that arrived.
+def fetch(query: Query, staging: Path, *, settings: dict, phase, max_conn: int = 4) -> dict:
+    """Search, then fetch every result into staging.
 
-    Resumes at file level: Fido skips files already complete in staging, and a
-    file already in the library by checksum is dropped as a duplicate.
+    Fido skips files already complete in staging (overwrite=False), so a job
+    that is run again after an interruption fetches only what is missing. The
+    fetch itself is one call and cannot be interrupted part way.
     """
     from sunpy.net import Fido
 
-    staging = lib.cfg.staging_dir / "fido"
-    staging.mkdir(parents=True, exist_ok=True)
-    result = Fido.search(*query.to_fido())
+    phase("searching")
+    result = Fido.search(*query.to_fido(settings.get("jsoc_email")))
+    found = getattr(result, "file_num", None)
+    phase("fetching", 0, found)
     fetched = Fido.fetch(result, path=str(staging / "{file}"), overwrite=False,
                          max_conn=max_conn, progress=False)
-    counts: dict[str, int] = {}
-    paths = [Path(p) for p in fetched if is_fits(Path(p))]
-    for i, p in enumerate(paths, 1):
-        r = lib.ingest(p, consume=True, query=query, source="fido")
-        counts[r.status] = counts.get(r.status, 0) + 1
-        if progress:
-            progress(i, len(paths), p)
-    return {"found": getattr(result, "file_num", None), "fetched": len(fetched),
-            "errors": [str(e) for e in fetched.errors], "ingest": counts}
+    return {"found": found, "paths": [Path(p) for p in fetched if is_fits(Path(p))],
+            "errors": [str(e) for e in fetched.errors], "urls": {}}
