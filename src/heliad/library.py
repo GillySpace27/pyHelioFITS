@@ -413,7 +413,7 @@ class Library:
         return [dict(r) for r in rows]
 
     def current_files(self, *, dataset_key: str | None = None, start: str | None = None,
-                      end: str | None = None, limit: int | None = None) -> list[dict]:
+                      end: str | None = None, limit: int | None = None, offset: int = 0) -> list[dict]:
         sql, args = "SELECT * FROM current_files WHERE 1 = 1", []
         if dataset_key:
             sql += " AND dataset_key = ?"
@@ -424,9 +424,9 @@ class Library:
         if end:
             sql += " AND date_obs <= ?"
             args.append(end)
-        sql += " ORDER BY date_obs"
+        sql += " ORDER BY date_obs, file_id"
         if limit:
-            sql += f" LIMIT {int(limit)}"
+            sql += f" LIMIT {int(limit)} OFFSET {max(0, int(offset))}"
         return [dict(r) for r in self.reader.execute(sql, args).fetchall()]
 
     def checks_for(self, file_id: int) -> list[dict]:

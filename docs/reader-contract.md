@@ -65,9 +65,11 @@ left unable to get data.
    Studio's existing download buttons are unchanged. With no library, the dialog is
    exactly as it is today.
 2. **When the Heliad app ships:** the dialog shows "Open in Heliad" only when the app
-   is installed. How Studio detects it (a bundle id lookup, or an entry the app adds
-   to `config.json`) is decided when the app is built; nothing in this contract
-   depends on it yet.
+   is installed. The app's bundle id is `io.github.gillyspace27.heliad`, and it handles
+   `heliad://search?...` and `heliad://get?...` links whose parameters are the query's
+   fields (`start`, `end`, `instrument`, `wavelength`, `sample_s`, ...; see
+   `Query.to_url`). Studio opens such a link to hand a search to the app; a `get` link
+   shows the search with a Download button rather than downloading unasked.
 3. **Last:** Studio's download buttons are removed once the app is installed and
    detected, so every search, download and delete goes through Heliad.
 

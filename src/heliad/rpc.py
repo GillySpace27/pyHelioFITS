@@ -2,10 +2,13 @@
 
 This is how the Mac app (and anything else) asks the core to act. One request
 per line in, one response per line out; progress arrives as notifications
-(a "method" and no "id"). The core answers requests one at a time; downloads
-run on a worker thread (see jobs.py), so download.enqueue returns at once and
-the job reports through download.progress and download.finished. Every write,
-from either thread, goes through the Library's one writer connection.
+(a "method" and no "id"). The core answers requests in order, except the slow
+ones in BACKGROUND (an archive search, rendering a thumbnail), which run on a
+small pool and answer when done, so replies can arrive out of order: match
+them by id. Downloads run on a worker thread (see jobs.py), so
+download.enqueue returns at once and the job reports through
+download.progress and download.finished. Every write, from any thread, goes
+through the Library's one writer connection.
 
 Methods are listed in Server.methods; each takes named params.
 """
@@ -16,6 +19,7 @@ import json
 import sys
 import threading
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, TextIO
 
 from . import __version__, config, db, fitsmeta, jobs, views
@@ -25,6 +29,10 @@ from .query import Query
 PARSE_ERROR, INVALID_REQUEST, METHOD_NOT_FOUND, INVALID_PARAMS, INTERNAL_ERROR = (
     -32700, -32600, -32601, -32602, -32603,
 )
+
+# Methods slow enough that answering them in order would stall the app; none of
+# them writes to the index.
+BACKGROUND = frozenset({"search", "library.thumbnail"})
 
 
 class RpcError(Exception):
@@ -39,12 +47,13 @@ class Server:
         self.out = out
         self._out_lock = threading.Lock()
         self.jobs = None if lib.readonly else jobs.JobRunner(lib, notify=self.notify)
+        self._pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix="heliad-rpc")
         self.methods: dict[str, Callable[..., Any]] = {
             "heliad.hello": self.hello,
             "library.stats": lambda: lib.stats(),
             "library.datasets": lambda: lib.datasets(),
-            "library.files": lambda dataset_key=None, start=None, end=None, limit=500:
-                lib.current_files(dataset_key=dataset_key, start=start, end=end, limit=limit),
+            "library.files": lambda dataset_key=None, start=None, end=None, limit=500, offset=0:
+                lib.current_files(dataset_key=dataset_key, start=start, end=end, limit=limit, offset=offset),
             "library.checks": lambda file_id: lib.checks_for(file_id),
             "library.verify": lambda: lib.verify(),
             "library.versions": lambda observation_id: lib.versions(observation_id),
@@ -95,6 +104,17 @@ class Server:
         params = request.get("params") or {}
         if not isinstance(params, dict):
             return _error(rid, INVALID_PARAMS, "params must be an object of named parameters")
+        if request["method"] in BACKGROUND:
+            self._pool.submit(self._answer_later, rid, method, params)
+            return None
+        return self._call(rid, method, params)
+
+    def _answer_later(self, rid, method, params) -> None:
+        reply = self._call(rid, method, params)
+        if reply is not None:
+            self.send(reply)
+
+    def _call(self, rid, method, params) -> dict | None:
         try:
             result = method(**params)
         except TypeError as exc:
@@ -120,6 +140,7 @@ class Server:
                 if reply is not None:
                     self.send(reply)
         finally:
+            self._pool.shutdown(wait=True)  # answer what was asked before input ended
             if self.jobs is not None:
                 self.jobs.stop(timeout=5)
 
