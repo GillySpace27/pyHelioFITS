@@ -19,5 +19,20 @@ be given on the command line for one run: `Heliad -corePath PATH -libraryPath DI
 saves a picture of each into DIR and writes DIR/report.json, for checking a build with
 no one at the screen.
 
+## Packaging
+
+    tools/bundle_python.sh      # build/python: a standalone CPython 3.12 with heliad[archives]
+    PYTHON_DIR=build/python SIGN_IDENTITY="Developer ID Application: ..." tools/make_app.sh
+
+The first run on Gilly's Mac (2026-10-18) gave a 213 MB app (68 MB zipped) with 116
+signatures: 115 Mach-O files in the Python, then the app, all with the hardened runtime and
+a timestamp. Under the hardened runtime with no entitlements the bundled core searched VSO
+and stored a real AIA file, and the self-test passed. Not yet notarized. To notarize, with a
+notarytool keychain profile:
+
+    ditto -c -k --keepParent build/Heliad.app build/Heliad.zip
+    xcrun notarytool submit build/Heliad.zip --keychain-profile PROFILE --wait
+    xcrun stapler staple build/Heliad.app
+
 Requires macOS 14. Sources: `Sources/HeliadKit` (core client, models, the search form's
 validation; no UI) and `Sources/Heliad` (SwiftUI).

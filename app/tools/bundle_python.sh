@@ -59,7 +59,9 @@ mv "$WORK/python" "$OUT"
 PY="$OUT/bin/python3"
 
 echo "Installing heliad[archives] from $REPO_ROOT"
-"$PY" -m pip install --quiet --no-cache-dir --no-compile --disable-pip-version-check "$REPO_ROOT[archives]"
+# -s: without it pip counts packages in the build machine's ~/.local user site as
+# already installed and leaves them out of the bundle (seen on the first real run).
+"$PY" -s -m pip install --quiet --no-cache-dir --no-compile --disable-pip-version-check "$REPO_ROOT[archives]"
 find "$OUT" -name __pycache__ -type d -prune -exec rm -rf {} +
 
 "$PY" -B -s -c "import heliad, sunpy.net, drms, astropy, numpy; print('heliad', heliad.__version__, 'sunpy', sunpy.__version__, 'numpy', numpy.__version__)"

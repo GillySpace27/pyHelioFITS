@@ -30,6 +30,9 @@ enum SelfTest {
         case .starting: note("state", "still starting after 60 s")
         case .failed(let why): note("state", "failed: \(why)")
         }
+        if case .ready = model.coreState {
+            await model.refreshLibrary()  // the sidebar's load may not have landed yet
+        }
         if let hello = model.hello {
             note("hello", "heliad \(hello.version), schema \(hello.schemaVersion), library \(hello.libraryRoot)")
         }

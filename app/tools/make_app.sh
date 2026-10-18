@@ -54,6 +54,13 @@ if [ -n "${PYTHON_DIR:-}" ]; then
     find "$APP/Contents/Resources/python" -name __pycache__ -type d -prune -exec rm -rf {} +
 fi
 
+# One retry: a Developer ID signature asks Apple's timestamp server for every file, and
+# the first real build lost one answer ("A timestamp was expected but was not found").
+sign() {
+    codesign --force --options runtime --timestamp --sign "$IDENTITY" "$1" ||
+        { sleep 3; codesign --force --options runtime --timestamp --sign "$IDENTITY" "$1"; }
+}
+
 if [ "$IDENTITY" = "-" ]; then
     codesign --force --deep --sign - "$APP"
 else
@@ -63,11 +70,11 @@ else
         find "$APP/Contents/Resources/python" -type f \( -name '*.so' -o -name '*.dylib' -o -perm -u+x \) -print0 |
             while IFS= read -r -d '' f; do
                 if file -b "$f" | grep -q Mach-O; then
-                    codesign --force --options runtime --timestamp --sign "$IDENTITY" "$f"
+                    sign "$f"
                 fi
             done
     fi
-    codesign --force --options runtime --timestamp --sign "$IDENTITY" "$APP"
+    sign "$APP"
 fi
 codesign --verify --strict --verbose=2 "$APP"
 echo "Built $APP ($VERSION)"

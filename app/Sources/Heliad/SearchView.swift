@@ -63,7 +63,8 @@ struct SearchView: View {
                 }
             }
             .formStyle(.grouped)
-            .frame(maxHeight: showMore ? 520 : 380)
+            .frame(minHeight: showMore ? 420 : 320, maxHeight: showMore ? 520 : 380)
+            .layoutPriority(1)  // the results list gives up height first, not the fields
 
             HStack {
                 Button("Search") { Task { await search() } }
