@@ -302,7 +302,7 @@ class Library:
         conn.execute("BEGIN IMMEDIATE")
         try:
             dataset_id = self._dataset_id(meta)
-            obs_key = meta.obs_key if meta.date_obs else f"{meta.dataset_key}|sha:{sha}"
+            obs_key = meta.obs_key if meta.date_obs or meta.sequence else f"{meta.dataset_key}|sha:{sha}"
             obs = conn.execute(
                 "SELECT o.id, o.current_file_id, f.version AS current_version "
                 "FROM observations o LEFT JOIN files f ON f.id = o.current_file_id "
@@ -331,7 +331,9 @@ class Library:
                 old_key = fitsmeta.version_sort_key(obs["current_version"])
                 if new_key > old_key:
                     status = "new_version"
-                    conn.execute("UPDATE observations SET current_file_id = ? WHERE id = ?", (file_id, obs_id))
+                    # The observation is dated by its current file; releases can date it differently.
+                    conn.execute("UPDATE observations SET current_file_id = ?, date_obs = ? WHERE id = ?",
+                                 (file_id, meta.date_obs or "", obs_id))
                 elif new_key < old_key:
                     status = "older_version"
                 else:
@@ -620,7 +622,7 @@ class Library:
             groups: dict[str, list[int]] = {}
             for f in files:
                 meta = metas[f["id"]]
-                key = meta.obs_key if meta.date_obs else f"{meta.dataset_key}|sha:{f['sha256']}"
+                key = meta.obs_key if meta.date_obs or meta.sequence else f"{meta.dataset_key}|sha:{f['sha256']}"
                 groups.setdefault(key, []).append(f["id"])
             version = {f["id"]: metas[f["id"]].version for f in files}
             current = {}
@@ -661,7 +663,7 @@ class Library:
                             "level, wavelength, label) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (key, *cols)).lastrowid
                 obs_ids: dict[str, int] = {}
                 for key, fids in groups.items():
-                    meta = metas[fids[0]]
+                    meta = metas[current[key]]  # dated by its current file, as in ingest
                     did = ds_ids[meta.dataset_key]
                     if key in old_obs:
                         conn.execute("UPDATE observations SET dataset_id = ?, date_obs = ? WHERE id = ?",

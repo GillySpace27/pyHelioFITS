@@ -337,3 +337,38 @@ def test_location_warnings(tmp_path):
     assert config.location_warnings(tmp_path / "HeliadLibrary") == []
     (synced,) = config.location_warnings(tmp_path / "Dropbox" / "HeliadLibrary")
     assert "sync service" in synced
+
+
+# ---- ASPIICS sequences -------------------------------------------------------
+
+def test_aspiics_releases_pair_by_sequence_id_not_date(lib, src, monkeypatch):
+    # Release 1.0 dates a pB sequence by its last frame, release 1.1 by its first.
+    base = {**ASPIICS, "BTYPE": "Polarized brightness"}
+    old = write_fits(src / "aspiics_pb_l3_163060040001_20250921T182136.fits",
+                     {**base, "WAVELNTH": 5508, "DATE-OBS": "2025-09-21T18:21:36.057"})
+    new = write_fits(src / "aspiics_pb_l3_20250921T182034_163060040001_v03.fits",
+                     {**base, "WAVELNTH": 5513, "DATE-OBS": "2025-09-21T18:20:34.056"})
+    other = write_fits(src / "aspiics_pb_l3_20250921T182738_163040060001_v03.fits",
+                       {**base, "WAVELNTH": 5513, "DATE-OBS": "2025-09-21T18:27:38.062"})
+    assert fitsmeta.read(new).sequence == "163060040001"
+    assert lib.ingest(old).status == "added"
+    assert lib.ingest(new).status == "new_version"
+    assert lib.ingest(other).status == "added"
+    cur = lib.current_files()
+    assert [c["date_obs"] for c in cur] == ["2025-09-21T18:20:34.056", "2025-09-21T18:27:38.062"]
+    assert [c["version"] for c in cur] == ["03", "03"]
+
+    # A library keyed by date before this rule is merged the same way by reindex.
+    before = lib.current_files()
+    monkeypatch.setattr(fitsmeta, "_sequence", lambda header, name: None)
+    lib.reindex()
+    assert len(lib.current_files()) == 3
+    monkeypatch.undo()
+    lib.reindex()
+    assert lib.current_files() == [{**b, "observation_id": a["observation_id"]}
+                                   for a, b in zip(lib.current_files(), before)]
+
+
+def test_sequence_id_is_aspiics_only(src):
+    name = "PUNCH_L3_CTM_20250921170000_v0l.fits"
+    assert fitsmeta.read(write_fits(src / name, punch_header())).sequence is None
