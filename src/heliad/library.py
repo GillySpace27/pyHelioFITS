@@ -21,6 +21,9 @@ from . import checks, config, db, fitsmeta
 from .query import Query
 
 FITS_SUFFIXES = (".fits", ".fts", ".fit", ".fits.gz", ".fts.gz", ".fit.gz")
+# Wavelengths closer than this fraction are one passband (0.2% is about 11 Å at 5500 Å
+# and 0.4 Å at 193 Å), so a release that rewrites WAVELNTH slightly stays one dataset.
+WAVELENGTH_BAND_TOLERANCE = 0.002
 
 
 def is_fits(path: Path) -> bool:
@@ -167,6 +170,34 @@ class Library:
             (source, text, now()),
         ).lastrowid
 
+    def _snap_wavelength(self, meta: fitsmeta.FitsMeta) -> list[checks.Finding]:
+        """Read a wavelength a hair off an existing dataset's as that dataset's band.
+
+        Releases of one product can disagree slightly on WAVELNTH (ASPIICS total
+        brightness is 5508 in one release and 5511 in the next), and without this
+        each release becomes its own dataset instead of versions of one another.
+        """
+        if meta.wavelength is None:
+            return []
+        prefix = meta.dataset_key.rsplit("/", 1)[0]
+        rows = self.conn.execute(
+            "SELECT dataset_key, wavelength FROM datasets WHERE wavelength IS NOT NULL"
+        ).fetchall()
+        best = None
+        for r in rows:
+            if r["dataset_key"].rsplit("/", 1)[0] != prefix:
+                continue
+            gap = abs(r["wavelength"] - meta.wavelength)
+            if gap <= WAVELENGTH_BAND_TOLERANCE * meta.wavelength and (best is None or gap < best[0]):
+                best = (gap, r["wavelength"])
+        if best is None or best[0] == 0:
+            return []
+        written, meta.wavelength = meta.wavelength, best[1]
+        return [checks.Finding(
+            "wavelength_snapped", "info",
+            f"WAVELNTH {written:g} Å filed under this dataset's {best[1]:g} Å band.",
+        )]
+
     def _dataset_id(self, meta: fitsmeta.FitsMeta) -> int:
         row = self.conn.execute(
             "SELECT id FROM datasets WHERE dataset_key = ?", (meta.dataset_key,)
@@ -207,7 +238,7 @@ class Library:
                 return IngestResult("duplicate", row["id"], row["relpath"])
 
             meta = fitsmeta.read(path)
-            findings = checks.run(meta)
+            findings = checks.run(meta) + self._snap_wavelength(meta)
             relpath = self._store_relpath(meta, path.name, sha)
             dest = self.root / relpath
             dest.parent.mkdir(parents=True, exist_ok=True)

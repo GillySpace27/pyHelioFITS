@@ -193,3 +193,17 @@ def test_aspiics_products_are_separate_datasets(src):
     a, b = fitsmeta.read(pb), fitsmeta.read(pa)
     assert a.obs_key != b.obs_key
     assert a.label == "Proba-3 ASPIICS 5513 Å Polarized brightness L3"
+
+
+def test_release_with_slightly_different_wavelength_is_a_new_version(lib, src):
+    base = {"OBSRVTRY": "Proba-3", "INSTRUME": "ASPIICS", "LEVEL": "L3", "WAVEUNIT": "Angstrom",
+            "DATE-OBS": "2025-09-21T18:23:11.058"}
+    old = write_fits(src / "aspiics_bt_l3_163040050001_20250921T182311.fits", {**base, "WAVELNTH": 5508})
+    new = write_fits(src / "aspiics_bt_l3_20250921T182311_163040050001_v03.fits", {**base, "WAVELNTH": 5511})
+    fe = write_fits(src / "aspiics_fe_l3_20250921T182311_163040050001_v03.fits", {**base, "WAVELNTH": 5303})
+    assert lib.ingest(old).status == "added"
+    r = lib.ingest(new)
+    assert r.status == "new_version"
+    assert "wavelength_snapped" in [f.code for f in r.findings]
+    assert lib.ingest(fe).status == "added"  # a different line is a different dataset
+    assert sorted(d["wavelength"] for d in lib.datasets()) == [5303, 5508]
