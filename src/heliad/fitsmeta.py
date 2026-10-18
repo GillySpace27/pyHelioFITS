@@ -198,7 +198,7 @@ def _sequence(header: fits.Header, name: str) -> str | None:
     """The acquisition id of an ASPIICS file, which both of its releases keep.
 
     Release 1.0 dates a polarized-brightness sequence by its last frame and
-    release 1.1 by its first, so DATE-OBS cannot pair them; the 12-digit id in
+    release 1.1 by its first, so DATE-OBS cannot pair them; the id in
     the filename (12 hex digits, starting with the CYCLE_ID) can. The header keeps
     only CYCLE_ID, without the sequence number that follows it in the filename.
     """
