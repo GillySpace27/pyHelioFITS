@@ -54,11 +54,17 @@ if [ -n "${PYTHON_DIR:-}" ]; then
     find "$APP/Contents/Resources/python" -name __pycache__ -type d -prune -exec rm -rf {} +
 fi
 
-# One retry: a Developer ID signature asks Apple's timestamp server for every file, and
-# the first real build lost one answer ("A timestamp was expected but was not found").
+# Retries with growing waits: a Developer ID signature asks Apple's timestamp server for
+# every file, and on Gilly's Mac (2026-10-18) it failed on and off for 10 s or more ("A
+# timestamp was expected but was not found"), which one retry after 3 s did not cover.
 sign() {
-    codesign --force --options runtime --timestamp --sign "$IDENTITY" "$1" ||
-        { sleep 3; codesign --force --options runtime --timestamp --sign "$IDENTITY" "$1"; }
+    local wait
+    for wait in 5 10 20 40; do
+        codesign --force --options runtime --timestamp --sign "$IDENTITY" "$1" && return 0
+        echo "codesign failed on $1; trying again in $wait s" >&2
+        sleep "$wait"
+    done
+    codesign --force --options runtime --timestamp --sign "$IDENTITY" "$1"
 }
 
 if [ "$IDENTITY" = "-" ]; then

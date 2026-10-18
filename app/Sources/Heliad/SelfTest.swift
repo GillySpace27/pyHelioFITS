@@ -44,7 +44,7 @@ enum SelfTest {
             model.selection = .dataset(first.datasetKey)
             do {
                 let files = try await model.files(dataset: first.datasetKey, start: nil, end: nil, offset: 0, limit: 5)
-                note("files", "\(files.count) listed, first \(files.first?.name ?? "none")")
+                note("files", "\(files.count) of \(first.observations) listed, first \(files.first?.name ?? "none")")
                 if let file = files.first {
                     let started = Date()
                     let image = await model.thumbnail(for: file)
