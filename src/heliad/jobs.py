@@ -7,13 +7,17 @@ transit fails the truncation check, is recorded as a failed download and is
 deleted, never stored. A job left active by a core that quit is queued again
 when the next core starts, and its fetch resumes from what is already staged.
 
-A cancel takes effect at the next phase boundary: a fetch already running
-finishes its files first, then nothing from it is ingested.
+A job ends done (every file found was stored), partial (some were), failed
+(none were, or the job broke) or cancelled. A cancel takes effect at the next
+phase boundary: a fetch already running finishes its files first, then
+nothing from it is ingested. Retrying a partial or failed job runs it again;
+files it already stored are put back in staging first, so Fido skips them.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import threading
 from pathlib import Path
@@ -94,13 +98,13 @@ class JobRunner:
                 "note": "a fetch already running finishes first; nothing from it is ingested"}
 
     def retry(self, job_id: int) -> dict:
-        """Queue a failed job again; its fetch resumes from what is staged."""
+        """Queue a partial or failed job again; its fetch resumes from what is staged."""
         with self.lib._write_lock:
             cur = self.lib.conn.execute(
                 "UPDATE jobs SET status = 'queued', error = NULL, updated_at = ? "
-                "WHERE id = ? AND status = 'failed'", (now(), job_id))
+                "WHERE id = ? AND status IN ('partial', 'failed')", (now(), job_id))
         if not cur.rowcount:
-            raise ValueError(f"job {job_id} is not a failed job")
+            raise ValueError(f"job {job_id} is not a partial or failed job")
         self._wake.set()
         return self.get(job_id)
 
@@ -167,12 +171,14 @@ class JobRunner:
         staging = lib.cfg.staging_dir / f"job-{job_id}"
         staging.mkdir(parents=True, exist_ok=True)
         _drop_incomplete(staging)
+        self._restage(job_id, staging)
 
-        def phase(name: str, done: int | None = None, total: int | None = None) -> None:
+        def phase(name: str, done: int | None = None, total: int | None = None,
+                  *, record_total: bool = True) -> None:
             if job_id in self._cancel:
                 raise Cancelled()
             cols = {"phase": name}
-            if total is not None:
+            if total is not None and record_total:
                 cols["files_total"] = total
             if done is not None:
                 cols["files_done"] = done
@@ -184,18 +190,29 @@ class JobRunner:
             fetched = self._source(job["source"]).fetch(
                 query, staging, settings=config.load_settings(), phase=phase)
             paths = [Path(p) for p in fetched["paths"]]
-            phase("ingesting", 0, len(paths))
+            found = fetched.get("found")
+            if found is not None:
+                self._update(job_id, files_total=found)
+            phase("ingesting", 0, len(paths), record_total=False)
             counts: dict[str, int] = {}
             for i, p in enumerate(paths, 1):
-                status = self._ingest_one(job, query, p, fetched.get("urls", {}).get(p.name))
-                counts[status] = counts.get(status, 0) + 1
+                kind = self._ingest_one(job, query, p, fetched.get("urls", {}).get(p.name))
+                counts[kind] = counts.get(kind, 0) + 1
                 if i == len(paths) or i % 10 == 0:
-                    phase("ingesting", i, len(paths))
-            result = {"found": fetched.get("found"), "fetched": len(paths),
-                      "errors": fetched.get("errors", []), "ingest": counts}
-            self._update(job_id, status="done", phase=None, result_json=json.dumps(result))
-            shutil.rmtree(staging, ignore_errors=True)
-            self.notify("download.finished", {"job_id": job_id, "status": "done", "result": result})
+                    phase("ingesting", i, len(paths), record_total=False)
+            errors = fetched.get("errors", [])
+            stored = sum(n for kind, n in counts.items() if kind not in INGEST_FAILURES)
+            status, error = outcome(found, stored, errors, counts)
+            result = {"found": found, "fetched": len(paths), "stored": stored,
+                      "errors": errors, "ingest": counts}
+            if "attempts" in fetched:
+                result["attempts"] = fetched["attempts"]
+            self._update(job_id, status=status, phase=None, files_done=stored, error=error,
+                         result_json=json.dumps(result))
+            if status == "done" or not any(staging.iterdir()):
+                shutil.rmtree(staging, ignore_errors=True)
+            self.notify("download.finished", {"job_id": job_id, "status": status,
+                                              "error": error, "result": result})
         except Cancelled:
             self._cancel.discard(job_id)
             self._update(job_id, status="cancelled", phase=None)
@@ -206,6 +223,27 @@ class JobRunner:
             error = f"{type(exc).__name__}: {exc}"
             self._update(job_id, status="failed", phase=None, error=error)
             self.notify("download.finished", {"job_id": job_id, "status": "failed", "error": error})
+
+    def _restage(self, job_id: int, staging: Path) -> None:
+        """Link files an earlier run of this job stored back into staging.
+
+        Fido then skips them instead of fetching them again, and ingest finds
+        them already stored. A link that cannot be made only costs a refetch.
+        """
+        with self.lib._write_lock:
+            rows = self.lib.conn.execute(
+                "SELECT d.record_json, f.relpath FROM downloads d JOIN files f ON f.id = d.file_id "
+                "WHERE d.job_id = ? AND d.status = 'done'", (job_id,)).fetchall()
+        for row in rows:
+            name = json.loads(row["record_json"]).get("name")
+            if not name or "/" in name or name.startswith("."):
+                continue
+            target = staging / name
+            if not target.exists():
+                try:
+                    os.link(self.lib.abspath(row["relpath"]), target)
+                except OSError:
+                    pass
 
     def _ingest_one(self, job, query: Query, path: Path, url: str | None) -> str:
         lib = self.lib
@@ -226,6 +264,24 @@ class JobRunner:
                 (job["query_id"], url, record, status, size, size if status == "done" else 0,
                  error, file_id, now(), job["id"]))
         return kind
+
+
+INGEST_FAILURES = ("incomplete", "error")
+
+
+def outcome(found: int | None, stored: int, errors: list, counts: dict) -> tuple[str, str | None]:
+    """A job's end state from what was found, what was stored and what went wrong."""
+    failed = sum(counts.get(kind, 0) for kind in INGEST_FAILURES)
+    missing = (found - stored) if found is not None else (len(errors) + failed)
+    if missing <= 0 and not failed:
+        return "done", None
+    total = found if found is not None else stored + missing
+    detail = errors[0].strip().replace("\n", " ") if errors else (
+        f"{failed} file(s) arrived incomplete or unreadable" if failed else "files were not delivered")
+    error = f"stored {stored} of {total} files; {detail}"
+    if len(errors) > 1:
+        error += f" (and {len(errors) - 1} more)"
+    return ("partial" if stored else "failed"), error
 
 
 def _drop_incomplete(staging: Path) -> None:

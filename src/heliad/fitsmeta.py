@@ -51,6 +51,7 @@ class FitsMeta:
     version: str | None
     header: dict = field(default_factory=dict)
     bad_cards: list[str] = field(default_factory=list)
+    nan_cards: list[str] = field(default_factory=list)  # value written as a bare nan
     sequence: str | None = None  # an acquisition id that outlives reprocessing (ASPIICS)
 
     @property
@@ -97,15 +98,21 @@ def _clean(value) -> str | None:
     return text or None
 
 
-def read_headers(path: Path) -> tuple[fits.Header, list[str]]:
+_BARE_NAN = re.compile(r"=\s*[+-]?nan\s*(/|$)", re.I)
+
+
+def read_headers(path: Path) -> tuple[fits.Header, list[str], list[str]]:
     """Primary header merged with the first image extension (compressed files keep WCS there).
 
-    Also returns the keywords of cards astropy could not parse as written. Those
-    are repaired the way astropy's verify('silentfix') would (AIA level 1 files
-    from JSOC carry OSCNMEAN = nan, for example), or dropped if that fails.
+    Also returns the keywords of cards astropy could not parse as written,
+    split into those whose value is a bare nan (AIA level 1 files from JSOC
+    carry OSCNMEAN = nan, a common way of writing "no value") and the rest.
+    Both are repaired the way astropy's verify('silentfix') would, or dropped
+    if that fails.
     """
     merged = fits.Header()
     bad: list[str] = []
+    nan: list[str] = []
     with fits.open(path, memmap=False, lazy_load_hdus=True) as hdul:
         for i, hdu in enumerate(hdul):
             if i > 1:
@@ -116,14 +123,15 @@ def read_headers(path: Path) -> tuple[fits.Header, list[str]]:
                 try:
                     value = card.value
                 except fits.VerifyError:
-                    bad.append(card.keyword)
+                    raw = getattr(card, "_image", None) or ""  # as written, before any repair
+                    (nan if _BARE_NAN.match(raw[8:]) else bad).append(card.keyword)
                     try:
                         card.verify("silentfix")
                         value = card.value
                     except (fits.VerifyError, ValueError):
                         continue
                 merged[card.keyword] = value
-    return merged, bad
+    return merged, bad, nan
 
 
 def _json_value(value):
@@ -218,11 +226,12 @@ def _version(header: fits.Header, name: str) -> str | None:
 
 def read(path: Path) -> FitsMeta:
     path = Path(path)
-    header, bad_cards = read_headers(path)
-    return from_header(header, path.name, bad_cards)
+    header, bad_cards, nan_cards = read_headers(path)
+    return from_header(header, path.name, bad_cards, nan_cards)
 
 
-def from_header(header, name: str, bad_cards: list[str] | None = None) -> FitsMeta:
+def from_header(header, name: str, bad_cards: list[str] | None = None,
+                nan_cards: list[str] | None = None) -> FitsMeta:
     """The same as read(), from headers already in hand (a dict of the indexed keywords
     works, which is how reindex rebuilds keys for a file that is no longer readable)."""
     if not isinstance(header, fits.Header):
@@ -256,6 +265,7 @@ def from_header(header, name: str, bad_cards: list[str] | None = None) -> FitsMe
         version=_version(header, name),
         header={k: _json_value(header[k]) for k in INDEXED_KEYWORDS if k in header},
         bad_cards=list(bad_cards or []),
+        nan_cards=list(nan_cards or []),
         sequence=_sequence(header, name),
     )
 

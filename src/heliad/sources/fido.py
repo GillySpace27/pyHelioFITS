@@ -41,20 +41,60 @@ def search(query: Query, *, settings: dict | None = None, limit: int = 2000) -> 
             "providers": providers}
 
 
+# VSO caching mirrors tried, in order, for records the first fetch could not get.
+# The names are VSO site codes from sunpy's VSOClient.fetch documentation; which
+# of them are serving on a given day is not known in advance. The vso_mirrors
+# setting (comma-separated, or "none") replaces the list.
+VSO_MIRRORS = ("NSO", "SAO", "ROB")
+
+
+def mirrors(settings: dict) -> list[str]:
+    value = (settings.get("vso_mirrors") or "").strip()
+    if not value:
+        return list(VSO_MIRRORS)
+    if value.lower() == "none":
+        return []
+    return [s.strip() for s in value.split(",") if s.strip()]
+
+
 def fetch(query: Query, staging: Path, *, settings: dict, phase, max_conn: int = 4) -> dict:
     """Search, then fetch every result into staging.
 
-    Fido skips files already complete in staging (overwrite=False), so a job
-    that is run again after an interruption fetches only what is missing. The
-    fetch itself is one call and cannot be interrupted part way.
+    Records the first fetch could not get are asked for again from the other
+    VSO mirrors, one at a time, until none are missing. Fido skips files
+    already complete in staging (overwrite=False), so a job that is run again
+    after an interruption fetches only what is missing; VSO names a file only
+    once the server answers, so a staged VSO file is found by looking in
+    staging rather than through Fido. Each fetch is one call and cannot be
+    interrupted part way.
     """
     from sunpy.net import Fido
+    from sunpy.net.vso import VSOClient
 
     phase("searching")
     result = Fido.search(*query.to_fido(settings.get("jsoc_email")))
     found = getattr(result, "file_num", None)
+    target = str(staging / "{file}")
     phase("fetching", 0, found)
-    fetched = Fido.fetch(result, path=str(staging / "{file}"), overwrite=False,
-                         max_conn=max_conn, progress=False)
-    return {"found": found, "paths": [Path(p) for p in fetched if is_fits(Path(p))],
-            "errors": [str(e) for e in fetched.errors], "urls": {}}
+    fetched = Fido.fetch(result, path=target, overwrite=False, max_conn=max_conn, progress=False)
+    errors = [str(e) for e in fetched.errors]
+    attempts = [{"site": "default", "failed": len(fetched.errors)}]
+    vso = [block for block in result if isinstance(getattr(block, "client", None), VSOClient)]
+    for site in mirrors(settings) if vso else []:
+        if not errors:
+            break
+        phase(f"fetching from mirror {site}", _staged(staging), found)
+        again = Fido.fetch(*vso, path=target, overwrite=False, max_conn=max_conn,
+                           progress=False, site=site)
+        errors = [str(e) for e in again.errors]
+        attempts.append({"site": site, "failed": len(again.errors)})
+    return {"found": found, "paths": _fits_in(staging), "errors": errors,
+            "attempts": attempts, "urls": {}}
+
+
+def _fits_in(staging: Path) -> list[Path]:
+    return sorted(p for p in staging.iterdir() if p.is_file() and is_fits(p))
+
+
+def _staged(staging: Path) -> int:
+    return len(_fits_in(staging))

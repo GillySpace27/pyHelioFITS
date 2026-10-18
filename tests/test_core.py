@@ -173,6 +173,17 @@ def test_unparsable_card_is_repaired_and_reported(lib, src):
     path.write_bytes(raw.replace(card, b"OSCNMEAN= " + b"nan".rjust(20)))
     r = lib.ingest(path)
     assert r.status == "added"
+    assert [f.code for f in r.findings if f.severity == "warning"] == []
+    assert "nan_value" in [f.code for f in r.findings if f.severity == "info"]
+
+
+def test_unparsable_card_that_is_not_nan_is_a_warning(lib, src):
+    path = write_fits(src / "aia.lev1.193A_2025_09_21T16_02_04.84Z.image_lev1.fits",
+                      aia_header(date="2025-09-21T16:02:04.84", OSCNMEAN=0.0))
+    raw = path.read_bytes()
+    card = b"OSCNMEAN= " + b"0.0".rjust(20)
+    path.write_bytes(raw.replace(card, b"OSCNMEAN= " + b"1.2.3".rjust(20)))
+    r = lib.ingest(path)
     assert [f.code for f in r.findings if f.severity == "warning"] == ["unparsable_card"]
 
 
