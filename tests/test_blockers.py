@@ -351,6 +351,8 @@ def test_aspiics_releases_pair_by_sequence_id_not_date(lib, src, monkeypatch):
     other = write_fits(src / "aspiics_pb_l3_20250921T182738_163040060001_v03.fits",
                        {**base, "WAVELNTH": 5513, "DATE-OBS": "2025-09-21T18:27:38.062"})
     assert fitsmeta.read(new).sequence == "163060040001"
+    hexid = write_fits(src / "aspiics_pb_l3_1630400A0001_20250921T183756.fits", base)
+    assert fitsmeta.read(hexid).sequence == "1630400A0001"
     assert lib.ingest(old).status == "added"
     assert lib.ingest(new).status == "new_version"
     assert lib.ingest(other).status == "added"

@@ -36,7 +36,7 @@ _VERSION_IN_NAME = re.compile(r"[_-]v(\d+[a-z]?|[a-z]{1,2}\d*|\d+(?:\.\d+)+)\.(?
 _LEVEL_IN_NAME = re.compile(r"(?:^|[_.-])l(?:ev)?([0-9](?:\.[0-9])?)(?:[_.-]|$)", re.I)
 _PUNCH_NAME = re.compile(r"^PUNCH_L(\w)_([A-Z0-9]{3})", re.I)
 _AIA_CAMERA = re.compile(r"^AIA_\d$", re.I)
-_ASPIICS_SEQUENCE = re.compile(r"(?:^|_)(\d{12})(?=[_.])")
+_ASPIICS_SEQUENCE = re.compile(r"(?:^|_)([0-9A-F]{12})(?=[_.])", re.I)  # hex: 1630400A0001
 
 
 @dataclass
@@ -199,13 +199,13 @@ def _sequence(header: fits.Header, name: str) -> str | None:
 
     Release 1.0 dates a polarized-brightness sequence by its last frame and
     release 1.1 by its first, so DATE-OBS cannot pair them; the 12-digit id in
-    the filename (CYCLE_ID plus a 4-digit sequence number) can. The header
-    holds only the 8-digit CYCLE_ID, which can cover more than one sequence.
+    the filename (12 hex digits, starting with the CYCLE_ID) can. The header keeps
+    only CYCLE_ID, without the sequence number that follows it in the filename.
     """
     if str(header.get("INSTRUME", "")).strip().upper() != "ASPIICS":
         return None
     match = _ASPIICS_SEQUENCE.search(name)
-    return match.group(1) if match else None
+    return match.group(1).upper() if match else None
 
 
 def _version(header: fits.Header, name: str) -> str | None:
