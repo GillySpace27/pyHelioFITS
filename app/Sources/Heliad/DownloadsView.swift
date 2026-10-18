@@ -37,13 +37,11 @@ private struct JobRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(job.title)
                     .lineLimit(1)
-                HStack(spacing: 8) {
-                    Text(statusText).foregroundStyle(color)
-                    Text("· \(job.source == "jsoc" ? "JSOC export" : "Fido")")
-                    Text("· queued \(String(Format.time(job.createdAt).prefix(16)))")
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                (Text(statusText).foregroundStyle(color)
+                    + Text(verbatim: " · \(job.source == "jsoc" ? "JSOC export" : "Fido")"
+                        + " · queued \(String(Format.time(job.createdAt).prefix(16)))"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 if job.status == "active", let total = job.filesTotal, total > 0 {
                     ProgressView(value: Double(min(job.filesDone, total)), total: Double(total))
                         .frame(maxWidth: 360)

@@ -118,7 +118,13 @@ struct SearchView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         } else {
-            Spacer()
+            VStack(spacing: 6) {
+                Text("Search shows what the archives hold for these fields.")
+                Text("Download queues everything the search finds; it runs in the background.")
+            }
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 

@@ -18,7 +18,8 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(job.title, "AIA · 193 Å · 2025-09-21T16:00:00 to 2025-09-21T16:05:00")
         XCTAssertEqual(job.summary, "stored 0 of 5")
         // Keys inside an open dictionary stay as the core wrote them (no snake_case conversion).
-        XCTAssertEqual(job.query["sample_s"], .double(60))
+        // (A whole-number float such as 60.0 decodes as .int; doubleValue reads either.)
+        XCTAssertEqual(job.query["sample_s"]?.doubleValue, 60)
         XCTAssertTrue(job.canRetry)
         XCTAssertFalse(job.isActive)
     }
