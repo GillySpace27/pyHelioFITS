@@ -1,7 +1,9 @@
 """The library: a store of files kept once each, and the index that describes them.
 
-Library is the only writer. It holds an exclusive lock on the library root so a
-second Heliad process cannot write at the same time; readers never need it.
+A writable Library is the only writer. It holds an exclusive lock on the library
+root so a second Heliad process cannot write at the same time. A read-only
+Library (Library.open(readonly=True)) takes no lock and cannot change anything,
+so scripts and read commands keep working while the Mac app's core is running.
 """
 
 from __future__ import annotations
@@ -64,6 +66,10 @@ class LibraryLocked(RuntimeError):
     pass
 
 
+class ReadOnlyLibrary(RuntimeError):
+    pass
+
+
 class _RootLock:
     def __init__(self, root: Path):
         self.path = root / ".heliad.lock"
@@ -111,24 +117,53 @@ class IngestResult:
 
 
 class Library:
-    def __init__(self, cfg: config.Config):
+    def __init__(self, cfg: config.Config, *, readonly: bool = False):
         self.cfg = cfg
         self.root = cfg.library_root
+        self.readonly = readonly
+        self._write_lock = threading.RLock()
+        self._lock = None
+        self.conn = None
+        if readonly:
+            if not cfg.db_path.exists():
+                raise FileNotFoundError(f"no Heliad library at {self.root} (run: heliad init)")
+            self.reader = db.connect_reader(cfg.db_path)
+            compat = int(db.meta_value(self.reader, "reader_compat") or 1)
+            if compat > db.SCHEMA_VERSION:
+                self.reader.close()
+                raise RuntimeError(f"{cfg.db_path} needs a newer Heliad (reader_compat {compat})")
+            return
         self._lock = _RootLock(self.root)
         self._lock.acquire()
         for d in (cfg.store_dir, cfg.views_dir, cfg.staging_dir):
             d.mkdir(parents=True, exist_ok=True)
         self.conn = db.connect_writer(cfg.db_path)
-        self._write_lock = threading.RLock()
-        config.write(cfg, db.SCHEMA_VERSION)
+        self.reader = db.connect_reader(cfg.db_path)
+        if db.meta_value(self.conn, "rules_version") is None:
+            empty = self.conn.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 0
+            # A library from before rules were versioned is marked 0, so reindex is due.
+            db.set_meta(self.conn, "rules_version", fitsmeta.RULES_VERSION if empty else 0)
+        if not config.exists():
+            config.write(cfg, db.SCHEMA_VERSION)
 
     @classmethod
-    def open(cls, library_root=None) -> "Library":
-        return cls(config.load(library_root))
+    def open(cls, library_root=None, *, readonly: bool = False) -> "Library":
+        return cls(config.load(library_root), readonly=readonly)
+
+    def make_default(self) -> Path:
+        """Point Studio, the Mac app and scripts at this library."""
+        return config.write(self.cfg, db.SCHEMA_VERSION)
+
+    def _require_writer(self) -> None:
+        if self.readonly:
+            raise ReadOnlyLibrary("this Library was opened read-only")
 
     def close(self) -> None:
-        self.conn.close()
-        self._lock.release()
+        self.reader.close()
+        if self.conn is not None:
+            self.conn.close()
+        if self._lock is not None:
+            self._lock.release()
 
     def __enter__(self):
         return self
@@ -226,7 +261,9 @@ class Library:
         how downloads leave the staging area). A file already in the library by
         checksum is not stored twice.
         """
+        self._require_writer()
         path = Path(path)
+        fitsmeta.check_complete(path)  # a cut-off download must not enter the store
         sha = sha256_of(path)
         with self._write_lock:
             row = self.conn.execute(
@@ -334,7 +371,7 @@ class Library:
     def verify(self) -> dict:
         """Recompute every checksum. Reports missing and altered files; changes nothing."""
         missing, altered, ok = [], [], 0
-        for row in self.conn.execute("SELECT id, relpath, sha256 FROM files").fetchall():
+        for row in self.reader.execute("SELECT id, relpath, sha256 FROM files").fetchall():
             p = self.abspath(row["relpath"])
             if not p.exists():
                 missing.append(row["relpath"])
@@ -347,19 +384,23 @@ class Library:
     # ---- reads -------------------------------------------------------------
 
     def stats(self) -> dict:
-        q = lambda sql: self.conn.execute(sql).fetchone()[0]  # noqa: E731
+        q = lambda sql: self.reader.execute(sql).fetchone()[0]  # noqa: E731
+        rules = int(db.meta_value(self.reader, "rules_version") or 0)
         return {
             "library_root": str(self.root),
-            "schema_version": db.SCHEMA_VERSION,
+            "schema_version": db.schema_version(self.reader),
+            "rules_version": rules,
+            "reindex_due": rules != fitsmeta.RULES_VERSION,
             "datasets": q("SELECT COUNT(*) FROM datasets"),
             "observations": q("SELECT COUNT(*) FROM observations"),
             "files": q("SELECT COUNT(*) FROM files"),
             "bytes": q("SELECT COALESCE(SUM(size), 0) FROM files"),
             "warnings": q("SELECT COUNT(*) FROM checks WHERE severity != 'info'"),
+            "collisions": len(self.collisions()),
         }
 
     def datasets(self) -> list[dict]:
-        rows = self.conn.execute(
+        rows = self.reader.execute(
             "SELECT d.*, COUNT(o.id) AS observations, MIN(o.date_obs) AS first, "
             "MAX(o.date_obs) AS last, "
             "(SELECT COALESCE(SUM(f.size), 0) FROM files f JOIN observations o2 "
@@ -384,10 +425,280 @@ class Library:
         sql += " ORDER BY date_obs"
         if limit:
             sql += f" LIMIT {int(limit)}"
-        return [dict(r) for r in self.conn.execute(sql, args).fetchall()]
+        return [dict(r) for r in self.reader.execute(sql, args).fetchall()]
 
     def checks_for(self, file_id: int) -> list[dict]:
-        rows = self.conn.execute(
+        rows = self.reader.execute(
             "SELECT code, severity, message FROM checks WHERE file_id = ?", (file_id,)
         ).fetchall()
         return [dict(r) for r in rows]
+
+    def versions(self, observation_id: int) -> list[dict]:
+        """Every file of one observation, newest version first, with which one is current."""
+        rows = self.reader.execute(
+            "SELECT f.id AS file_id, f.relpath, f.version, f.size, f.original_name, f.ingested_at, "
+            "f.id = o.current_file_id AS current "
+            "FROM files f JOIN observations o ON o.id = f.observation_id WHERE o.id = ?",
+            (observation_id,),
+        ).fetchall()
+        out = [dict(r) for r in rows]
+        out.sort(key=lambda r: (fitsmeta.version_sort_key(r["version"]), -r["file_id"]), reverse=True)
+        return out
+
+    def collisions(self) -> list[dict]:
+        """Observations holding two different files with the same version as the current one.
+
+        Only one of them can be current, so the other is hidden from readers. Zero is
+        normal; anything else means the dataset key misses a keyword that tells the
+        files apart (for example a polarizer or a data product written at one time).
+        """
+        rows = self.reader.execute(
+            "SELECT o.id AS observation_id, d.label, o.date_obs, COUNT(f.id) AS files "
+            "FROM observations o JOIN files cur ON cur.id = o.current_file_id "
+            "JOIN files f ON f.observation_id = o.id AND f.version IS cur.version "
+            "JOIN datasets d ON d.id = o.dataset_id "
+            "GROUP BY o.id HAVING COUNT(f.id) > 1 ORDER BY d.label, o.date_obs"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ---- delete --------------------------------------------------------------
+
+    def delete(self, *, file_ids=(), observation_ids=(), dataset_keys=(), dry_run: bool = False) -> dict:
+        """Remove files from the library: their index rows first, then the stored files.
+
+        Deleting the current version of an observation makes the next newest one
+        current; deleting an observation's last file removes the observation (and
+        its place in views), and a dataset with no observations left goes too.
+        Views that lost members have their link folders rebuilt.
+
+        bytes_released counts the stored files removed. On APFS a file imported
+        from an event folder is a clone of the original, and a view built with the
+        hard-link fallback shares the file's blocks, so free disk can grow by less.
+        """
+        self._require_writer()
+        conn = self.conn
+        with self._write_lock:
+            ids = set(int(i) for i in file_ids)
+            if observation_ids:
+                q = ",".join("?" * len(observation_ids))
+                ids |= {r[0] for r in conn.execute(
+                    f"SELECT id FROM files WHERE observation_id IN ({q})", list(observation_ids))}
+            if dataset_keys:
+                q = ",".join("?" * len(dataset_keys))
+                ids |= {r[0] for r in conn.execute(
+                    "SELECT f.id FROM files f JOIN observations o ON o.id = f.observation_id "
+                    f"JOIN datasets d ON d.id = o.dataset_id WHERE d.dataset_key IN ({q})",
+                    list(dataset_keys))}
+            if not ids:
+                return {"files": 0, "observations": 0, "datasets": 0, "bytes_released": 0,
+                        "repointed": 0, "dry_run": dry_run, "views_rebuilt": []}
+            q = ",".join("?" * len(ids))
+            files = [dict(r) for r in conn.execute(
+                f"SELECT id, relpath, size, observation_id FROM files WHERE id IN ({q})", list(ids))]
+            obs_ids = sorted({f["observation_id"] for f in files})
+            oq = ",".join("?" * len(obs_ids))
+            touched_views = [r[0] for r in conn.execute(
+                f"SELECT DISTINCT v.name FROM views v JOIN view_members m ON m.view_id = v.id "
+                f"WHERE m.observation_id IN ({oq})", obs_ids)]
+            removed_obs, repointed, emptied_datasets = [], 0, set()
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                conn.execute(f"DELETE FROM checks WHERE file_id IN ({q})", list(ids))
+                conn.execute(f"UPDATE downloads SET file_id = NULL WHERE file_id IN ({q})", list(ids))
+                conn.execute(f"UPDATE observations SET current_file_id = NULL "
+                             f"WHERE current_file_id IN ({q})", list(ids))
+                conn.execute(f"DELETE FROM files WHERE id IN ({q})", list(ids))
+                for oid in obs_ids:
+                    obs = conn.execute("SELECT dataset_id, current_file_id FROM observations WHERE id = ?",
+                                       (oid,)).fetchone()
+                    left = conn.execute("SELECT id, version FROM files WHERE observation_id = ?",
+                                        (oid,)).fetchall()
+                    if not left:
+                        conn.execute("DELETE FROM view_members WHERE observation_id = ?", (oid,))
+                        conn.execute("DELETE FROM observations WHERE id = ?", (oid,))
+                        removed_obs.append(oid)
+                        emptied_datasets.add(obs["dataset_id"])
+                    elif obs["current_file_id"] is None:
+                        best = max(left, key=lambda r: (fitsmeta.version_sort_key(r["version"]), -r["id"]))
+                        conn.execute("UPDATE observations SET current_file_id = ? WHERE id = ?",
+                                     (best["id"], oid))
+                        repointed += 1
+                gone_datasets = 0
+                for did in emptied_datasets:
+                    if not conn.execute("SELECT 1 FROM observations WHERE dataset_id = ? LIMIT 1",
+                                        (did,)).fetchone():
+                        conn.execute("DELETE FROM datasets WHERE id = ?", (did,))
+                        gone_datasets += 1
+                conn.execute("ROLLBACK" if dry_run else "COMMIT")
+            except BaseException:
+                conn.execute("ROLLBACK")
+                raise
+        released, failed = 0, []
+        if not dry_run:
+            for f in files:
+                p = self.abspath(f["relpath"])
+                try:
+                    p.unlink()
+                    released += f["size"]
+                    self._prune_empty_dirs(p.parent)
+                except FileNotFoundError:
+                    pass
+                except OSError as exc:
+                    failed.append({"relpath": f["relpath"], "error": str(exc)})
+            from . import views  # views imports this module
+            for name in touched_views:
+                views.materialize(self, name)
+        else:
+            released = sum(f["size"] for f in files)
+        return {"files": len(files), "observations": len(removed_obs), "datasets": gone_datasets,
+                "repointed": repointed, "bytes_released": released, "unlink_failed": failed,
+                "views_rebuilt": touched_views, "dry_run": dry_run}
+
+    def _prune_empty_dirs(self, d: Path) -> None:
+        store = self.cfg.store_dir.resolve()
+        d = d.resolve()
+        while d != store and store in d.parents:
+            try:
+                d.rmdir()
+            except OSError:
+                return
+            d = d.parent
+
+    # ---- reindex -------------------------------------------------------------
+
+    def reindex(self, *, dry_run: bool = False, from_files: bool = True, progress=None) -> dict:
+        """Rebuild every dataset and observation key with the current fitsmeta rules.
+
+        Keys are fixed when a file is ingested, so a rule change (a new keyword that
+        separates products, a fix for one mission's headers) only reaches files that
+        arrive afterwards. This applies it to everything already in the library, in
+        one transaction. Headers are re-read from the stored files (from_files) or,
+        for a file that is missing, taken from the indexed keywords. File ids, paths
+        and checksums never change; datasets and observations keep their ids when
+        their key is unchanged; views keep every file they held.
+        """
+        self._require_writer()
+        conn = self.conn
+        with self._write_lock:
+            files = [dict(r) for r in conn.execute(
+                "SELECT f.id, f.relpath, f.original_name, f.version, f.header_json, f.observation_id, "
+                "f.sha256 FROM files f ORDER BY f.id")]
+            metas = {}
+            for i, f in enumerate(files, 1):
+                p = self.abspath(f["relpath"])
+                meta = None
+                if from_files and p.exists():
+                    try:
+                        meta = fitsmeta.read(p)
+                    except Exception:
+                        meta = None
+                if meta is None:
+                    meta = fitsmeta.from_header(json.loads(f["header_json"]), f["original_name"])
+                metas[f["id"]] = meta
+                if progress and (i % 200 == 0 or i == len(files)):
+                    progress(i, len(files))
+            old_ds = {r["dataset_key"]: r["id"] for r in conn.execute("SELECT id, dataset_key FROM datasets")}
+            old_obs = {r["obs_key"]: r["id"] for r in conn.execute("SELECT id, obs_key FROM observations")}
+            old_current = {r["id"]: r["current_file_id"] for r in conn.execute(
+                "SELECT id, current_file_id FROM observations")}
+
+            # Datasets in ingest order, snapping wavelengths the way ingest does.
+            new_ds: dict[str, fitsmeta.FitsMeta] = {}
+            for f in files:
+                meta = metas[f["id"]]
+                if meta.wavelength is not None:
+                    prefix = meta.dataset_key.rsplit("/", 1)[0]
+                    best = None
+                    for key, m in new_ds.items():
+                        if key.rsplit("/", 1)[0] == prefix and m.wavelength is not None:
+                            gap = abs(m.wavelength - meta.wavelength)
+                            if gap <= WAVELENGTH_BAND_TOLERANCE * meta.wavelength and (best is None or gap < best[0]):
+                                best = (gap, m.wavelength)
+                    if best is not None:
+                        meta.wavelength = best[1]
+                new_ds.setdefault(meta.dataset_key, meta)
+            groups: dict[str, list[int]] = {}
+            for f in files:
+                meta = metas[f["id"]]
+                key = meta.obs_key if meta.date_obs else f"{meta.dataset_key}|sha:{f['sha256']}"
+                groups.setdefault(key, []).append(f["id"])
+            version = {f["id"]: metas[f["id"]].version for f in files}
+            current = {}
+            for key, fids in groups.items():
+                # Newest version wins; among equals the earliest ingested stays, as in ingest.
+                current[key] = max(fids, key=lambda i: (fitsmeta.version_sort_key(version[i]), -i))
+
+            file_obs_old = {f["id"]: f["observation_id"] for f in files}
+            summary = {
+                "files": len(files),
+                "datasets_before": len(old_ds), "datasets_after": len(new_ds),
+                "observations_before": len(old_obs), "observations_after": len(groups),
+                "files_moved": 0, "current_changed": 0, "dry_run": dry_run,
+            }
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                conn.execute("PRAGMA defer_foreign_keys = ON")
+                members = conn.execute("SELECT view_id, observation_id FROM view_members").fetchall()
+                view_files: dict[int, set[int]] = {}
+                obs_files: dict[int, list[int]] = {}
+                for fid, oid in file_obs_old.items():
+                    obs_files.setdefault(oid, []).append(fid)
+                for m in members:
+                    view_files.setdefault(m["view_id"], set()).update(obs_files.get(m["observation_id"], []))
+                conn.execute("DELETE FROM view_members")
+                conn.execute("UPDATE observations SET current_file_id = NULL")
+                ds_ids: dict[str, int] = {}
+                for key, meta in new_ds.items():
+                    cols = (meta.observatory, meta.instrument, meta.detector, meta.product,
+                            meta.level, meta.wavelength, meta.label)
+                    if key in old_ds:
+                        conn.execute("UPDATE datasets SET observatory=?, instrument=?, detector=?, product=?, "
+                                     "level=?, wavelength=?, label=? WHERE id = ?", (*cols, old_ds[key]))
+                        ds_ids[key] = old_ds[key]
+                    else:
+                        ds_ids[key] = conn.execute(
+                            "INSERT INTO datasets(dataset_key, observatory, instrument, detector, product, "
+                            "level, wavelength, label) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (key, *cols)).lastrowid
+                obs_ids: dict[str, int] = {}
+                for key, fids in groups.items():
+                    meta = metas[fids[0]]
+                    did = ds_ids[meta.dataset_key]
+                    if key in old_obs:
+                        conn.execute("UPDATE observations SET dataset_id = ?, date_obs = ? WHERE id = ?",
+                                     (did, meta.date_obs or "", old_obs[key]))
+                        obs_ids[key] = old_obs[key]
+                    else:
+                        obs_ids[key] = conn.execute(
+                            "INSERT INTO observations(obs_key, dataset_id, date_obs) VALUES (?, ?, ?)",
+                            (key, did, meta.date_obs or "")).lastrowid
+                file_obs_new = {}
+                for key, fids in groups.items():
+                    for fid in fids:
+                        file_obs_new[fid] = obs_ids[key]
+                        conn.execute("UPDATE files SET observation_id = ?, version = ?, header_json = ? "
+                                     "WHERE id = ?", (obs_ids[key], version[fid],
+                                                     json.dumps(metas[fid].header, sort_keys=True), fid))
+                    conn.execute("UPDATE observations SET current_file_id = ? WHERE id = ?",
+                                 (current[key], obs_ids[key]))
+                    if old_current.get(obs_ids[key]) != current[key]:
+                        summary["current_changed"] += 1
+                summary["files_moved"] = sum(1 for fid in file_obs_new
+                                             if file_obs_new[fid] != file_obs_old[fid])
+                keep_obs = set(obs_ids.values())
+                for oid in set(old_obs.values()) - keep_obs:
+                    conn.execute("DELETE FROM observations WHERE id = ?", (oid,))
+                keep_ds = set(ds_ids.values())
+                for did in set(old_ds.values()) - keep_ds:
+                    conn.execute("DELETE FROM datasets WHERE id = ?", (did,))
+                for vid, fids in view_files.items():
+                    conn.executemany("INSERT OR IGNORE INTO view_members(view_id, observation_id) VALUES (?, ?)",
+                                     [(vid, file_obs_new[f]) for f in fids])
+                db.set_meta(conn, "rules_version", fitsmeta.RULES_VERSION)
+                conn.execute("ROLLBACK" if dry_run else "COMMIT")
+            except BaseException:
+                conn.execute("ROLLBACK")
+                raise
+        if not dry_run:
+            from . import views
+            summary["views_rebuilt"] = [r["name"] for r in views.rebuild_all(self)]
+        return summary

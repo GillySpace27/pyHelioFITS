@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 CONFIG_NAME = "config.json"
+SETTINGS_NAME = "settings.json"
 DB_NAME = "heliad.sqlite"
 
 
@@ -80,10 +81,108 @@ def load(library_root: str | os.PathLike | None = None) -> Config:
     return Config(default_library_root())
 
 
+def exists() -> bool:
+    return config_path().exists()
+
+
 def write(cfg: Config, schema_version: int) -> Path:
+    """Point every reader at this library. Only `heliad init` (or a first run with no
+    config at all) calls this, so a one-off `--library` never redirects Studio."""
     path = config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(cfg.to_json(schema_version), indent=2) + "\n")
     tmp.replace(path)
     return path
+
+
+# ---- settings ------------------------------------------------------------
+# Per-user preferences that are not part of the reader handshake, such as the
+# email address JSOC requires for exports. Environment variables win.
+
+SETTING_ENV = {"jsoc_email": "HELIAD_JSOC_EMAIL"}
+
+
+def settings_path() -> Path:
+    return app_support_dir() / SETTINGS_NAME
+
+
+def load_settings() -> dict:
+    path = settings_path()
+    data = json.loads(path.read_text()) if path.exists() else {}
+    for key, env in SETTING_ENV.items():
+        if os.environ.get(env):
+            data[key] = os.environ[env]
+    return data
+
+
+def save_setting(key: str, value: str | None) -> dict:
+    path = settings_path()
+    data = json.loads(path.read_text()) if path.exists() else {}
+    if value is None:
+        data.pop(key, None)
+    else:
+        data[key] = value
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+    tmp.replace(path)
+    return data
+
+
+# ---- where a library should not live ---------------------------------------
+
+_SYNCED_PARTS = ("Library/Mobile Documents", "Library/CloudStorage", "Dropbox", "Google Drive",
+                 "OneDrive", "Nextcloud", "Box Sync")
+_NETWORK_FS = {"smbfs", "nfs", "nfs4", "afpfs", "webdav", "cifs", "smb3", "sshfs", "fuse.sshfs",
+               "osxfuse", "macfuse"}
+
+
+def _filesystem_type(path: Path) -> str | None:
+    """The type of the filesystem holding path, from the mount table; None if unknown."""
+    import subprocess
+
+    path = path.resolve()
+    while not path.exists():
+        path = path.parent
+    mounts: list[tuple[str, str]] = []
+    try:
+        if sys.platform.startswith("linux"):
+            for line in Path("/proc/mounts").read_text().splitlines():
+                parts = line.split()
+                if len(parts) >= 3:
+                    mounts.append((parts[1], parts[2]))
+        elif sys.platform == "darwin":
+            out = subprocess.run(["/sbin/mount"], capture_output=True, text=True, timeout=5).stdout
+            for line in out.splitlines():  # "/dev/disk3s5 on /System/Volumes/Data (apfs, local, ...)"
+                if " on " in line and " (" in line:
+                    point = line.split(" on ", 1)[1].rsplit(" (", 1)
+                    mounts.append((point[0], point[1].split(",")[0].strip("()")))
+    except (OSError, subprocess.SubprocessError):
+        return None
+    best = None
+    for point, kind in mounts:
+        if str(path) == point or str(path).startswith(point.rstrip("/") + "/"):
+            if best is None or len(point) > len(best[0]):
+                best = (point, kind)
+    return best[1] if best else None
+
+
+def location_warnings(root: Path) -> list[str]:
+    """Reasons a library root is a bad idea. SQLite's WAL mode and file locks are not
+    reliable on network or sync-service folders, and iCloud evicts files it syncs."""
+    text = str(Path(root).expanduser())
+    warnings = []
+    for part in _SYNCED_PARTS:
+        if part in text:
+            warnings.append(f"{text} is inside a sync service folder ({part}); the index can be "
+                            "corrupted and files evicted. Use a plain local folder such as ~/HeliadLibrary.")
+            break
+    home = str(Path.home())
+    if sys.platform == "darwin" and (text.startswith(home + "/Documents") or text.startswith(home + "/Desktop")):
+        warnings.append(f"{text} is under Documents or Desktop, which iCloud syncs when "
+                        "'Desktop & Documents Folders' is on. Prefer ~/HeliadLibrary.")
+    kind = _filesystem_type(Path(text))
+    if kind and kind.lower() in _NETWORK_FS:
+        warnings.append(f"{text} is on a network filesystem ({kind}); SQLite locking is not reliable there.")
+    return warnings

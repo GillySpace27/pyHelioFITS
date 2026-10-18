@@ -2,10 +2,12 @@
 
 This is how the Mac app (and anything else) asks the core to act. One request
 per line in, one response per line out; progress arrives as notifications
-(a "method" and no "id"). The core runs requests one at a time, so the index
-always has exactly one writer.
+(a "method" and no "id"). The core answers requests one at a time; downloads
+run on a worker thread (see jobs.py), so download.enqueue returns at once and
+the job reports through download.progress and download.finished. Every write,
+from either thread, goes through the Library's one writer connection.
 
-Methods are listed in METHODS; each takes named params.
+Methods are listed in Server.methods; each takes named params.
 """
 
 from __future__ import annotations
@@ -16,7 +18,7 @@ import threading
 import traceback
 from typing import Any, Callable, TextIO
 
-from . import __version__, db, views
+from . import __version__, config, db, fitsmeta, jobs, views
 from .library import Library
 from .query import Query
 
@@ -36,6 +38,7 @@ class Server:
         self.lib = lib
         self.out = out
         self._out_lock = threading.Lock()
+        self.jobs = None if lib.readonly else jobs.JobRunner(lib, notify=self.notify)
         self.methods: dict[str, Callable[..., Any]] = {
             "heliad.hello": self.hello,
             "library.stats": lambda: lib.stats(),
@@ -44,6 +47,17 @@ class Server:
                 lib.current_files(dataset_key=dataset_key, start=start, end=end, limit=limit),
             "library.checks": lambda file_id: lib.checks_for(file_id),
             "library.verify": lambda: lib.verify(),
+            "library.versions": lambda observation_id: lib.versions(observation_id),
+            "library.collisions": lambda: lib.collisions(),
+            "library.delete": self.delete,
+            "library.reindex": lambda dry_run=False: lib.reindex(dry_run=dry_run),
+            "download.enqueue": self.enqueue,
+            "download.list": lambda status=None, limit=50: jobs.list_jobs(lib, status=status, limit=limit),
+            "download.get": lambda job_id: next(iter(jobs.list_jobs(lib, job_id=job_id)), None),
+            "download.cancel": lambda job_id: self._jobs().cancel(job_id),
+            "download.retry": lambda job_id: self._jobs().retry(job_id),
+            "settings.get": lambda: config.load_settings(),
+            "settings.set": lambda key, value=None: config.save_setting(key, value),
             "ingest.path": self.ingest_path,
             "ingest.tree": self.ingest_tree,
             "view.create": lambda name, **kw: views.create(lib, name, **kw),
@@ -93,13 +107,19 @@ class Server:
         return {"jsonrpc": "2.0", "id": rid, "result": result}
 
     def serve(self, inp: TextIO = sys.stdin) -> None:
-        for line in inp:
-            line = line.strip()
-            if not line:
-                continue
-            reply = self.handle_line(line)
-            if reply is not None:
-                self.send(reply)
+        if self.jobs is not None:
+            self.jobs.start()
+        try:
+            for line in inp:
+                line = line.strip()
+                if not line:
+                    continue
+                reply = self.handle_line(line)
+                if reply is not None:
+                    self.send(reply)
+        finally:
+            if self.jobs is not None:
+                self.jobs.stop(timeout=5)
 
     # ---- methods -----------------------------------------------------------
 
@@ -108,6 +128,10 @@ class Server:
             "name": "heliad",
             "version": __version__,
             "schema_version": db.SCHEMA_VERSION,
+            "reader_compat": db.READER_COMPAT,
+            "rules_version": fitsmeta.RULES_VERSION,
+            "reindex_due": self.lib.stats()["reindex_due"],
+            "readonly": self.lib.readonly,
             "library_root": str(self.lib.root),
             "db_path": str(self.lib.cfg.db_path),
             "methods": sorted(self.methods),
@@ -123,9 +147,22 @@ class Server:
                 self.notify("ingest.progress", {"done": i, "total": n, "path": str(p)})
         return self.lib.import_tree(path, progress=progress)
 
-    def search(self, query: dict) -> dict:
-        from .sources import fido  # sunpy is optional; imported only when searching
-        return fido.search(Query.from_json(query))
+    def search(self, query: dict, source: str = "fido") -> dict:
+        from . import sources  # sunpy and drms are optional; imported only when searching
+        return sources.get(source).search(Query.from_json(query), settings=config.load_settings())
+
+    def _jobs(self) -> jobs.JobRunner:
+        if self.jobs is None:
+            raise RpcError(INVALID_REQUEST, "this core opened the library read-only")
+        return self.jobs
+
+    def enqueue(self, query: dict, source: str = "fido") -> dict:
+        return self._jobs().enqueue(Query.from_json(query), source)
+
+    def delete(self, file_ids=(), observation_ids=(), dataset_keys=(), dry_run: bool = True) -> dict:
+        """Dry run unless dry_run is false, so a client shows what would go before it goes."""
+        return self.lib.delete(file_ids=file_ids, observation_ids=observation_ids,
+                               dataset_keys=dataset_keys, dry_run=dry_run)
 
 
 def _error(rid, code: int, message: str, data: Any = None) -> dict:

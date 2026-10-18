@@ -15,12 +15,17 @@ from pathlib import Path
 from astropy.io import fits
 from astropy.time import Time
 
+# Bump whenever a change here can move a file to a different dataset or
+# observation. The index records the version its keys were built with, and
+# `heliad reindex` rebuilds them when the two differ.
+RULES_VERSION = 2
+
 # Keywords copied into the index for every file, so readers can filter and
 # display without opening the FITS file.
 INDEXED_KEYWORDS = (
     "OBSRVTRY", "TELESCOP", "INSTRUME", "DETECTOR", "WAVELNTH", "WAVEUNIT", "WAVE_STR",
     "LEVEL", "LVL_NUM", "TYPECODE", "OBSCODE", "FILEVRSN", "DATE-OBS", "DATE_OBS",
-    "DATE-BEG", "DATE-END", "TIMESYS", "BTYPE", "EXPTIME", "NAXIS1", "NAXIS2", "CTYPE1", "CTYPE2",
+    "DATE-BEG", "DATE-END", "DATE-AVG", "TIME-OBS", "TIMESYS", "BTYPE", "EXPTIME", "NAXIS1", "NAXIS2", "CTYPE1", "CTYPE2",
     "CUNIT1", "CUNIT2", "CDELT1", "CDELT2", "CRPIX1", "CRPIX2", "CRVAL1", "CRVAL2",
     "CROTA2", "PC1_1", "PC1_2", "PC2_1", "PC2_2", "RSUN_OBS", "RSUN_REF", "RSUN_ARC",
     "R_SUN", "DSUN_OBS", "QUALITY", "OBS_MODE",
@@ -196,7 +201,17 @@ def _version(header: fits.Header, name: str) -> str | None:
 def read(path: Path) -> FitsMeta:
     path = Path(path)
     header, bad_cards = read_headers(path)
-    name = path.name
+    return from_header(header, path.name, bad_cards)
+
+
+def from_header(header, name: str, bad_cards: list[str] | None = None) -> FitsMeta:
+    """The same as read(), from headers already in hand (a dict of the indexed keywords
+    works, which is how reindex rebuilds keys for a file that is no longer readable)."""
+    if not isinstance(header, fits.Header):
+        merged = fits.Header()
+        for k, v in header.items():
+            merged[k] = v
+        header = merged
     observatory = _clean(header.get("OBSRVTRY")) or _clean(header.get("TELESCOP"))
     instrument = _clean(header.get("INSTRUME"))
     if observatory and instrument and observatory.upper() == instrument.upper():
@@ -222,7 +237,7 @@ def read(path: Path) -> FitsMeta:
         date_obs=_date_obs(header),
         version=_version(header, name),
         header={k: _json_value(header[k]) for k in INDEXED_KEYWORDS if k in header},
-        bad_cards=bad_cards,
+        bad_cards=list(bad_cards or []),
     )
 
 
@@ -232,3 +247,66 @@ def version_sort_key(version: str | None) -> tuple:
         return ((-1,),)
     parts = re.findall(r"\d+|[a-z]+", version.lower())
     return tuple((0, int(p)) if p.isdigit() else (1, p) for p in parts) or ((-1,),)
+
+
+class IncompleteFile(ValueError):
+    """The file is shorter than its own headers say: a download cut off part way."""
+
+
+def expected_size(path: Path) -> int | None:
+    """Bytes a FITS file must have, summed from each HDU's header (FITS 4.0, section 4.4.1).
+
+    Reads only the headers. Returns None when the file cannot be measured this way
+    (gzip-compressed, or not FITS at all), so the caller skips the check.
+    """
+    path = Path(path)
+    if path.name.lower().endswith(".gz"):
+        return None
+    total, size = 0, path.stat().st_size
+    with open(path, "rb") as fh:
+        while total < size:
+            fh.seek(total)
+            cards: dict[str, str] = {}
+            blocks = 0
+            while True:
+                block = fh.read(2880)
+                if len(block) < 2880:
+                    return total + (blocks + 1) * 2880  # header itself is cut off
+                blocks += 1
+                done = False
+                for i in range(0, 2880, 80):
+                    card = block[i:i + 80].decode("ascii", "replace")
+                    key = card[:8].strip()
+                    if key == "END":
+                        done = True
+                        break
+                    if card[8:10] == "= ":
+                        cards[key] = card[10:].split("/", 1)[0].strip()
+                if done:
+                    break
+            if total == 0 and "SIMPLE" not in cards:
+                return None
+            try:
+                bitpix = abs(int(cards.get("BITPIX", "8")))
+                naxis = int(cards.get("NAXIS", "0"))
+                dims = [int(cards.get(f"NAXIS{i}", "0")) for i in range(1, naxis + 1)]
+                pcount = int(cards.get("PCOUNT", "0"))
+                gcount = int(cards.get("GCOUNT", "1"))
+            except ValueError:
+                return None
+            if cards.get("GROUPS", "") == "T" and dims and dims[0] == 0:
+                dims = dims[1:]  # random groups: NAXIS1 = 0 is a marker
+            elements = 1
+            for d in dims:
+                elements *= d
+            data = bitpix // 8 * gcount * (pcount + elements) if naxis else 0
+            total += blocks * 2880 + -(-data // 2880) * 2880
+    return total
+
+
+def check_complete(path: Path) -> None:
+    """Raise IncompleteFile when a FITS file is shorter than its headers require."""
+    want = expected_size(path)
+    have = Path(path).stat().st_size
+    if want is not None and have < want:
+        raise IncompleteFile(f"{Path(path).name} has {have} bytes; its headers need {want}")

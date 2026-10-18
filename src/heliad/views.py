@@ -29,6 +29,7 @@ def create(lib: Library, name: str, *, description: str | None = None,
            end: str | None = None, observation_ids: list[int] | None = None) -> dict:
     """Create or extend a view. Members are observations, so a view always resolves
     to the newest version of each file."""
+    lib._require_writer()
     conn = lib.conn
     with lib._write_lock:
         conn.execute("BEGIN IMMEDIATE")
@@ -68,7 +69,7 @@ def create(lib: Library, name: str, *, description: str | None = None,
 
 
 def members(lib: Library, name: str) -> list[dict]:
-    rows = lib.conn.execute(
+    rows = lib.reader.execute(
         "SELECT c.*, f.source_url, f.original_name, q.query_json "
         "FROM views v JOIN view_members m ON m.view_id = v.id "
         "JOIN current_files c ON c.observation_id = m.observation_id "
@@ -144,5 +145,5 @@ def materialize(lib: Library, name: str, *, modes: tuple[str, ...] = LINK_MODES)
 
 
 def rebuild_all(lib: Library, *, modes: tuple[str, ...] = LINK_MODES) -> list[dict]:
-    names = [r["name"] for r in lib.conn.execute("SELECT name FROM views ORDER BY name")]
+    names = [r["name"] for r in lib.reader.execute("SELECT name FROM views ORDER BY name")]
     return [materialize(lib, n, modes=modes) for n in names]

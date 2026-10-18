@@ -5,7 +5,11 @@ One process writes (the Heliad core, through one connection). Everyone else
 those readers never block the writer and never see a half-written change.
 
 The schema is the contract with those readers, so it is versioned: bump
-SCHEMA_VERSION and add a step to MIGRATIONS for every change.
+SCHEMA_VERSION and add a step to MIGRATIONS for every change. meta also holds
+reader_compat, the oldest schema a reader may know and still read this index
+safely. Additive changes (new tables, new columns) leave it alone; a change that
+would mislead an older reader raises it. Readers check reader_compat, never
+schema_version, so adding a table does not lock Studio out.
 """
 
 from __future__ import annotations
@@ -13,7 +17,8 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+READER_COMPAT = 1  # see the module docstring
 
 SCHEMA_V1 = """
 CREATE TABLE meta (
@@ -119,7 +124,27 @@ JOIN files f    ON f.id = o.current_file_id
 JOIN datasets d ON d.id = o.dataset_id;
 """
 
-MIGRATIONS: dict[int, str] = {1: SCHEMA_V1}
+# Version 2: download jobs. A job is one query run against one source; the
+# downloads rows it writes are the files it fetched, good or rejected.
+SCHEMA_V2 = """
+CREATE TABLE jobs (
+    id           INTEGER PRIMARY KEY,
+    source       TEXT NOT NULL,      -- fido | jsoc
+    query_id     INTEGER NOT NULL REFERENCES queries(id),
+    status       TEXT NOT NULL CHECK (status IN ('queued', 'active', 'done', 'failed', 'cancelled')),
+    phase        TEXT,               -- searching | fetching | ingesting, while active
+    files_total  INTEGER,
+    files_done   INTEGER NOT NULL DEFAULT 0,
+    result_json  TEXT,
+    error        TEXT,
+    created_at   TEXT NOT NULL,
+    updated_at   TEXT NOT NULL
+);
+CREATE INDEX jobs_status ON jobs(status);
+ALTER TABLE downloads ADD COLUMN job_id INTEGER REFERENCES jobs(id);
+"""
+
+MIGRATIONS: dict[int, str] = {1: SCHEMA_V1, 2: SCHEMA_V2}
 
 
 def _configure(conn: sqlite3.Connection) -> None:
@@ -144,6 +169,23 @@ def connect_reader(path: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True, check_same_thread=False)
     _configure(conn)
     return conn
+
+
+def meta_value(conn: sqlite3.Connection, key: str) -> str | None:
+    has_meta = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta'"
+    ).fetchone()
+    if not has_meta:
+        return None
+    row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row else None
+
+
+def set_meta(conn: sqlite3.Connection, key: str, value) -> None:
+    conn.execute(
+        "INSERT INTO meta(key, value) VALUES (?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, str(value)),
+    )
 
 
 def schema_version(conn: sqlite3.Connection) -> int:
@@ -171,6 +213,11 @@ def migrate(conn: sqlite3.Connection) -> None:
                 "INSERT INTO meta(key, value) VALUES ('schema_version', ?) "
                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 (str(version),),
+            )
+            conn.execute(
+                "INSERT INTO meta(key, value) VALUES ('reader_compat', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (str(READER_COMPAT),),
             )
             conn.execute("COMMIT")
         except BaseException:
