@@ -18,7 +18,7 @@ from astropy.time import Time
 # Bump whenever a change here can move a file to a different dataset or
 # observation. The index records the version its keys were built with, and
 # `heliad reindex` rebuilds them when the two differ.
-RULES_VERSION = 2
+RULES_VERSION = 3
 
 # Keywords copied into the index for every file, so readers can filter and
 # display without opening the FITS file.
@@ -36,6 +36,7 @@ _VERSION_IN_NAME = re.compile(r"[_-]v(\d+[a-z]?|[a-z]{1,2}\d*|\d+(?:\.\d+)+)\.(?
 _LEVEL_IN_NAME = re.compile(r"(?:^|[_.-])l(?:ev)?([0-9](?:\.[0-9])?)(?:[_.-]|$)", re.I)
 _PUNCH_NAME = re.compile(r"^PUNCH_L(\w)_([A-Z0-9]{3})", re.I)
 _AIA_CAMERA = re.compile(r"^AIA_\d$", re.I)
+_ASPIICS_SEQUENCE = re.compile(r"(?:^|_)([0-9A-F]{12})(?=[_.])", re.I)  # hex: 1630400A0001
 
 
 @dataclass
@@ -50,6 +51,7 @@ class FitsMeta:
     version: str | None
     header: dict = field(default_factory=dict)
     bad_cards: list[str] = field(default_factory=list)
+    sequence: str | None = None  # an acquisition id that outlives reprocessing (ASPIICS)
 
     @property
     def dataset_key(self) -> str:
@@ -59,6 +61,8 @@ class FitsMeta:
 
     @property
     def obs_key(self) -> str:
+        if self.sequence:
+            return f"{self.dataset_key}|seq:{self.sequence}"
         return f"{self.dataset_key}|{self.date_obs}"
 
     @property
@@ -190,6 +194,20 @@ def _product(header: fits.Header, name: str) -> str | None:
     return None
 
 
+def _sequence(header: fits.Header, name: str) -> str | None:
+    """The acquisition id of an ASPIICS file, which both of its releases keep.
+
+    Release 1.0 dates a polarized-brightness sequence by its last frame and
+    release 1.1 by its first, so DATE-OBS cannot pair them; the id in
+    the filename (12 hex digits, starting with the CYCLE_ID) can. The header keeps
+    only CYCLE_ID, without the sequence number that follows it in the filename.
+    """
+    if str(header.get("INSTRUME", "")).strip().upper() != "ASPIICS":
+        return None
+    match = _ASPIICS_SEQUENCE.search(name)
+    return match.group(1).upper() if match else None
+
+
 def _version(header: fits.Header, name: str) -> str | None:
     value = _clean(header.get("FILEVRSN"))
     if value:
@@ -238,6 +256,7 @@ def from_header(header, name: str, bad_cards: list[str] | None = None) -> FitsMe
         version=_version(header, name),
         header={k: _json_value(header[k]) for k in INDEXED_KEYWORDS if k in header},
         bad_cards=list(bad_cards or []),
+        sequence=_sequence(header, name),
     )
 
 

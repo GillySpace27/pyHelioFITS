@@ -71,6 +71,5 @@ left unable to get data.
 3. **Last:** Studio's download buttons are removed once the app is installed and
    detected, so every search, download and delete goes through Heliad.
 
-Whether Studio keeps JPIP streaming from Helioviewer is still open (the recommendation
-is to keep it, since it is viewing rather than downloading); none of these steps
-touches it.
+Studio keeps JPIP streaming from Helioviewer (decision 10): it is viewing rather than
+downloading, and none of these steps touches it.
