@@ -42,6 +42,15 @@ def check_identity(meta: FitsMeta) -> list[Finding]:
     return out
 
 
+def check_cards(meta: FitsMeta) -> list[Finding]:
+    if not meta.bad_cards:
+        return []
+    return [Finding(
+        "unparsable_card", "warning",
+        f"Not valid FITS as written, repaired on read: {', '.join(meta.bad_cards)}.",
+    )]
+
+
 def check_time_scale(header: dict) -> list[Finding]:
     timesys = str(header.get("TIMESYS", "")).strip().upper()
     if not timesys:
@@ -115,6 +124,7 @@ def run(meta: FitsMeta) -> list[Finding]:
     header = meta.header
     return [
         *check_identity(meta),
+        *check_cards(meta),
         *check_time_scale(header),
         *check_units(header),
         *check_rotation(header),

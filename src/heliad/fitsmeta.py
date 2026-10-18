@@ -20,7 +20,7 @@ from astropy.time import Time
 INDEXED_KEYWORDS = (
     "OBSRVTRY", "TELESCOP", "INSTRUME", "DETECTOR", "WAVELNTH", "WAVEUNIT", "WAVE_STR",
     "LEVEL", "LVL_NUM", "TYPECODE", "OBSCODE", "FILEVRSN", "DATE-OBS", "DATE_OBS",
-    "DATE-BEG", "DATE-END", "TIMESYS", "EXPTIME", "NAXIS1", "NAXIS2", "CTYPE1", "CTYPE2",
+    "DATE-BEG", "DATE-END", "TIMESYS", "BTYPE", "EXPTIME", "NAXIS1", "NAXIS2", "CTYPE1", "CTYPE2",
     "CUNIT1", "CUNIT2", "CDELT1", "CDELT2", "CRPIX1", "CRPIX2", "CRVAL1", "CRVAL2",
     "CROTA2", "PC1_1", "PC1_2", "PC2_1", "PC2_2", "RSUN_OBS", "RSUN_REF", "RSUN_ARC",
     "R_SUN", "DSUN_OBS", "QUALITY", "OBS_MODE",
@@ -30,6 +30,7 @@ _WAVE_TO_ANGSTROM = {"angstrom": 1.0, "a": 1.0, "nm": 10.0, "um": 1e4, "m": 1e10
 _VERSION_IN_NAME = re.compile(r"[_-]v(\d+[a-z]?|[a-z]{1,2}\d*|\d+(?:\.\d+)+)\.(?:fits|fts|fit)(?:\.gz)?$", re.I)
 _LEVEL_IN_NAME = re.compile(r"(?:^|[_.-])l(?:ev)?([0-9](?:\.[0-9])?)(?:[_.-]|$)", re.I)
 _PUNCH_NAME = re.compile(r"^PUNCH_L(\w)_([A-Z0-9]{3})", re.I)
+_AIA_CAMERA = re.compile(r"^AIA_\d$", re.I)
 
 
 @dataclass
@@ -43,6 +44,7 @@ class FitsMeta:
     date_obs: str | None
     version: str | None
     header: dict = field(default_factory=dict)
+    bad_cards: list[str] = field(default_factory=list)
 
     @property
     def dataset_key(self) -> str:
@@ -86,9 +88,15 @@ def _clean(value) -> str | None:
     return text or None
 
 
-def read_headers(path: Path) -> fits.Header:
-    """Primary header merged with the first image extension (compressed files keep WCS there)."""
+def read_headers(path: Path) -> tuple[fits.Header, list[str]]:
+    """Primary header merged with the first image extension (compressed files keep WCS there).
+
+    Also returns the keywords of cards astropy could not parse as written. Those
+    are repaired the way astropy's verify('silentfix') would (AIA level 1 files
+    from JSOC carry OSCNMEAN = nan, for example), or dropped if that fails.
+    """
     merged = fits.Header()
+    bad: list[str] = []
     with fits.open(path, memmap=False, lazy_load_hdus=True) as hdul:
         for i, hdu in enumerate(hdul):
             if i > 1:
@@ -96,8 +104,17 @@ def read_headers(path: Path) -> fits.Header:
             for card in hdu.header.cards:
                 if card.keyword in ("", "COMMENT", "HISTORY"):
                     continue
-                merged[card.keyword] = card.value
-    return merged
+                try:
+                    value = card.value
+                except fits.VerifyError:
+                    bad.append(card.keyword)
+                    try:
+                        card.verify("silentfix")
+                        value = card.value
+                    except (fits.VerifyError, ValueError):
+                        continue
+                merged[card.keyword] = value
+    return merged, bad
 
 
 def _json_value(value):
@@ -160,6 +177,11 @@ def _product(header: fits.Header, name: str) -> str | None:
     match = _PUNCH_NAME.match(name)
     if match:
         return match.group(2).upper()
+    # ASPIICS L3 says what each image is only in BTYPE ('Polarized brightness',
+    # 'Polarization angle'; total brightness leaves it out). Elsewhere BTYPE is a
+    # generic quantity (EUI writes 'Flux') and would only clutter the label.
+    if str(header.get("INSTRUME", "")).strip().upper() == "ASPIICS":
+        return _clean(header.get("BTYPE"))
     return None
 
 
@@ -173,7 +195,7 @@ def _version(header: fits.Header, name: str) -> str | None:
 
 def read(path: Path) -> FitsMeta:
     path = Path(path)
-    header = read_headers(path)
+    header, bad_cards = read_headers(path)
     name = path.name
     observatory = _clean(header.get("OBSRVTRY")) or _clean(header.get("TELESCOP"))
     instrument = _clean(header.get("INSTRUME"))
@@ -185,16 +207,22 @@ def read(path: Path) -> FitsMeta:
         head, _, tail = observatory.partition("/")
         observatory = head
         instrument = instrument or tail
+    if instrument and _AIA_CAMERA.match(instrument):  # AIA_1..AIA_4 name the camera, not the instrument
+        instrument = "AIA"
+    detector = _clean(header.get("DETECTOR"))
+    if detector and detector.upper() in {(v or "").upper() for v in (observatory, instrument)}:
+        detector = None  # PUNCH and ASPIICS repeat the mission name here, and not in every version
     return FitsMeta(
         observatory=observatory,
         instrument=instrument,
-        detector=_clean(header.get("DETECTOR")),
+        detector=detector,
         product=_product(header, name),
         level=_level(header, name),
         wavelength=_wavelength(header),
         date_obs=_date_obs(header),
         version=_version(header, name),
         header={k: _json_value(header[k]) for k in INDEXED_KEYWORDS if k in header},
+        bad_cards=bad_cards,
     )
 
 
