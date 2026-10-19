@@ -64,7 +64,8 @@ def search(query: Query, *, settings: dict | None = None) -> dict:
     rs = recordset(query)
     keys = drms.Client().query(rs, key="T_REC,WAVELNTH,QUALITY")
     return {"query": query.to_json(), "recordset": rs, "total": len(keys),
-            "rows": keys.astype(str).to_dict("records")[:2000]}
+            "rows": keys.astype(str).to_dict("records")[:2000],
+            "times": [str(t) for t in keys["T_REC"]]}  # every record; the core bins them
 
 
 def fetch(query: Query, staging: Path, *, settings: dict, phase) -> dict:

@@ -100,6 +100,21 @@ class _RootLock:
             self._fh = None
 
 
+
+def time_bound(text: str | None) -> str | None:
+    """A range bound in the index's own form (isot with milliseconds), so that comparing
+    text compares times. Unchanged, an end of "16:30:00" sorts before an observation at
+    16:30:00.000 and leaves it out. Text that is not a time is passed on as it is."""
+    if not text:
+        return text
+    try:
+        when = datetime.fromisoformat(text.strip().removesuffix("Z").replace(" ", "T"))
+    except ValueError:
+        return text
+    if when.tzinfo is not None:
+        when = when.astimezone(timezone.utc).replace(tzinfo=None)
+    return when.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
+
 @dataclass
 class IngestResult:
     status: str               # added | duplicate | new_version | older_version | same_version
@@ -414,6 +429,7 @@ class Library:
 
     def current_files(self, *, dataset_key: str | None = None, start: str | None = None,
                       end: str | None = None, limit: int | None = None, offset: int = 0) -> list[dict]:
+        start, end = time_bound(start), time_bound(end)
         sql, args = "SELECT * FROM current_files WHERE 1 = 1", []
         if dataset_key:
             sql += " AND dataset_key = ?"
@@ -539,7 +555,7 @@ class Library:
         if not dry_run:
             for f in files:
                 p = self.abspath(f["relpath"])
-                thumbs.thumb_path(self.root, f["sha256"]).unlink(missing_ok=True)
+                thumbs.remove(self.root, f["sha256"])
                 try:
                     p.unlink()
                     released += f["size"]

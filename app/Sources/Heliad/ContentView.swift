@@ -31,6 +31,16 @@ struct ContentView: View {
             SearchView()
         case .downloads:
             DownloadsView()
+        case .timeline:
+            TimelineView()
+        case .event(let name):
+            if let event = model.events.first(where: { $0.name == name }) {
+                EventPane(event: event)
+                    .id(name)
+            } else {
+                Text("This event is no longer in the library.")
+                    .foregroundStyle(.secondary)
+            }
         case .dataset(let key):
             if let dataset = model.datasets.first(where: { $0.datasetKey == key }) {
                 FilesView(dataset: dataset)
@@ -69,6 +79,8 @@ private struct Sidebar: View {
                 .tag(SidebarItem.downloads)
             }
             Section("Library") {
+                Label("Timeline", systemImage: "chart.bar.xaxis")
+                    .tag(SidebarItem.timeline)
                 if model.datasets.isEmpty, model.coreState == .ready {
                     Text("Nothing kept yet")
                         .foregroundStyle(.secondary)
@@ -79,6 +91,24 @@ private struct Sidebar: View {
                         .contextMenu {
                             Button("Delete Dataset…", role: .destructive) { pendingDelete = dataset }
                         }
+                }
+            }
+            Section("Events") {
+                if model.events.isEmpty, model.coreState == .ready {
+                    Text("Select a range in the Timeline to make one")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(model.events) { event in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(event.name)
+                            .lineLimit(1)
+                        Text("\(event.observations) · \(event.datasets) dataset\(event.datasets == 1 ? "" : "s")")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .tag(SidebarItem.event(event.name))
+                    .help(event.description ?? event.name)
                 }
             }
         }

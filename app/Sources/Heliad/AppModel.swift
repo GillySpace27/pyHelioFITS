@@ -5,7 +5,16 @@ import HeliadKit
 enum SidebarItem: Hashable {
     case search
     case downloads
+    case timeline
     case dataset(String)  // dataset_key
+    case event(String)    // view name
+}
+
+/// A time range to open a dataset's files at, set by the Timeline before it selects the dataset.
+struct FilesFilter: Equatable {
+    let datasetKey: String
+    let start: String
+    let end: String
 }
 
 /// What the window shows, kept in step with the core.
@@ -22,6 +31,8 @@ final class AppModel: ObservableObject {
     @Published var stats: Stats?
     @Published var datasets: [Dataset] = []
     @Published var jobs: [Job] = []
+    @Published var events: [EventView] = []
+    @Published var filesFilter: FilesFilter?
     @Published var selection: SidebarItem? = .search
     @Published var searchFields = QueryFields()
     /// Set when another program (Studio) sent a heliad://get link: the search is shown,
@@ -35,6 +46,12 @@ final class AppModel: ObservableObject {
     private(set) var launch: CoreClient.Launch?
     private var thumbnails: [Int: NSImage] = [:]
     private var failedThumbnails: Set<Int> = []
+    /// The frame viewer's larger previews, oldest dropped first so a long playback stays bounded.
+    private var previews: [Int: NSImage] = [:]
+    private var previewOrder: [Int] = []
+    private var previewsInFlight: [Int: Task<String?, Never>] = [:]  // the rendered PNG's path
+    static let previewSize = 1024
+    static let previewsKept = 150
     private var pendingLinks: [URL] = []
 
     var libraryRoot: String? { hello?.libraryRoot }
@@ -71,6 +88,8 @@ final class AppModel: ObservableObject {
         coreState = .starting
         thumbnails.removeAll()
         failedThumbnails.removeAll()
+        previews.removeAll()
+        previewOrder.removeAll()
         Task {
             await core.stop(grace: 8)  // it holds the library lock until it exits
             startCore()
@@ -121,6 +140,7 @@ final class AppModel: ObservableObject {
         do {
             stats = try await core.call("library.stats", as: Stats.self)
             datasets = try await core.call("library.datasets", as: [Dataset].self)
+            events = try await core.call("view.list", as: [EventView].self)
             libraryGeneration += 1
         } catch {
             report(error)
@@ -164,6 +184,103 @@ final class AppModel: ObservableObject {
         }
         thumbnails[file.fileId] = image
         return image
+    }
+
+    /// A larger preview for the frame viewer: the core renders it once at previewSize and
+    /// caches it beside the thumbnail. Asking twice while it renders waits for the one render.
+    func preview(for file: LibraryFile) async -> NSImage? {
+        if let image = previews[file.fileId] { return image }
+        let task: Task<String?, Never>
+        if let running = previewsInFlight[file.fileId] {
+            task = running
+        } else {
+            let params: [String: JSONValue] = ["file_id": .int(file.fileId), "size": .int(Self.previewSize)]
+            task = Task { [core] in
+                try? await core.call("library.thumbnail", params, as: RenderedPreview.self).path
+            }
+            previewsInFlight[file.fileId] = task
+        }
+        let path = await task.value
+        previewsInFlight[file.fileId] = nil
+        if let image = previews[file.fileId] { return image }  // the other waiter got there first
+        guard let path, let image = NSImage(contentsOfFile: path) else { return nil }
+        previews[file.fileId] = image
+        previewOrder.append(file.fileId)
+        if previewOrder.count > Self.previewsKept {
+            previews[previewOrder.removeFirst()] = nil
+        }
+        return image
+    }
+
+    func checks(for file: LibraryFile) async -> [FileCheck] {
+        (try? await core.call("library.checks", ["file_id": .int(file.fileId)], as: [FileCheck].self)) ?? []
+    }
+
+    // MARK: - coverage and events
+
+    /// Observations per bin for every dataset (or those a search names) over [start, end];
+    /// nil start and end mean the library's own first to last observation.
+    func coverage(start: String?, end: String?, bins: Int, instrument: String? = nil,
+                  wavelength: Double? = nil) async throws -> Coverage {
+        var params: [String: JSONValue] = ["bins": .int(bins)]
+        if let start { params["start"] = .string(start) }
+        if let end { params["end"] = .string(end) }
+        if let instrument, !instrument.isEmpty { params["instrument"] = .string(instrument) }
+        if let wavelength { params["wavelength"] = .double(wavelength) }
+        return try await core.call("library.coverage", params, as: Coverage.self)
+    }
+
+    /// Open one dataset's files at a time range (from the Timeline).
+    func showFiles(_ datasetKey: String, start: String, end: String) {
+        filesFilter = FilesFilter(datasetKey: datasetKey, start: start, end: end)
+        selection = .dataset(datasetKey)
+    }
+
+    /// Fill the search with a range (and a dataset's instrument and wavelength) and show it.
+    func searchArchives(start: String, end: String, like row: Coverage.Row? = nil) {
+        searchFields.start = IndexTime.wholeSeconds(start, up: false)
+        searchFields.end = IndexTime.wholeSeconds(end, up: true)
+        if let row {
+            searchFields.instrument = row.instrument ?? ""
+            searchFields.wavelength = row.wavelength.map { JSONValue.double($0).display } ?? ""
+        }
+        linkAskedToDownload = false
+        selection = .search
+    }
+
+    /// Make an event: a view of these datasets' observations in [start, end], with its folder
+    /// of links written beside the library (views/<name>). Adding to an existing event keeps
+    /// what it already holds.
+    func makeEvent(name: String, description: String, start: String, end: String, datasetKeys: [String]) async {
+        do {
+            var params: [String: JSONValue] = ["name": .string(name), "start": .string(start), "end": .string(end),
+                                               "dataset_keys": .array(datasetKeys.map { .string($0) })]
+            if !description.isEmpty { params["description"] = .string(description) }
+            _ = try await core.callRaw("view.create", params)
+            _ = try await core.callRaw("view.materialize", ["name": .string(name)])
+            await refreshLibrary()
+            selection = .event(name)
+        } catch {
+            report(error)
+        }
+    }
+
+    /// Write an event's folder of links again from the index.
+    func rebuildEvent(_ name: String) async {
+        do {
+            _ = try await core.callRaw("view.materialize", ["name": .string(name)])
+            await refreshLibrary()
+        } catch {
+            report(error)
+        }
+    }
+
+    func eventMembers(_ name: String) async throws -> [LibraryFile] {
+        try await core.call("view.members", ["name": .string(name)], as: [LibraryFile].self)
+    }
+
+    func revealFolder(_ path: String) {
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
     }
 
     // MARK: - searching and downloading
@@ -231,7 +348,10 @@ final class AppModel: ObservableObject {
         params["dry_run"] = .bool(false)
         do {
             _ = try await core.call("library.delete", params, as: DeleteSummary.self)
-            for id in target.fileIds { thumbnails[id] = nil }
+            for id in target.fileIds {
+                thumbnails[id] = nil
+                previews[id] = nil
+            }
             if case .dataset(let key) = selection, target.datasetKeys.contains(key) { selection = .search }
             await refreshLibrary()
         } catch {
@@ -296,4 +416,9 @@ final class AppModel: ObservableObject {
         if case .failed = coreState { return }  // the core stopping explains everything after it
         alert = error.localizedDescription
     }
+}
+
+/// library.thumbnail's answer: where the PNG is.
+private struct RenderedPreview: Decodable {
+    let path: String
 }

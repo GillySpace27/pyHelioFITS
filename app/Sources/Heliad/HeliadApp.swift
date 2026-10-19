@@ -5,6 +5,7 @@ import SwiftUI
 struct HeliadApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var model = AppModel()
+    @AppStorage("showFrameViewer") private var showViewer = false
 
     var body: some Scene {
         WindowGroup("Heliad", id: "main") {
@@ -26,6 +27,13 @@ struct HeliadApp: App {
                     .keyboardShortcut("f", modifiers: [.command, .shift])
                 Button("Downloads") { model.selection = .downloads }
                     .keyboardShortcut("d", modifiers: [.command, .shift])
+                Button("Timeline") { model.selection = .timeline }
+                    .keyboardShortcut("t", modifiers: [.command, .shift])
+            }
+            CommandGroup(after: .sidebar) {
+                // Hidden by default: the viewer is for checking what is kept, not for making images.
+                Toggle("Show Frame Viewer", isOn: $showViewer)
+                    .keyboardShortcut("p", modifiers: [.command, .option])
             }
             CommandGroup(after: .toolbar) {
                 Button("Reload Library") { Task { await model.refreshAll() } }

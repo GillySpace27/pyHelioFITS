@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import struct
+import threading
 import warnings
 import zlib
 from pathlib import Path
@@ -86,7 +87,15 @@ def ensure(root: Path, path: Path, sha256: str, size: int = DEFAULT_SIZE) -> Pat
         return out
     png = encode_png(scale(downsample(image_data(path), size)))
     out.parent.mkdir(parents=True, exist_ok=True)
-    tmp = out.with_name(f"{out.name}.{os.getpid()}.part")
+    # One name per thread: the app's grid and frame viewer can ask for the same preview at once.
+    tmp = out.with_name(f"{out.name}.{os.getpid()}.{threading.get_ident()}.part")
     tmp.write_bytes(png)
     os.replace(tmp, out)
     return out
+
+
+def remove(root: Path, sha256: str) -> None:
+    """Every cached preview of one file, whatever its size."""
+    folder = Path(root) / ".thumbs" / sha256[:2]
+    for p in [thumb_path(root, sha256), *folder.glob(f"{sha256}-*.png")]:
+        p.unlink(missing_ok=True)

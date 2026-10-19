@@ -57,6 +57,8 @@ public struct LibraryFile: Decodable, Sendable, Identifiable, Hashable {
 
     public var id: Int { fileId }
     public var name: String { (relpath as NSString).lastPathComponent }
+    /// The version for sorting a table by, "" when the file has none.
+    public var versionText: String { version ?? "" }
 
     /// Where the core caches this file's thumbnail (thumbs.thumb_path in the core).
     public func thumbnailURL(libraryRoot: String) -> URL {
@@ -129,19 +131,22 @@ public struct SearchResult: Decodable, Sendable {
         public let count: Int
         public let columns: [String]
         public let rows: [[String: JSONValue]]
+        /// Every record's time binned over the search range, when the archive reports times.
+        public let coverage: TimeBins?
     }
 
     public let total: Int
     public let recordset: String?
     public let providers: [Provider]
 
-    private enum Keys: String, CodingKey { case total, recordset, providers, rows }
+    private enum Keys: String, CodingKey { case total, recordset, providers, rows, coverage }
 
     private struct RawProvider: Decodable {
         let client: String?
         let count: Int
         let columns: [String]
         let rows: [[String: JSONValue]]
+        let coverage: TimeBins?
     }
 
     public init(from decoder: Decoder) throws {
@@ -150,14 +155,83 @@ public struct SearchResult: Decodable, Sendable {
         recordset = try c.decodeIfPresent(String.self, forKey: .recordset)
         if let raw = try c.decodeIfPresent([RawProvider].self, forKey: .providers) {
             providers = raw.enumerated().map { i, p in
-                Provider(id: i, client: p.client ?? "archive", count: p.count, columns: p.columns, rows: p.rows)
+                Provider(id: i, client: p.client ?? "archive", count: p.count, columns: p.columns, rows: p.rows,
+                         coverage: p.coverage)
             }
         } else {
             let rows = try c.decodeIfPresent([[String: JSONValue]].self, forKey: .rows) ?? []
             let columns = rows.first.map { Array($0.keys).sorted() } ?? []
-            providers = [Provider(id: 0, client: "JSOC export", count: total, columns: columns, rows: rows)]
+            providers = [Provider(id: 0, client: "JSOC export", count: total, columns: columns, rows: rows,
+                                  coverage: try c.decodeIfPresent(TimeBins.self, forKey: .coverage))]
         }
     }
+}
+
+/// library.coverage: per dataset, how many observations fall in each equal slice of a range.
+/// The bins split [start, end]; an observation exactly at end is in the last bin.
+public struct Coverage: Decodable, Sendable, Equatable {
+    public struct Row: Decodable, Sendable, Identifiable, Equatable {
+        public let datasetKey: String
+        public let label: String
+        public let instrument: String?
+        public let wavelength: Double?
+        public let counts: [Int]
+        public let frames: Int        // observations in the range
+        public let first: String?     // first and last of those
+        public let last: String?
+        public let undated: Int       // observations whose time the index cannot read
+
+        public var id: String { datasetKey }
+    }
+
+    public let start: String?         // nil when nothing in the library has a time
+    public let end: String?
+    public let bins: Int
+    public let binSeconds: Double?
+    public let datasets: [Row]
+
+    /// Every row's counts added bin by bin.
+    public var total: [Int] {
+        datasets.reduce(into: Array(repeating: 0, count: bins)) { sum, row in
+            for (i, n) in row.counts.enumerated() where i < sum.count { sum[i] += n }
+        }
+    }
+}
+
+/// An archive search's record times binned the way library.coverage bins the index.
+public struct TimeBins: Decodable, Sendable, Equatable {
+    public let start: String
+    public let end: String
+    public let bins: Int
+    public let binSeconds: Double
+    public let counts: [Int]
+    public let outside: Int           // records the archive gave with a time outside the range
+    public let undated: Int           // records with no time Heliad could read
+}
+
+/// One row of view.list: a named selection of observations (an event) and its folder of links.
+public struct EventView: Decodable, Sendable, Identifiable, Hashable {
+    public let viewId: Int
+    public let name: String
+    public let kind: String
+    public let description: String?
+    public let createdAt: String
+    public let observations: Int
+    public let datasets: Int
+    public let bytes: Int64
+    public let first: String?
+    public let last: String?
+    public let path: String           // where its folder of links is, or would be
+    public let materialized: Bool     // whether that folder has been made
+
+    public var id: String { name }
+}
+
+/// library.checks: what the header and WCS checks found in one file.
+public struct FileCheck: Decodable, Sendable, Hashable {
+    public let code: String
+    public let severity: String       // info | warning | error
+    public let message: String
 }
 
 /// query.from_url
