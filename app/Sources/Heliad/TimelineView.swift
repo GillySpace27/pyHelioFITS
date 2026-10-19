@@ -8,6 +8,7 @@ struct TimelineView: View {
     @EnvironmentObject var model: AppModel
     @State var range: ClosedRange<Date>?       // nil: the library's first to last observation
     @State var coverage: Coverage?
+    @State var extent: (start: String, end: String)?  // the library's first and last observation
     @State var problem: String?
     @State var selected: ClosedRange<Date>?
     @State var inSelection: Coverage?          // one bin per dataset, over the selection
@@ -49,7 +50,8 @@ struct TimelineView: View {
 
     private var topBar: some View {
         HStack(spacing: 10) {
-            if let coverage, let start = coverage.start, let end = coverage.end {
+            if let coverage, let start = range == nil ? extent?.start : coverage.start,
+               let end = range == nil ? extent?.end : coverage.end {
                 Text("\(Format.span(start, end)) UTC")
                     .font(.callout.monospacedDigit())
                     .lineLimit(1)
@@ -277,8 +279,9 @@ struct TimelineView: View {
         do {
             var shown = range
             if shown == nil {  // the whole library, with a margin so its first and last frames are not on the edges
-                let extent = try await model.coverage(start: nil, end: nil, bins: 1)
-                if let start = IndexTime.date(extent.start), let end = IndexTime.date(extent.end) {
+                let whole = try await model.coverage(start: nil, end: nil, bins: 1)
+                extent = whole.start.flatMap { s in whole.end.map { (start: s, end: $0) } }
+                if let start = IndexTime.date(whole.start), let end = IndexTime.date(whole.end) {
                     let margin = max(end.timeIntervalSince(start) * 0.02, 1)
                     shown = start.addingTimeInterval(-margin)...end.addingTimeInterval(margin)
                 }

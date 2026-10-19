@@ -36,7 +36,7 @@ struct FilesView: View {
             }
         }
         .navigationTitle(dataset.label)
-        .navigationSubtitle("\(dataset.observations) observations · \(Format.time(dataset.first)) to \(Format.time(dataset.last))")
+        .navigationSubtitle("\(dataset.observations) observations · \(Format.span(dataset.first, dataset.last)) UTC")
         .toolbar {
             ToolbarItemGroup {
                 Toggle(isOn: $showViewer) { Label("Frame Viewer", systemImage: "play.rectangle") }

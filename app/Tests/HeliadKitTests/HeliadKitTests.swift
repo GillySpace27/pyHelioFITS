@@ -15,7 +15,7 @@ final class ModelTests: XCTestCase {
          "query":{"end":"2025-09-21T16:05:00","instrument":"AIA","sample_s":60.0,"start":"2025-09-21T16:00:00","wavelength":193.0},
          "result":{"found":5,"fetched":0,"stored":0,"errors":["timeout"],"ingest":{}}}
         """)
-        XCTAssertEqual(job.title, "AIA · 193 Å · 2025-09-21T16:00:00 to 2025-09-21T16:05:00")
+        XCTAssertEqual(job.title, "AIA · 193 Å · 2025-09-21T16:00:00 to 2025-09-21T16:05:00 UTC")
         XCTAssertEqual(job.summary, "stored 0 of 5")
         // Keys inside an open dictionary stay as the core wrote them (no snake_case conversion).
         // (A whole-number float such as 60.0 decodes as .int; doubleValue reads either.)

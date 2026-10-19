@@ -55,6 +55,7 @@ struct FrameViewer: View {
             Spacer(minLength: 0)
         }
         .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .task(id: current) { await show() }
         .task(id: playing) { await play() }
         .onAppear { if current == nil { current = frames.first?.fileId } }
@@ -81,34 +82,49 @@ struct FrameViewer: View {
         .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 
+    /// Playback and the file's own actions on one row when the pane is wide enough, else two.
     private var controls: some View {
-        HStack {
-            Button { step(-1) } label: { Image(systemName: "backward.frame") }
-                .help("Previous frame")
-            Button { playing.toggle() } label: { Image(systemName: playing ? "pause.fill" : "play.fill") }
-                .help(playing ? "Pause" : "Play through the frames, looping")
-            Button { step(1) } label: { Image(systemName: "forward.frame") }
-                .help("Next frame")
-            Picker("Rate", selection: $rate) {
-                ForEach([1.0, 2, 5, 10, 20], id: \.self) { Text("\(Int($0)) per s").tag($0) }
+        ViewThatFits(in: .horizontal) {
+            HStack {
+                playback
+                Spacer(minLength: 8)
+                actions
             }
-            .labelsHidden()
-            .frame(width: 90)
-            .help("Frames a second, when the previews are ready; playback waits for each one")
-            Spacer()
-            if let file {
-                Button { model.reveal([file]) } label: { Image(systemName: "folder") }
-                    .help("Show in Finder")
-                Button { model.copyPaths([file]) } label: { Image(systemName: "doc.on.doc") }
-                    .help("Copy the file's path")
-                Button(role: .destructive) {
-                    playing = false
-                    onDelete([file])
-                } label: { Image(systemName: "trash") }
-                    .help("Delete this frame from the library")
+            VStack(alignment: .leading, spacing: 6) {
+                HStack { playback }
+                HStack { actions }
             }
         }
         .disabled(frames.isEmpty)
+    }
+
+    @ViewBuilder private var playback: some View {
+        Button { step(-1) } label: { Image(systemName: "backward.frame") }
+            .help("Previous frame")
+        Button { playing.toggle() } label: { Image(systemName: playing ? "pause.fill" : "play.fill") }
+            .help(playing ? "Pause" : "Play through the frames, looping")
+        Button { step(1) } label: { Image(systemName: "forward.frame") }
+            .help("Next frame")
+        Picker("Rate", selection: $rate) {
+            ForEach([1.0, 2, 5, 10, 20], id: \.self) { Text("\(Int($0)) per s").tag($0) }
+        }
+        .labelsHidden()
+        .frame(width: 90)
+        .help("Frames a second, when the previews are ready; playback waits for each one")
+    }
+
+    @ViewBuilder private var actions: some View {
+        if let file {
+            Button { model.reveal([file]) } label: { Image(systemName: "folder") }
+                .help("Show in Finder")
+            Button { model.copyPaths([file]) } label: { Image(systemName: "doc.on.doc") }
+                .help("Copy the file's path")
+            Button(role: .destructive) {
+                playing = false
+                onDelete([file])
+            } label: { Image(systemName: "trash") }
+                .help("Delete this frame from the library")
+        }
     }
 
     @ViewBuilder private var checkList: some View {

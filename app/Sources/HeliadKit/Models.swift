@@ -99,7 +99,7 @@ public struct Job: Decodable, Sendable, Identifiable, Equatable {
         if let series = query["jsoc_series"]?.stringValue { parts.append(series) }
         let start = query["start"]?.stringValue ?? "?"
         let end = query["end"]?.stringValue ?? "?"
-        parts.append("\(start) to \(end)")
+        parts.append("\(start) to \(end) UTC")
         return parts.joined(separator: " · ")
     }
 
