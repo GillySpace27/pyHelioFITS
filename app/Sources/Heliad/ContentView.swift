@@ -94,10 +94,11 @@ private struct Sidebar: View {
                 }
             }
             Section("Events") {
+                // One short line, like the Library's placeholder; the longer hint is its tooltip.
                 if model.events.isEmpty, model.coreState == .ready {
-                    Text("Select a range in the Timeline to make one")
-                        .font(.caption)
+                    Text("No events yet")
                         .foregroundStyle(.secondary)
+                        .help("Select a range in the Timeline to make one")
                 }
                 ForEach(model.events) { event in
                     VStack(alignment: .leading, spacing: 2) {
