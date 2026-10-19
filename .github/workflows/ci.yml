@@ -1,0 +1,83 @@
+# The core's tests on Linux and macOS, the Mac app's build and tests on macOS, and a guard
+# against em dashes. Archive searches are faked in the tests, so nothing here reaches an archive.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: Core tests (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, python: "3.10" }
+          - { os: ubuntu-latest, python: "3.13" }
+          - { os: macos-latest, python: "3.12" }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install -e ".[archives,test]"
+      - run: python -m pytest -q
+
+  app:
+    name: Mac app build and tests
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Note whether this branch has the app
+        id: has
+        run: echo "app=$([ -f app/Package.swift ] && echo yes || echo no)" >> "$GITHUB_OUTPUT"
+      - if: steps.has.outputs.app == 'no'
+        run: 'echo "SKIP: no app/Package.swift on this branch"'
+      - if: steps.has.outputs.app == 'yes'
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - if: steps.has.outputs.app == 'yes'
+        name: Install the core for the real-core test
+        run: |
+          python -m venv "$RUNNER_TEMP/core"
+          "$RUNNER_TEMP/core/bin/python" -m pip install ".[archives]"
+      - if: steps.has.outputs.app == 'yes'
+        run: swift --version
+      - if: steps.has.outputs.app == 'yes'
+        working-directory: app
+        run: swift build
+      - if: steps.has.outputs.app == 'yes'
+        working-directory: app
+        run: |
+          export HELIAD_CORE="$RUNNER_TEMP/core/bin/python3"
+          export HELIAD_TEST_LIBRARY="$RUNNER_TEMP/library"
+          swift test
+
+  guards:
+    name: No em dashes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Refuse U+2014 in tracked text files
+        run: |
+          if git grep -nIF "$(printf '\342\200\224')"; then
+            echo "FAIL: em dash found (use a colon, semicolon, comma, period or parentheses)"
+            exit 1
+          fi
+          echo "ok: no em dashes"
