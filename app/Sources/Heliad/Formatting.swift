@@ -15,6 +15,29 @@ enum Format {
         return s
     }
 
+    /// A wall-clock time the core wrote (ISO 8601 with an offset, such as when a job was queued)
+    /// in this Mac's time zone, named: "2026-10-18 15:34 MDT". Observation times stay UTC.
+    static func localTime(_ iso: String) -> String {
+        guard let date = ISO8601DateFormatter().date(from: iso) else { return String(time(iso).prefix(16)) }
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd HH:mm zzz"
+        return f.string(from: date)
+    }
+
+    /// A span of index times, the date given once when both ends fall on the same day and
+    /// whole seconds only: "2025-09-21 16:00:04 to 16:10:04".
+    static func span(_ start: String?, _ end: String?) -> String {
+        let a = seconds(time(start)), b = seconds(time(end))
+        if a.count >= 10, b.count >= 10, a.prefix(10) == b.prefix(10) {
+            return "\(a) to \(b.dropFirst(11))"
+        }
+        return "\(a) to \(b)"
+    }
+
+    private static func seconds(_ shown: String) -> String {
+        shown.firstIndex(of: ".").map { String(shown[..<$0]) } ?? shown
+    }
+
     /// A length of time in the largest units that keep it short: "40 s", "12 min", "3 h 20 min", "6 d".
     static func duration(_ seconds: Double) -> String {
         let s = max(seconds, 0)

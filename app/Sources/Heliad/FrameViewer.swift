@@ -178,6 +178,7 @@ struct FrameTimes: View {
     @Binding var current: Int?
 
     private var times: [Date?] { frames.map { IndexTime.date($0.dateObs) } }
+    static let inset: CGFloat = 4  // so the first and last marks are not on the edge
 
     var body: some View {
         GeometryReader { geo in
@@ -190,7 +191,7 @@ struct FrameTimes: View {
                              with: .color(.secondary.opacity(0.08)))
                 for (i, t) in times.enumerated() {
                     guard let t else { continue }
-                    let x = CGFloat(t.timeIntervalSince(first) / span) * (size.width - 2) + 1
+                    let x = CGFloat(t.timeIntervalSince(first) / span) * (size.width - 2 * Self.inset) + Self.inset
                     let on = frames[i].fileId == current
                     context.fill(Path(CGRect(x: x - (on ? 1 : 0.5), y: on ? 0 : 5, width: on ? 3 : 1,
                                              height: on ? size.height : size.height - 10)),
@@ -199,7 +200,7 @@ struct FrameTimes: View {
             }
             .contentShape(Rectangle())
             .onTapGesture { point in
-                let at = first.addingTimeInterval(Double((point.x - 1) / max(geo.size.width - 2, 1)) * span)
+                let at = first.addingTimeInterval(Double((point.x - Self.inset) / max(geo.size.width - 2 * Self.inset, 1)) * span)
                 let nearest = times.enumerated().compactMap { i, t in t.map { (i, abs($0.timeIntervalSince(at))) } }
                     .min { $0.1 < $1.1 }
                 if let nearest { current = frames[nearest.0].fileId }

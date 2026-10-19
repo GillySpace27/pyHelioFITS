@@ -29,10 +29,10 @@ struct FilesView: View {
                 Divider()
                 if layout == "table" { table } else { grid }
             }
-            .frame(minWidth: 360)
+            .frame(minWidth: 300)
             if showViewer {
                 FrameViewer(frames: files, current: current, more: more) { deleting = $0 }
-                    .frame(minWidth: 340, idealWidth: 480)
+                    .frame(minWidth: 300, idealWidth: 440)
             }
         }
         .navigationTitle(dataset.label)
@@ -131,36 +131,76 @@ struct FilesView: View {
         }
     }
 
+    /// One row when there is room; narrower (the frame viewer open), two rows, then four.
     private var filterBar: some View {
-        HStack {
-            TextField("From (UTC)", text: $start, prompt: Text(Format.time(dataset.first)))
-                .frame(maxWidth: 220)
-            TextField("To (UTC)", text: $end, prompt: Text(Format.time(dataset.last)))
-                .frame(maxWidth: 220)
-            Button("Filter") { Task { await load(reset: true) } }
-                .keyboardShortcut(.defaultAction)
-            if !start.isEmpty || !end.isEmpty {
-                Button("Clear") {
-                    start = ""
-                    end = ""
-                    Task { await load(reset: true) }
+        ViewThatFits(in: .horizontal) {
+            HStack {
+                fromField
+                toField
+                filterButtons
+                Spacer(minLength: 8)
+                status
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    fromField
+                    toField
+                    filterButtons
+                }
+                HStack {
+                    Spacer()
+                    status
                 }
             }
-            Spacer()
-            Text(countText)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Picker("Layout", selection: $layout) {
-                Image(systemName: "square.grid.2x2").tag("grid")
-                Image(systemName: "list.bullet").tag("table")
+            VStack(alignment: .leading, spacing: 6) {
+                fromField
+                toField
+                HStack {
+                    filterButtons
+                    Spacer()
+                    status
+                }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 80)
-            .help("Show the files as previews or as a table")
         }
         .textFieldStyle(.roundedBorder)
         .padding(10)
+    }
+
+    private var fromField: some View {
+        TextField("From (UTC)", text: $start, prompt: Text(Format.time(dataset.first)))
+            .frame(minWidth: 170, maxWidth: 220)
+    }
+
+    private var toField: some View {
+        TextField("To (UTC)", text: $end, prompt: Text(Format.time(dataset.last)))
+            .frame(minWidth: 170, maxWidth: 220)
+    }
+
+    @ViewBuilder private var filterButtons: some View {
+        Button("Filter") { Task { await load(reset: true) } }
+            .keyboardShortcut(.defaultAction)
+        if !start.isEmpty || !end.isEmpty {
+            Button("Clear") {
+                start = ""
+                end = ""
+                Task { await load(reset: true) }
+            }
+        }
+    }
+
+    @ViewBuilder private var status: some View {
+        Text(countText)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+        Picker("Layout", selection: $layout) {
+            Image(systemName: "square.grid.2x2").tag("grid")
+            Image(systemName: "list.bullet").tag("table")
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .frame(width: 80)
+        .help("Show the files as previews or as a table")
     }
 
     private var countText: String {

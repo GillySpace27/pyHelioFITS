@@ -65,7 +65,8 @@ struct EventPane: View {
             }
         }
         .navigationTitle(event.name)
-        .navigationSubtitle("\(event.observations) observations · \(event.datasets) datasets · \(Format.bytes(event.bytes))")
+        .navigationSubtitle("\(event.observations) observation\(event.observations == 1 ? "" : "s") · "
+                            + "\(event.datasets) dataset\(event.datasets == 1 ? "" : "s") · \(Format.bytes(event.bytes))")
         .toolbar {
             ToolbarItemGroup {
                 Button { model.revealFolder(event.path) } label: { Label("Show Folder", systemImage: "folder") }

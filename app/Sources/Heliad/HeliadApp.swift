@@ -20,6 +20,7 @@ struct HeliadApp: App {
                 .onOpenURL { url in model.open(url) }
                 .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
         }
+        .defaultSize(width: 1240, height: 780)  // room for the grid beside the frame viewer
         .handlesExternalEvents(matching: ["*"])
         .commands {
             CommandGroup(after: .newItem) {

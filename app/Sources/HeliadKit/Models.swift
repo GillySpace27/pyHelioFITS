@@ -111,6 +111,14 @@ public struct Job: Decodable, Sendable, Identifiable, Equatable {
         if let found = result["found"]?.intValue { return "stored \(stored) of \(found)" }
         return "stored \(stored)"
     }
+
+    /// Ended "done" but stored fewer files than it found: jobs from before partial existed
+    /// (schema 3) were marked done this way, so the list shows them as partial.
+    public var fellShort: Bool {
+        guard status == "done", let result, let found = result["found"]?.intValue,
+              let stored = result["stored"]?.intValue ?? result["fetched"]?.intValue else { return false }
+        return stored < found
+    }
 }
 
 /// library.delete, as a dry run or done.

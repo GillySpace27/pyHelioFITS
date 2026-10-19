@@ -50,12 +50,15 @@ struct TimelineView: View {
     private var topBar: some View {
         HStack(spacing: 10) {
             if let coverage, let start = coverage.start, let end = coverage.end {
-                Text("\(Format.time(start)) to \(Format.time(end)) UTC")
+                Text("\(Format.span(start, end)) UTC")
                     .font(.callout.monospacedDigit())
+                    .lineLimit(1)
+                    .help("\(Format.time(start)) to \(Format.time(end)) UTC")
                 if let seconds = coverage.binSeconds {
                     Text("one column is \(Format.duration(seconds))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
             }
             Spacer()
@@ -272,8 +275,16 @@ struct TimelineView: View {
 
     private func load() async {
         do {
-            coverage = try await model.coverage(start: range.map { IndexTime.text($0.lowerBound) },
-                                                end: range.map { IndexTime.text($0.upperBound) }, bins: Self.bins)
+            var shown = range
+            if shown == nil {  // the whole library, with a margin so its first and last frames are not on the edges
+                let extent = try await model.coverage(start: nil, end: nil, bins: 1)
+                if let start = IndexTime.date(extent.start), let end = IndexTime.date(extent.end) {
+                    let margin = max(end.timeIntervalSince(start) * 0.02, 1)
+                    shown = start.addingTimeInterval(-margin)...end.addingTimeInterval(margin)
+                }
+            }
+            coverage = try await model.coverage(start: shown.map { IndexTime.text($0.lowerBound) },
+                                                end: shown.map { IndexTime.text($0.upperBound) }, bins: Self.bins)
             problem = nil
             if selected != nil { await loadSelection() }
         } catch {
@@ -304,8 +315,10 @@ struct Axis: View {
                 let x = CGFloat(tick.timeIntervalSince(span.lowerBound) / total) * size.width
                 context.fill(Path(CGRect(x: x, y: size.height - 6, width: 1, height: 6)), with: .color(.secondary))
                 let label = IndexTime.label(tick, step: step, showDate: crossesDays)
+                // Near an edge the label hangs inward, so it is not cut off.
+                let anchor: UnitPoint = x < 40 ? .bottomLeading : (x > size.width - 40 ? .bottomTrailing : .bottom)
                 context.draw(Text(label).font(.caption2.monospacedDigit()).foregroundStyle(.secondary),
-                             at: CGPoint(x: x, y: size.height - 8), anchor: .bottom)
+                             at: CGPoint(x: x, y: size.height - 8), anchor: anchor)
             }
         }
     }

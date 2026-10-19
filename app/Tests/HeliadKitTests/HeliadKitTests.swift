@@ -22,6 +22,13 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(job.query["sample_s"]?.doubleValue, 60)
         XCTAssertTrue(job.canRetry)
         XCTAssertFalse(job.isActive)
+        XCTAssertFalse(job.fellShort)  // failed already says so
+        let old = try decode(Job.self, """
+        {"job_id":2,"source":"fido","status":"done","phase":null,"files_total":5,"files_done":0,"error":null,
+         "created_at":"2026-10-18T21:34:24+00:00","updated_at":"2026-10-18T21:37:30+00:00","query":{},
+         "result":{"found":5,"stored":0}}
+        """)
+        XCTAssertTrue(old.fellShort)
     }
 
     func testDatasetAndFile() throws {
