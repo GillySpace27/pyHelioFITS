@@ -6,6 +6,7 @@ struct SearchView: View {
     @EnvironmentObject var model: AppModel
     @AppStorage("searchRoute") var route = "fido"
     @State var result: SearchResult?
+    @State var local: Coverage?   // the library over the same bins, for the coverage rows
     @State var searching = false
     @State var problem: String?
     @State var showMore = false
@@ -111,6 +112,9 @@ struct SearchView: View {
                     if let rs = result.recordset {
                         Text(rs).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
                     }
+                    if result.providers.contains(where: { $0.coverage != nil }) {
+                        CoverageCompare(providers: result.providers.filter { $0.coverage != nil }, local: local)
+                    }
                     ForEach(result.providers) { provider in
                         ProviderTable(provider: provider)
                     }
@@ -134,7 +138,16 @@ struct SearchView: View {
         searching = true
         defer { searching = false }
         do {
-            result = try await model.search(model.searchFields, route: route)
+            let found = try await model.search(model.searchFields, route: route)
+            result = found
+            local = nil
+            if let bins = found.providers.compactMap(\.coverage).first {
+                let fields = model.searchFields
+                local = try? await model.coverage(
+                    start: bins.start, end: bins.end, bins: bins.bins,
+                    instrument: fields.instrument.trimmingCharacters(in: .whitespaces),
+                    wavelength: Double(fields.wavelength.trimmingCharacters(in: .whitespaces)))
+            }
         } catch {
             problem = error.localizedDescription
         }
@@ -179,6 +192,98 @@ private struct ProviderTable: View {
                 Text("Showing the first \(Self.shown) of \(provider.rows.count).")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+/// What the archives list over the search range, row by row, beside what the library already
+/// holds of the matching datasets; the last row marks where the archives have data and the
+/// library has none.
+private struct CoverageCompare: View {
+    let providers: [SearchResult.Provider]
+    let local: Coverage?
+    static let labelWidth: CGFloat = 160
+
+    private var offered: [Int] {
+        guard let first = providers.first?.coverage else { return [] }
+        return providers.compactMap(\.coverage).reduce(into: Array(repeating: 0, count: first.bins)) { sum, bins in
+            for (i, n) in bins.counts.enumerated() where i < sum.count { sum[i] += n }
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Coverage").font(.subheadline.bold())
+            if let bins = providers.first?.coverage, let start = IndexTime.date(bins.start),
+               let end = IndexTime.date(bins.end), end > start {
+                row("") { Axis(span: start...end) }
+                    .frame(height: 22)
+            }
+            ForEach(providers) { provider in
+                if let bins = provider.coverage {
+                    row(provider.client) { Strip(counts: bins.counts) }
+                        .help(note(bins))
+                }
+            }
+            if let local {
+                row("In the library") { Strip(counts: local.total) }
+                    .help(local.datasets.map { "\($0.label): \($0.frames)" }.joined(separator: "\n"))
+                row("Not kept yet") { Gaps(offered: offered, kept: local.total) }
+                Text(summary(local))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: 900, alignment: .leading)
+    }
+
+    private func row<Content: View>(_ label: String, @ViewBuilder _ strip: () -> Content) -> some View {
+        HStack(spacing: 0) {
+            Text(label)
+                .font(.caption)
+                .lineLimit(1)
+                .frame(width: Self.labelWidth, alignment: .leading)
+            strip()
+        }
+        .frame(height: 20)
+    }
+
+    private func note(_ bins: TimeBins) -> String {
+        var parts = ["one column is \(Format.duration(bins.binSeconds))"]
+        if bins.outside > 0 { parts.append("\(bins.outside) records outside the range") }
+        if bins.undated > 0 { parts.append("\(bins.undated) without a readable time") }
+        return parts.joined(separator: "; ")
+    }
+
+    private func summary(_ local: Coverage) -> String {
+        let kept = local.datasets.reduce(0) { $0 + $1.frames }
+        let missing = zip(offered, local.total).filter { $0.0 > 0 && $0.1 == 0 }.count
+        let names = local.datasets.filter { $0.frames > 0 }.map(\.label)
+        var text = "The library holds \(kept) frame\(kept == 1 ? "" : "s") here"
+        text += names.isEmpty ? "." : " (\(names.joined(separator: ", ")))."
+        if missing > 0 {
+            text += " \(missing) of \(offered.count) columns have archive records and nothing kept."
+        }
+        return text
+    }
+}
+
+/// Orange where the archives have records and the library has none; faint where both have some.
+private struct Gaps: View {
+    let offered: [Int]
+    let kept: [Int]
+
+    var body: some View {
+        Canvas { context, size in
+            context.fill(Path(CGRect(x: 0, y: 4, width: size.width, height: size.height - 8)),
+                         with: .color(.secondary.opacity(0.08)))
+            guard !offered.isEmpty else { return }
+            let width = size.width / CGFloat(offered.count)
+            for i in offered.indices where offered[i] > 0 {
+                let missing = i >= kept.count || kept[i] == 0
+                let rect = CGRect(x: CGFloat(i) * width, y: 4, width: max(width, 1), height: size.height - 8)
+                context.fill(Path(rect), with: .color(missing ? .orange : .accentColor.opacity(0.25)))
             }
         }
     }

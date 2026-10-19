@@ -22,7 +22,7 @@ import traceback
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, TextIO
 
-from . import __version__, config, db, fitsmeta, jobs, views
+from . import __version__, config, coverage, db, fitsmeta, jobs, views
 from .library import Library
 from .query import Query
 
@@ -75,6 +75,8 @@ class Server:
             "view.materialize": lambda name: views.materialize(lib, name),
             "view.rebuild_all": lambda: views.rebuild_all(lib),
             "view.members": lambda name: views.members(lib, name),
+            "view.list": lambda: views.list_views(lib),
+            "library.coverage": lambda **kw: coverage.library(lib, **kw),
             "search": self.search,
         }
 
@@ -170,9 +172,17 @@ class Server:
                 self.notify("ingest.progress", {"done": i, "total": n, "path": str(p)})
         return self.lib.import_tree(path, progress=progress)
 
-    def search(self, query: dict, source: str = "fido") -> dict:
+    def search(self, query: dict, source: str = "fido", bins: int = coverage.DEFAULT_BINS) -> dict:
+        """An archive search. Where a source reports its records' times, they come back
+        binned over the query's range as "coverage", beside the table they belong to."""
         from . import sources  # sunpy and drms are optional; imported only when searching
-        return sources.get(source).search(Query.from_json(query), settings=config.load_settings())
+        q = Query.from_json(query)
+        result = sources.get(source).search(q, settings=config.load_settings())
+        for part in [result, *result.get("providers", [])]:
+            times = part.pop("times", None)
+            if times is not None:
+                part["coverage"] = coverage.times(times, q.start, q.end, bins)
+        return result
 
     def query_from_url(self, url: str) -> dict:
         try:

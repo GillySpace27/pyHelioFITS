@@ -15,13 +15,20 @@ final class ModelTests: XCTestCase {
          "query":{"end":"2025-09-21T16:05:00","instrument":"AIA","sample_s":60.0,"start":"2025-09-21T16:00:00","wavelength":193.0},
          "result":{"found":5,"fetched":0,"stored":0,"errors":["timeout"],"ingest":{}}}
         """)
-        XCTAssertEqual(job.title, "AIA · 193 Å · 2025-09-21T16:00:00 to 2025-09-21T16:05:00")
+        XCTAssertEqual(job.title, "AIA · 193 Å · 2025-09-21T16:00:00 to 2025-09-21T16:05:00 UTC")
         XCTAssertEqual(job.summary, "stored 0 of 5")
         // Keys inside an open dictionary stay as the core wrote them (no snake_case conversion).
         // (A whole-number float such as 60.0 decodes as .int; doubleValue reads either.)
         XCTAssertEqual(job.query["sample_s"]?.doubleValue, 60)
         XCTAssertTrue(job.canRetry)
         XCTAssertFalse(job.isActive)
+        XCTAssertFalse(job.fellShort)  // failed already says so
+        let old = try decode(Job.self, """
+        {"job_id":2,"source":"fido","status":"done","phase":null,"files_total":5,"files_done":0,"error":null,
+         "created_at":"2026-10-18T21:34:24+00:00","updated_at":"2026-10-18T21:37:30+00:00","query":{},
+         "result":{"found":5,"stored":0}}
+        """)
+        XCTAssertTrue(old.fellShort)
     }
 
     func testDatasetAndFile() throws {
@@ -66,6 +73,83 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(value["e"], .null)
         let encoded = String(decoding: try JSONEncoder().encode(JSONValue.int(7)), as: UTF8.self)
         XCTAssertEqual(encoded, "7")
+    }
+}
+
+final class ViewModelTests: XCTestCase {
+    func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
+        try HeliadJSON.decoder().decode(T.self, from: Data(json.utf8))
+    }
+
+    /// Shaped like the core's test_coverage.py results.
+    func testCoverageAndSearchBins() throws {
+        let cov = try decode(Coverage.self, """
+        {"start":"2025-09-21T16:00:00.000","end":"2025-09-21T17:00:00.000","bins":3,"bin_seconds":1200.0,
+         "datasets":[{"dataset_key":"a","label":"SDO AIA 171 Å L1","instrument":"AIA","wavelength":171.0,
+                      "counts":[0,1,0],"frames":1,"first":"2025-09-21T16:30:00.000","last":"2025-09-21T16:30:00.000","undated":0},
+                     {"dataset_key":"b","label":"SDO AIA 193 Å L1","instrument":"AIA","wavelength":193.0,
+                      "counts":[3,0,1],"frames":4,"first":null,"last":null,"undated":2}]}
+        """)
+        XCTAssertEqual(cov.total, [3, 1, 1])
+        XCTAssertEqual(cov.datasets.map(\.id), ["a", "b"])
+        XCTAssertEqual(cov.datasets[1].undated, 2)
+        let empty = try decode(Coverage.self, #"{"start":null,"end":null,"bins":4,"bin_seconds":null,"datasets":[]}"#)
+        XCTAssertNil(empty.start)
+        XCTAssertEqual(empty.total, [0, 0, 0, 0])
+        let fido = try decode(SearchResult.self, """
+        {"total":3,"providers":[{"client":"VSOClient","count":3,"columns":[],"rows":[],
+          "coverage":{"start":"2025-09-21T16:00:00.000","end":"2025-09-21T17:00:00.000","bins":2,"bin_seconds":1800.0,
+                      "counts":[1,2],"outside":0,"undated":0}}]}
+        """)
+        XCTAssertEqual(fido.providers[0].coverage?.counts, [1, 2])
+        let jsoc = try decode(SearchResult.self, """
+        {"recordset":"x","total":1,"rows":[{"T_REC":"2025-09-21T16:00:00Z"}],
+         "coverage":{"start":"2025-09-21T16:00:00.000","end":"2025-09-21T16:05:00.000","bins":1,"bin_seconds":300.0,
+                     "counts":[1],"outside":0,"undated":0}}
+        """)
+        XCTAssertEqual(jsoc.providers[0].coverage?.binSeconds, 300)
+    }
+
+    func testEventAndChecks() throws {
+        let events = try decode([EventView].self, """
+        [{"view_id":1,"name":"flare","kind":"event","description":"M1","created_at":"2026-10-19T03:00:00+00:00",
+          "observations":4,"datasets":2,"bytes":1024,"first":"2025-09-21T16:00:00.000","last":"2025-09-21T16:30:00.000",
+          "path":"/lib/views/flare","materialized":false}]
+        """)
+        XCTAssertEqual(events[0].id, "flare")
+        XCTAssertFalse(events[0].materialized)
+        let checks = try decode([FileCheck].self, #"[{"code":"wcs.missing","severity":"warning","message":"no CTYPE1"}]"#)
+        XCTAssertEqual(checks[0].severity, "warning")
+    }
+}
+
+final class IndexTimeTests: XCTestCase {
+    func testReadsAndWritesIndexText() throws {
+        let t = try XCTUnwrap(IndexTime.date("2025-09-21T16:00:04.840"))
+        XCTAssertEqual(IndexTime.text(t), "2025-09-21T16:00:04.840")
+        XCTAssertEqual(IndexTime.date("2025-09-21T16:00:04.84Z"), t)
+        XCTAssertEqual(IndexTime.date("2025-09-21 16:00:04.8401"), t)
+        XCTAssertEqual(IndexTime.text(try XCTUnwrap(IndexTime.date("2025-09-21 16:00"))), "2025-09-21T16:00:00.000")
+        XCTAssertEqual(IndexTime.text(try XCTUnwrap(IndexTime.date("2025-09-21"))), "2025-09-21T00:00:00.000")
+        XCTAssertNil(IndexTime.date("yesterday"))
+        XCTAssertNil(IndexTime.date("2025-09-21T16:00:04."))
+        XCTAssertNil(IndexTime.date(nil))
+        XCTAssertEqual(IndexTime.wholeSeconds("2025-09-21T16:00:04.840", up: false), "2025-09-21T16:00:04")
+        XCTAssertEqual(IndexTime.wholeSeconds("2025-09-21T16:00:04.840", up: true), "2025-09-21T16:00:05")
+        XCTAssertEqual(IndexTime.wholeSeconds("2025-09-21T16:00:04.000", up: true), "2025-09-21T16:00:04")
+    }
+
+    func testTicksLandOnRoundTimes() throws {
+        let start = try XCTUnwrap(IndexTime.date("2025-09-21T16:00:04.840"))
+        let end = try XCTUnwrap(IndexTime.date("2025-09-21T17:00:00"))
+        XCTAssertEqual(IndexTime.step(from: start, to: end, count: 8), 600)
+        let ticks = IndexTime.ticks(from: start, to: end, count: 8).map(IndexTime.text)
+        XCTAssertEqual(ticks.first, "2025-09-21T16:10:00.000")
+        XCTAssertEqual(ticks.last, "2025-09-21T17:00:00.000")
+        XCTAssertEqual(ticks.count, 6)
+        XCTAssertEqual(IndexTime.label(try XCTUnwrap(IndexTime.date(ticks[0])), step: 600, showDate: false), "16:10")
+        let week = try XCTUnwrap(IndexTime.date("2025-09-28"))
+        XCTAssertEqual(IndexTime.step(from: start, to: week, count: 8), 86400)
     }
 }
 

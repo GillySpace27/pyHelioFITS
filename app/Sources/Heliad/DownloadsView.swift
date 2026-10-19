@@ -39,7 +39,7 @@ private struct JobRow: View {
                     .lineLimit(1)
                 (Text(statusText).foregroundStyle(color)
                     + Text(verbatim: " · \(job.source == "jsoc" ? "JSOC export" : "Fido")"
-                        + " · queued \(String(Format.time(job.createdAt).prefix(16)))"))
+                        + " · queued \(Format.localTime(job.createdAt))"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if job.status == "active", let total = job.filesTotal, total > 0 {
@@ -80,6 +80,7 @@ private struct JobRow: View {
             let phase = job.phase.map { $0.prefix(1).uppercased() + $0.dropFirst() } ?? "Working"
             if let total = job.filesTotal, total > 0 { return "\(phase) \(job.filesDone) of \(total)" }
             return phase
+        case "done" where job.fellShort: return job.summary.map { "Ended short, \($0)" } ?? "Ended short"
         case "done": return job.summary.map { "Done, \($0)" } ?? "Done"
         case "partial": return job.summary.map { "Partly done, \($0)" } ?? "Partly done"
         case "failed": return "Failed"
@@ -92,6 +93,7 @@ private struct JobRow: View {
         switch job.status {
         case "queued": return "clock"
         case "active": return "arrow.down.circle"
+        case "done" where job.fellShort: return "exclamationmark.circle.fill"
         case "done": return "checkmark.circle.fill"
         case "partial": return "exclamationmark.circle.fill"
         case "failed": return "xmark.octagon.fill"
@@ -101,6 +103,7 @@ private struct JobRow: View {
 
     var color: Color {
         switch job.status {
+        case "done" where job.fellShort: return .orange
         case "done": return .green
         case "partial": return .orange
         case "failed": return .red

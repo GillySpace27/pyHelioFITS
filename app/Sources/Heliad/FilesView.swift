@@ -2,51 +2,45 @@ import AppKit
 import HeliadKit
 import SwiftUI
 
-/// The files of one dataset, newest version of each observation, as a grid of previews.
+/// The files of one dataset, newest version of each observation, as a grid of previews or a
+/// sortable table, with the frame viewer beside them when it is shown.
 struct FilesView: View {
     @EnvironmentObject var model: AppModel
     let dataset: Dataset
 
     private static let page = 200
-    @State var files: [LibraryFile] = []
+    @State var files: [LibraryFile] = []       // time order, as the core lists them
     @State var more = false
     @State var loading = false
     @State var start = ""
     @State var end = ""
     @State var selection: Set<Int> = []
     @State var deleting: [LibraryFile]?
+    @State var sortOrder = [KeyPathComparator(\LibraryFile.dateObs)]
+    @AppStorage("filesLayout") var layout = "grid"
+    @AppStorage("showFrameViewer") var showViewer = false
 
     let columns = [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 12)]
 
     var body: some View {
-        VStack(spacing: 0) {
-            filterBar
-            Divider()
-            ScrollView {
-                LazyVGrid(columns: columns, spacing: 12) {
-                    ForEach(files) { file in
-                        FileCell(file: file, selected: selection.contains(file.fileId))
-                            .onTapGesture { select(file) }
-                            .contextMenu { menu(for: file) }
-                    }
-                }
-                .padding(12)
-                if more {
-                    Button("Show More") { Task { await load(reset: false) } }
-                        .disabled(loading)
-                        .padding(.bottom, 16)
-                }
+        HSplitView {
+            VStack(spacing: 0) {
+                filterBar
+                Divider()
+                if layout == "table" { table } else { grid }
             }
-            .overlay {
-                if files.isEmpty && !loading {
-                    Text("No files in this range.").foregroundStyle(.secondary)
-                }
+            .frame(minWidth: 300)
+            if showViewer {
+                FrameViewer(frames: files, current: current, more: more) { deleting = $0 }
+                    .frame(minWidth: 300, idealWidth: 440)
             }
         }
         .navigationTitle(dataset.label)
-        .navigationSubtitle("\(dataset.observations) observations · \(Format.time(dataset.first)) to \(Format.time(dataset.last))")
+        .navigationSubtitle("\(dataset.observations) observations · \(Format.span(dataset.first, dataset.last)) UTC")
         .toolbar {
             ToolbarItemGroup {
+                Toggle(isOn: $showViewer) { Label("Frame Viewer", systemImage: "play.rectangle") }
+                    .help("Show or hide the frame viewer (View > Show Frame Viewer)")
                 Button { model.reveal(selectedFiles) } label: { Label("Show in Finder", systemImage: "folder") }
                     .disabled(selection.isEmpty)
                     .help("Show the selected files in Finder")
@@ -66,32 +60,147 @@ struct FilesView: View {
                 }
             }
         }
-        .task { await load(reset: true) }
+        .task {
+            if let filter = model.filesFilter, filter.datasetKey == dataset.datasetKey {  // from the Timeline
+                start = filter.start
+                end = filter.end
+                model.filesFilter = nil
+            }
+            await load(reset: true)
+        }
         .onChange(of: model.libraryGeneration) { Task { await load(reset: true) } }
     }
 
-    private var filterBar: some View {
-        HStack {
-            TextField("From (UTC)", text: $start, prompt: Text(Format.time(dataset.first)))
-                .frame(maxWidth: 220)
-            TextField("To (UTC)", text: $end, prompt: Text(Format.time(dataset.last)))
-                .frame(maxWidth: 220)
-            Button("Filter") { Task { await load(reset: true) } }
-                .keyboardShortcut(.defaultAction)
-            if !start.isEmpty || !end.isEmpty {
-                Button("Clear") {
-                    start = ""
-                    end = ""
-                    Task { await load(reset: true) }
+    private var grid: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVGrid(columns: columns, spacing: 12) {
+                    ForEach(files) { file in
+                        FileCell(file: file, selected: selection.contains(file.fileId))
+                            .id(file.fileId)
+                            .onTapGesture { select(file) }
+                            .contextMenu { menu(for: file) }
+                    }
+                }
+                .padding(12)
+                if more {
+                    Button("Show More") { Task { await load(reset: false) } }
+                        .disabled(loading)
+                        .padding(.bottom, 16)
                 }
             }
-            Spacer()
-            Text(countText)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            .overlay { emptyNote }
+            .onChange(of: selection) {  // keep the viewer's frame in sight as it plays
+                if showViewer, selection.count == 1, let id = selection.first { proxy.scrollTo(id) }
+            }
+        }
+    }
+
+    private var table: some View {
+        VStack(spacing: 0) {
+            Table(files.sorted(using: sortOrder), selection: $selection, sortOrder: $sortOrder) {
+                TableColumn("Observed (UTC)", value: \.dateObs) { file in
+                    Text(Format.time(file.dateObs)).monospacedDigit()
+                }
+                TableColumn("Version", value: \.versionText)
+                    .width(min: 50, ideal: 60, max: 90)
+                TableColumn("Size", value: \.size) { file in
+                    Text(Format.bytes(file.size)).monospacedDigit()
+                }
+                .width(min: 60, ideal: 80, max: 110)
+                TableColumn("File", value: \.name)
+            }
+            .contextMenu(forSelectionType: Int.self) { ids in
+                let targets = files.filter { ids.contains($0.fileId) }
+                if !targets.isEmpty { menuItems(targets) }
+            } primaryAction: { _ in
+                showViewer = true  // a double-click opens the frame viewer on that file
+            }
+            .overlay { emptyNote }
+            if more {
+                Button("Show More") { Task { await load(reset: false) } }
+                    .disabled(loading)
+                    .padding(8)
+            }
+        }
+    }
+
+    @ViewBuilder private var emptyNote: some View {
+        if files.isEmpty && !loading {
+            Text("No files in this range.").foregroundStyle(.secondary)
+        }
+    }
+
+    /// One row when there is room; narrower (the frame viewer open), two rows, then four.
+    private var filterBar: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack {
+                fromField
+                toField
+                filterButtons
+                Spacer(minLength: 8)
+                status
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    fromField
+                    toField
+                    filterButtons
+                }
+                HStack {
+                    Spacer()
+                    status
+                }
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                fromField
+                toField
+                HStack {
+                    filterButtons
+                    Spacer()
+                    status
+                }
+            }
         }
         .textFieldStyle(.roundedBorder)
         .padding(10)
+    }
+
+    private var fromField: some View {
+        TextField("From (UTC)", text: $start, prompt: Text(Format.time(dataset.first)))
+            .frame(minWidth: 170, maxWidth: 220)
+    }
+
+    private var toField: some View {
+        TextField("To (UTC)", text: $end, prompt: Text(Format.time(dataset.last)))
+            .frame(minWidth: 170, maxWidth: 220)
+    }
+
+    @ViewBuilder private var filterButtons: some View {
+        Button("Filter") { Task { await load(reset: true) } }
+            .keyboardShortcut(.defaultAction)
+        if !start.isEmpty || !end.isEmpty {
+            Button("Clear") {
+                start = ""
+                end = ""
+                Task { await load(reset: true) }
+            }
+        }
+    }
+
+    @ViewBuilder private var status: some View {
+        Text(countText)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+        Picker("Layout", selection: $layout) {
+            Image(systemName: "square.grid.2x2").tag("grid")
+            Image(systemName: "list.bullet").tag("table")
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .frame(width: 80)
+        .help("Show the files as previews or as a table")
     }
 
     private var countText: String {
@@ -101,10 +210,25 @@ struct FilesView: View {
 
     private var selectedFiles: [LibraryFile] { files.filter { selection.contains($0.fileId) } }
 
+    /// The viewer shows the first selected file, and picking a frame there selects it here.
+    private var current: Binding<Int?> {
+        Binding(get: { files.first { selection.contains($0.fileId) }?.fileId },
+                set: { id in selection = id.map { [$0] } ?? [] })
+    }
+
     @ViewBuilder private func menu(for file: LibraryFile) -> some View {
-        let targets = selection.contains(file.fileId) ? selectedFiles : [file]
+        menuItems(selection.contains(file.fileId) ? selectedFiles : [file])
+    }
+
+    @ViewBuilder private func menuItems(_ targets: [LibraryFile]) -> some View {
         Button("Show in Finder") { model.reveal(targets) }
         Button("Copy Path\(targets.count == 1 ? "" : "s")") { model.copyPaths(targets) }
+        if targets.count == 1 {
+            Button("Show in Frame Viewer") {
+                selection = [targets[0].fileId]
+                showViewer = true
+            }
+        }
         Divider()
         Button("Delete…", role: .destructive) { deleting = targets }
     }
@@ -172,7 +296,7 @@ private struct FileCell: View {
                     ProgressView().controlSize(.small)
                 }
             }
-            .frame(height: 140)
+            .aspectRatio(1, contentMode: .fit)  // square, like most full-disk and coronagraph frames
             .clipShape(RoundedRectangle(cornerRadius: 6))
             Text(Format.time(file.dateObs))
                 .font(.caption.monospacedDigit())

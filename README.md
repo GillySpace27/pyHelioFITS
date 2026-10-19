@@ -23,7 +23,11 @@ through VSO) run against the real archives; the JSOC export route written but no
   in transit is refused by a size check against its FITS header. A job ends done, partial
   (some files stored) or failed; records a VSO mirror cannot serve are asked for from the
   next one (setting `vso_mirrors`), and a retry fetches only what is still missing.
-- **Thumbnails**: `heliad thumb FILE_ID` renders a greyscale preview into `.thumbs/`, once per file.
+- **Thumbnails**: `heliad thumb FILE_ID` renders a greyscale preview into `.thumbs/`, once per file
+  and size (the app's grid uses 256 px, its frame viewer 1024 px); deleting a file removes them all.
+- **Coverage**: `library.coverage` counts each dataset's observations in equal bins of a range,
+  for the app's Timeline; an archive search returns its records' times binned the same way
+  (JSOC's TAI record times moved to UTC), so the two can be drawn one above the other.
 - **Links**: `heliad://search?...` and `heliad://get?...` carry a query (the same field names)
   from another program to the Heliad app.
 - **Rules version**: when the rules that turn headers into datasets change, `heliad stats`

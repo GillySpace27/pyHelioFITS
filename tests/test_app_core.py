@@ -59,8 +59,10 @@ def test_thumbnail_handles_compressed_and_nan(lib, src):
 def test_delete_removes_the_thumbnail(lib, src):
     r = lib.ingest(write_fits(src / "a.fits", aia_header()))
     out = lib.thumbnail(r.file_id)
+    big = lib.thumbnail(r.file_id, size=1024)  # the frame viewer's size
+    assert big != out and big.exists()
     lib.delete(file_ids=[r.file_id])
-    assert not out.exists()
+    assert not out.exists() and not big.exists()
 
 
 def test_heliad_link_round_trip():

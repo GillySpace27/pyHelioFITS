@@ -53,8 +53,32 @@ enum SelfTest {
             } catch {
                 note("files", "error: \(error.localizedDescription)")
             }
+            if UserDefaults.standard.bool(forKey: "showFrameViewer"), let file = try? await model.files(
+                dataset: first.datasetKey, start: nil, end: nil, offset: 0, limit: 1).first {
+                let started = Date()  // the viewer is asking for the same preview; this waits on that one
+                let preview = await model.preview(for: file)
+                note("preview", preview.map { "\(Int($0.size.width))x\(Int($0.size.height)) in \(String(format: "%.1f", Date().timeIntervalSince(started))) s" } ?? "failed")
+            } else {
+                note("preview", "viewer hidden")
+            }
             try? await Task.sleep(nanoseconds: 4_000_000_000)  // let the grid's previews arrive
             snapshot("library.png", dir, note)
+        }
+        model.selection = .timeline
+        do {
+            let cov = try await model.coverage(start: nil, end: nil, bins: TimelineView.bins)
+            let rows = cov.datasets.filter { $0.frames > 0 }.count
+            note("timeline", "\(Format.time(cov.start)) to \(Format.time(cov.end)), \(rows) of \(cov.datasets.count) datasets drawn, \(cov.total.reduce(0, +)) frames")
+        } catch {
+            note("timeline", "error: \(error.localizedDescription)")
+        }
+        try? await Task.sleep(nanoseconds: 2_000_000_000)
+        snapshot("timeline.png", dir, note)
+        note("events", "\(model.events.count) listed" + (model.events.first.map { ", first \($0.name) (\($0.observations) observations, folder made: \($0.materialized))" } ?? ""))
+        if let event = model.events.first {
+            model.selection = .event(event.name)
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            snapshot("event.png", dir, note)
         }
         model.selection = .downloads
         await model.refreshJobs()

@@ -14,7 +14,7 @@ import re
 import shutil
 from pathlib import Path
 
-from .library import Library, now
+from .library import Library, now, time_bound
 
 MARKER = ".heliad-view"
 LINK_MODES = ("symlink", "hardlink", "copy")
@@ -31,6 +31,7 @@ def create(lib: Library, name: str, *, description: str | None = None,
     to the newest version of each file."""
     lib._require_writer()
     conn = lib.conn
+    start, end = time_bound(start), time_bound(end)
     with lib._write_lock:
         conn.execute("BEGIN IMMEDIATE")
         try:
@@ -66,6 +67,23 @@ def create(lib: Library, name: str, *, description: str | None = None,
         "SELECT COUNT(*) FROM view_members WHERE view_id = ?", (view_id,)
     ).fetchone()[0]
     return {"view_id": view_id, "name": name, "observations": count}
+
+
+def list_views(lib: Library) -> list[dict]:
+    """Every view with its size and span, and where its folder of links is (or would be)."""
+    rows = lib.reader.execute(
+        "SELECT v.id AS view_id, v.name, v.kind, v.description, v.created_at, "
+        "COUNT(c.file_id) AS observations, COUNT(DISTINCT c.dataset_key) AS datasets, "
+        "COALESCE(SUM(c.size), 0) AS bytes, MIN(c.date_obs) AS first, MAX(c.date_obs) AS last "
+        "FROM views v LEFT JOIN view_members m ON m.view_id = v.id "
+        "LEFT JOIN current_files c ON c.observation_id = m.observation_id "
+        "GROUP BY v.id ORDER BY v.name"
+    ).fetchall()
+    out = []
+    for r in rows:
+        folder = lib.cfg.views_dir / slug(r["name"])
+        out.append({**dict(r), "path": str(folder), "materialized": (folder / MARKER).exists()})
+    return out
 
 
 def members(lib: Library, name: str) -> list[dict]:

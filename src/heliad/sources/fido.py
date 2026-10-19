@@ -31,12 +31,15 @@ def search(query: Query, *, settings: dict | None = None, limit: int = 2000) -> 
         rows = []
         for row in block[:limit]:
             rows.append({name: _jsonable(row[name]) for name in block.colnames})
-        providers.append({
+        provider = {
             "client": type(block.client).__name__ if getattr(block, "client", None) else None,
             "count": len(block),
             "columns": list(block.colnames),
             "rows": rows,
-        })
+        }
+        if "Start Time" in block.colnames:  # every record, not just the rows shown; the core bins them
+            provider["times"] = [_jsonable(t) for t in block["Start Time"]]
+        providers.append(provider)
     return {"query": query.to_json(), "total": sum(p["count"] for p in providers),
             "providers": providers}
 
