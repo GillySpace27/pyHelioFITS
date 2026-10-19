@@ -93,13 +93,10 @@ private struct Sidebar: View {
                         }
                 }
             }
+            // No placeholder row here: one that appeared as the core became ready, while the list
+            // was updating, made AppKit warn of a reentrant table operation (traced on the Mac,
+            // 2026-10-19). The Timeline says how to make an event instead.
             Section("Events") {
-                // One short line, like the Library's placeholder; the longer hint is its tooltip.
-                if model.events.isEmpty, model.coreState == .ready {
-                    Text("No events yet")
-                        .foregroundStyle(.secondary)
-                        .help("Select a range in the Timeline to make one")
-                }
                 ForEach(model.events) { event in
                     VStack(alignment: .leading, spacing: 2) {
                         Text(event.name)

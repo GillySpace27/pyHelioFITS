@@ -26,9 +26,17 @@ struct TimelineView: View {
             topBar
             Divider()
             content
+            Divider()
             if selected != nil {
-                Divider()
                 selectionBar
+            } else if coverage?.start != nil {
+                Text("Drag across the strips to choose a range, then zoom to it, search the archives for it or make it an event.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
             }
         }
         .navigationTitle("Timeline")
