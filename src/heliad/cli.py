@@ -15,7 +15,8 @@
     heliad reindex [--dry-run]       apply the current header rules to every file
     heliad delete [--file ID] [--observation ID] [--dataset KEY] [--yes]
     heliad settings [KEY [VALUE] | --unset KEY]
-    heliad serve                     JSON-RPC on stdin/stdout
+    heliad serve                     JSON-RPC on stdin/stdout; relays to the
+                                     library's writer if another core is one
 
 Commands that only read open the library read-only, so they work while the
 Mac app (or another core) holds it. --library never changes the default
@@ -29,7 +30,7 @@ import json
 import sys
 
 from . import config, jobs, views
-from .library import Library
+from .library import Library, LibraryLocked
 from .query import Query
 
 READ_ONLY = {"stats", "datasets", "files", "verify", "collisions", "versions", "jobs", "thumb"}
@@ -118,6 +119,8 @@ def main(argv: list[str] | None = None) -> int:
     ns = build_parser().parse_args(argv)
     if ns.cmd in NO_LIBRARY:
         return _no_library(ns)
+    if ns.cmd == "serve":
+        return _serve(ns)
     try:
         lib = Library.open(ns.library, readonly=ns.cmd in READ_ONLY)
     except FileNotFoundError as exc:
@@ -125,6 +128,22 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     with lib:
         return _run(lib, ns)
+
+
+def _serve(ns) -> int:
+    from . import share
+    from .rpc import Server
+    try:
+        lib = Library.open(ns.library)
+    except LibraryLocked:
+        try:
+            return share.relay(config.load(ns.library).library_root)
+        except share.WriterUnavailable as exc:
+            print(f"heliad: {exc}", file=sys.stderr)
+            return 3
+    with lib:
+        Server(lib).serve(shared=True)
+    return 0
 
 
 def _no_library(ns) -> int:
@@ -207,9 +226,6 @@ def _run(lib: Library, ns) -> int:
         finished = runner.run_pending()
         _print(finished)
         return 0 if all(j["status"] == "done" for j in finished) else 1
-    elif ns.cmd == "serve":
-        from .rpc import Server
-        Server(lib).serve()
     return 0
 
 
