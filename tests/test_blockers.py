@@ -60,7 +60,7 @@ def test_cli_read_commands_run_beside_a_writer(lib, src, capsys):
 
 # ---- schema 2 ----------------------------------------------------------------
 
-def test_schema_1_library_migrates_to_2(tmp_path):
+def test_schema_1_library_migrates_to_current(tmp_path):
     path = tmp_path / "heliad.sqlite"
     conn = sqlite3.connect(path, isolation_level=None)
     for statement in db._split(db.SCHEMA_V1):
@@ -68,7 +68,7 @@ def test_schema_1_library_migrates_to_2(tmp_path):
     conn.execute("INSERT INTO meta(key, value) VALUES ('schema_version', '1')")
     conn.close()
     conn = db.connect_writer(path)
-    assert db.schema_version(conn) == 2
+    assert db.schema_version(conn) == db.SCHEMA_VERSION
     assert db.meta_value(conn, "reader_compat") == str(db.READER_COMPAT)
     cols = {r[1] for r in conn.execute("PRAGMA table_info(downloads)")}
     assert "job_id" in cols
@@ -224,7 +224,7 @@ def test_job_ingests_good_files_and_rejects_cut_off_ones(lib, src):
     job = runner.enqueue(QUERY, "fake")
     assert job["status"] == "queued" and job["query"]["instrument"] == "AIA"
     (done,) = runner.run_pending()
-    assert done["status"] == "done"
+    assert done["status"] == "partial" and done["error"].startswith("stored 1 of 2 files")
     assert done["result"]["ingest"] == {"added": 1, "incomplete": 1}
     assert lib.stats()["files"] == 1
     rows = lib.reader.execute("SELECT status, job_id, url FROM downloads ORDER BY id").fetchall()

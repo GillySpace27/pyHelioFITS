@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import checks, config, db, fitsmeta
+from . import checks, config, db, fitsmeta, thumbs
 from .query import Query
 
 FITS_SUFFIXES = (".fits", ".fts", ".fit", ".fits.gz", ".fts.gz", ".fit.gz")
@@ -496,7 +496,7 @@ class Library:
                         "repointed": 0, "dry_run": dry_run, "views_rebuilt": []}
             q = ",".join("?" * len(ids))
             files = [dict(r) for r in conn.execute(
-                f"SELECT id, relpath, size, observation_id FROM files WHERE id IN ({q})", list(ids))]
+                f"SELECT id, relpath, size, observation_id, sha256 FROM files WHERE id IN ({q})", list(ids))]
             obs_ids = sorted({f["observation_id"] for f in files})
             oq = ",".join("?" * len(obs_ids))
             touched_views = [r[0] for r in conn.execute(
@@ -539,6 +539,7 @@ class Library:
         if not dry_run:
             for f in files:
                 p = self.abspath(f["relpath"])
+                thumbs.thumb_path(self.root, f["sha256"]).unlink(missing_ok=True)
                 try:
                     p.unlink()
                     released += f["size"]
@@ -704,3 +705,15 @@ class Library:
             from . import views
             summary["views_rebuilt"] = [r["name"] for r in views.rebuild_all(self)]
         return summary
+
+    # ---- thumbnails ----------------------------------------------------------
+
+    def thumbnail(self, file_id: int, size: int = thumbs.DEFAULT_SIZE) -> Path:
+        """A PNG preview of a stored file, made on first request and cached by checksum.
+
+        Works on a read-only Library too: the cache is outside the index.
+        """
+        row = self.reader.execute("SELECT relpath, sha256 FROM files WHERE id = ?", (file_id,)).fetchone()
+        if row is None:
+            raise KeyError(f"no file {file_id}")
+        return thumbs.ensure(self.root, self.abspath(row["relpath"]), row["sha256"], size)

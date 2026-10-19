@@ -3,8 +3,8 @@
 Find solar data, download it and keep it in one library. Heliad is the "find it and keep it"
 half of HelioFITS Software; the HelioFITS apps look at what it keeps.
 
-Status: core library, CONNECT import validated on real files; download jobs and the JSOC
-route written but not yet run against the archives.
+Status: core library, CONNECT import validated on real files; Fido downloads (AIA 193
+through VSO) run against the real archives; the JSOC export route written but not yet run.
 
 ## How it fits together
 
@@ -20,7 +20,12 @@ route written but not yet run against the archives.
   other programs can find the index. Only `heliad init` writes it. `docs/reader-contract.md`
   is what Studio and scripts may rely on.
 - **Downloads** run as jobs on a worker thread, each in its own staging folder; a file cut off
-  in transit is refused by a size check against its FITS header.
+  in transit is refused by a size check against its FITS header. A job ends done, partial
+  (some files stored) or failed; records a VSO mirror cannot serve are asked for from the
+  next one (setting `vso_mirrors`), and a retry fetches only what is still missing.
+- **Thumbnails**: `heliad thumb FILE_ID` renders a greyscale preview into `.thumbs/`, once per file.
+- **Links**: `heliad://search?...` and `heliad://get?...` carry a query (the same field names)
+  from another program to the Heliad app.
 - **Rules version**: when the rules that turn headers into datasets change, `heliad stats`
   says `reindex_due`, and `heliad reindex` applies them to every file already kept.
 

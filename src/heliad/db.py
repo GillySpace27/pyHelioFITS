@@ -17,7 +17,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 READER_COMPAT = 1  # see the module docstring
 
 SCHEMA_V1 = """
@@ -144,7 +144,31 @@ CREATE INDEX jobs_status ON jobs(status);
 ALTER TABLE downloads ADD COLUMN job_id INTEGER REFERENCES jobs(id);
 """
 
-MIGRATIONS: dict[int, str] = {1: SCHEMA_V1, 2: SCHEMA_V2}
+# Version 3: a job can end partial (some files stored, some not). SQLite cannot
+# change a CHECK constraint in place, so the table is rebuilt (migrate turns
+# foreign keys off around it and checks them before committing).
+SCHEMA_V3 = """
+CREATE TABLE jobs_v3 (
+    id           INTEGER PRIMARY KEY,
+    source       TEXT NOT NULL,      -- fido | jsoc
+    query_id     INTEGER NOT NULL REFERENCES queries(id),
+    status       TEXT NOT NULL CHECK (status IN ('queued', 'active', 'done', 'partial', 'failed', 'cancelled')),
+    phase        TEXT,               -- searching | fetching | ingesting, while active
+    files_total  INTEGER,
+    files_done   INTEGER NOT NULL DEFAULT 0,
+    result_json  TEXT,
+    error        TEXT,
+    created_at   TEXT NOT NULL,
+    updated_at   TEXT NOT NULL
+);
+INSERT INTO jobs_v3 SELECT id, source, query_id, status, phase, files_total, files_done,
+    result_json, error, created_at, updated_at FROM jobs;
+DROP TABLE jobs;
+ALTER TABLE jobs_v3 RENAME TO jobs;
+CREATE INDEX jobs_status ON jobs(status);
+"""
+
+MIGRATIONS: dict[int, str] = {1: SCHEMA_V1, 2: SCHEMA_V2, 3: SCHEMA_V3}
 
 
 def _configure(conn: sqlite3.Connection) -> None:
@@ -204,25 +228,40 @@ def migrate(conn: sqlite3.Connection) -> None:
         raise RuntimeError(
             f"index has schema {current}, newer than this Heliad ({SCHEMA_VERSION}); update Heliad"
         )
-    for version in range(current + 1, SCHEMA_VERSION + 1):
-        conn.execute("BEGIN IMMEDIATE")
-        try:
-            for statement in _split(MIGRATIONS[version]):
-                conn.execute(statement)
-            conn.execute(
-                "INSERT INTO meta(key, value) VALUES ('schema_version', ?) "
-                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                (str(version),),
-            )
-            conn.execute(
-                "INSERT INTO meta(key, value) VALUES ('reader_compat', ?) "
-                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-                (str(READER_COMPAT),),
-            )
-            conn.execute("COMMIT")
-        except BaseException:
-            conn.execute("ROLLBACK")
-            raise
+    if current == SCHEMA_VERSION:
+        return
+    # Rebuilding a table that others reference needs foreign keys off (it has no
+    # effect inside a transaction); each step checks them itself before committing.
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        for version in range(current + 1, SCHEMA_VERSION + 1):
+            _migrate_to(conn, version)
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
+
+
+def _migrate_to(conn: sqlite3.Connection, version: int) -> None:
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        for statement in _split(MIGRATIONS[version]):
+            conn.execute(statement)
+        broken = conn.execute("PRAGMA foreign_key_check").fetchall()
+        if broken:
+            raise RuntimeError(f"migration to schema {version} broke {len(broken)} references")
+        conn.execute(
+            "INSERT INTO meta(key, value) VALUES ('schema_version', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (str(version),),
+        )
+        conn.execute(
+            "INSERT INTO meta(key, value) VALUES ('reader_compat', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (str(READER_COMPAT),),
+        )
+        conn.execute("COMMIT")
+    except BaseException:
+        conn.execute("ROLLBACK")
+        raise
 
 
 def _split(script: str) -> list[str]:

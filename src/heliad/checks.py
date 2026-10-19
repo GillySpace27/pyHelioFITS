@@ -43,12 +43,18 @@ def check_identity(meta: FitsMeta) -> list[Finding]:
 
 
 def check_cards(meta: FitsMeta) -> list[Finding]:
-    if not meta.bad_cards:
-        return []
-    return [Finding(
-        "unparsable_card", "warning",
-        f"Not valid FITS as written, repaired on read: {', '.join(meta.bad_cards)}.",
-    )]
+    out = []
+    if meta.bad_cards:
+        out.append(Finding(
+            "unparsable_card", "warning",
+            f"Not valid FITS as written, repaired on read: {', '.join(meta.bad_cards)}.",
+        ))
+    if meta.nan_cards:
+        out.append(Finding(
+            "nan_value", "info",
+            f"Value written as a bare nan (not valid FITS), read as no value: {', '.join(meta.nan_cards)}.",
+        ))
+    return out
 
 
 def check_time_scale(header: dict) -> list[Finding]:
