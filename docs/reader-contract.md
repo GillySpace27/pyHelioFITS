@@ -61,13 +61,17 @@ Studio's own download buttons stay until the Heliad app exists, so Studio is nev
 left unable to get data.
 
 1. **Now:** if a library is found as above, the new-layer dialog adds a "Heliad
-   cache" list read from `current_files` (grouped by `label`, filtered by time).
-   Studio's existing download buttons are unchanged. With no library, the dialog is
-   exactly as it is today.
+   library" tab read from `current_files` (grouped by `dataset_key`, shown by `label`,
+   counted against the master time range). Studio's existing download buttons are
+   unchanged. With no library, the dialog is exactly as it is today. Studio's reader is
+   `org.helioviewer.jhv.io.HeliadLibrary`, checked by `extra/test/HeliadLibraryCheck.java`
+   (branch `claude/heliad-library-tab` in HelioFITS-Studio).
 2. **When the Heliad app ships:** the dialog shows "Open in Heliad" only when the app
-   is installed. How Studio detects it (a bundle id lookup, or an entry the app adds
-   to `config.json`) is decided when the app is built; nothing in this contract
-   depends on it yet.
+   is installed. The app's bundle id is `io.github.gillyspace27.heliad`, and it handles
+   `heliad://search?...` and `heliad://get?...` links whose parameters are the query's
+   fields (`start`, `end`, `instrument`, `wavelength`, `sample_s`, ...; see
+   `Query.to_url`). Studio opens such a link to hand a search to the app; a `get` link
+   shows the search with a Download button rather than downloading unasked.
 3. **Last:** Studio's download buttons are removed once the app is installed and
    detected, so every search, download and delete goes through Heliad.
 

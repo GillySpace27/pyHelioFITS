@@ -90,8 +90,54 @@ def test_rpc_thumbnail_and_link(lib, src):
     server = Server(lib, out=io.StringIO())
     call = lambda m, **p: server.handle_line(json.dumps(  # noqa: E731
         {"jsonrpc": "2.0", "id": 1, "method": m, "params": p}))
-    assert call("library.thumbnail", file_id=r.file_id)["result"]["path"].endswith(".png")
+    assert call("library.thumbnail", file_id=r.file_id) is None  # answered from the pool
+    server._pool.shutdown(wait=True)
+    (reply,) = [json.loads(line) for line in server.out.getvalue().splitlines()]
+    assert reply["id"] == 1 and reply["result"]["path"].endswith(".png")
     parsed = call("query.from_url", url="heliad://get?start=2025-09-21T16:00:00&end=2025-09-21T17:00:00&wavelength=171")
     assert parsed["result"] == {"action": "get", "query": {"start": "2025-09-21T16:00:00",
                                                            "end": "2025-09-21T17:00:00", "wavelength": 171.0}}
     assert call("query.from_url", url="heliad://nope?start=a&end=b")["error"]["code"] == -32602
+
+
+def test_slow_requests_do_not_hold_up_the_rest(lib, src):
+    """A search still running does not stop the core answering other requests."""
+    import threading
+
+    release = threading.Event()
+    server = Server(lib, out=io.StringIO())
+    server.methods["search"] = lambda **p: release.wait(5) and {"total": 0}
+    lines = [{"jsonrpc": "2.0", "id": 1, "method": "search", "params": {"query": {}}},
+             {"jsonrpc": "2.0", "id": 2, "method": "library.stats"}]
+    assert server.handle_line(json.dumps(lines[0])) is None
+    assert server.handle_line(json.dumps(lines[1]))["id"] == 2
+    release.set()
+    server._pool.shutdown(wait=True)
+    (late,) = [json.loads(line) for line in server.out.getvalue().splitlines()]
+    assert late == {"jsonrpc": "2.0", "id": 1, "result": {"total": 0}}
+
+
+def test_serve_answers_background_requests_before_it_returns(lib, src):
+    r = lib.ingest(write_fits(src / "a.fits", aia_header()))
+    out = io.StringIO()
+    Server(lib, out=out).serve(io.StringIO(json.dumps(
+        {"jsonrpc": "2.0", "id": 7, "method": "library.thumbnail", "params": {"file_id": r.file_id}}) + "\n"))
+    (reply,) = [json.loads(line) for line in out.getvalue().splitlines()]
+    assert reply["id"] == 7 and "result" in reply
+
+
+def test_files_page_through_with_offset(lib, src):
+    for minute in range(5):
+        lib.ingest(write_fits(src / f"a{minute}.fits", aia_header(date=f"2025-09-21T16:0{minute}:04.84")))
+    pages = [lib.current_files(limit=2, offset=o) for o in (0, 2, 4)]
+    assert [len(p) for p in pages] == [2, 2, 1]
+    assert [f["date_obs"][:16] for p in pages for f in p] == [f"2025-09-21T16:0{m}" for m in range(5)]
+
+
+def test_python_dash_m_runs_the_cli(tmp_path, monkeypatch):
+    import subprocess
+    import sys
+
+    monkeypatch.setenv("HELIAD_HOME", str(tmp_path / "home"))
+    out = subprocess.run([sys.executable, "-m", "heliad", "settings"], capture_output=True, text=True)
+    assert out.returncode == 0 and out.stdout.strip().startswith("{")
