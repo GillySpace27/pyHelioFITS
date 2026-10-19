@@ -46,6 +46,16 @@ through VSO) run against the real archives; the JSOC export route written but no
     heliad reindex --dry-run && heliad reindex
     heliad delete --dataset KEY                     # shows what would go; add --yes to delete
     heliad serve        # JSON-RPC 2.0, one JSON object per line on stdin/stdout
+    heliad api          # the methods serve answers
+
+## API
+
+Programs (the Heliad app, HelioFITS Studio, your scripts) change a library through
+`heliad serve`, which speaks JSON-RPC 2.0 over stdin and stdout. `heliad api` lists every
+method and notification with its params; `heliad api METHOD` shows one. The full reference,
+with examples, error codes and how several clients share one library, is
+[docs/api.md](docs/api.md). To only read a library, open its index as
+[docs/reader-contract.md](docs/reader-contract.md) describes.
 
 ## Tests
 

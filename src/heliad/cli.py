@@ -17,6 +17,7 @@
     heliad settings [KEY [VALUE] | --unset KEY]
     heliad serve                     JSON-RPC on stdin/stdout; relays to the
                                      library's writer if another core is one
+    heliad api [METHOD]              the JSON-RPC methods serve answers (docs/api.md)
 
 Commands that only read open the library read-only, so they work while the
 Mac app (or another core) holds it. --library never changes the default
@@ -34,7 +35,7 @@ from .library import Library, LibraryLocked
 from .query import Query
 
 READ_ONLY = {"stats", "datasets", "files", "verify", "collisions", "versions", "jobs", "thumb"}
-NO_LIBRARY = {"search", "settings"}
+NO_LIBRARY = {"search", "settings", "api"}
 
 
 def _print(obj) -> None:
@@ -65,7 +66,10 @@ def _query(ns) -> Query:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    ap = argparse.ArgumentParser(prog="heliad", description="Find solar data, download it and keep it in one library.")
+    ap = argparse.ArgumentParser(
+        prog="heliad", description="Find solar data, download it and keep it in one library.",
+        epilog="Programs talk to Heliad through `heliad serve` (JSON-RPC over stdin/stdout): "
+               "`heliad api` lists its methods, and docs/api.md in the heliad repository is the full reference.")
     ap.add_argument("--library", help="library root (default: config file, then ~/HeliadLibrary)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("init")
@@ -112,6 +116,8 @@ def build_parser() -> argparse.ArgumentParser:
     _query_args(sub.add_parser("search"))
     _query_args(sub.add_parser("get"))
     sub.add_parser("serve")
+    p = sub.add_parser("api", help="the JSON-RPC methods that serve answers")
+    p.add_argument("method", nargs="?")
     return ap
 
 
@@ -147,7 +153,14 @@ def _serve(ns) -> int:
 
 
 def _no_library(ns) -> int:
-    if ns.cmd == "search":
+    if ns.cmd == "api":
+        from .rpc import describe
+        try:
+            sys.stdout.write(describe(ns.method))
+        except KeyError:
+            print(f"heliad: no method {ns.method!r} (heliad api lists them)", file=sys.stderr)
+            return 2
+    elif ns.cmd == "search":
         from . import sources
         _print(sources.get(ns.client).search(_query(ns), settings=config.load_settings()))
     elif ns.cmd == "settings":
