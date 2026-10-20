@@ -298,6 +298,8 @@ def expected_size(path: Path) -> int | None:
         return None
     total, size = 0, path.stat().st_size
     with open(path, "rb") as fh:
+        if fh.read(2) == b"\x1f\x8b":  # gzip by its magic, whatever the name says
+            return None
         while total < size:
             fh.seek(total)
             cards: dict[str, str] = {}

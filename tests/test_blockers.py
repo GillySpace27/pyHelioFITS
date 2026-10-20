@@ -118,11 +118,12 @@ def test_ingest_path_says_which_refusals_are_final(lib, src):
         assert call(path)["error"]["code"] == rpc.UNSTORABLE, path.name
     assert call(src / "gone.fits")["error"]["code"] == rpc.INTERNAL_ERROR  # not the file's fault
 
-    plain = write_fits(src / "a.fits", aia_header())
-    zipped = src / "a.fits.gz"
-    zipped.write_bytes(gzip.compress(plain.read_bytes()))
-    assert call(zipped)["result"]["status"] == "added"  # gzip-wrapped FITS, as Studio caches it
-    assert lib.stats()["files"] == 1
+    # gzip-wrapped FITS, as Studio caches it: named .fits.gz, or by a bare digest before 2026-09-28
+    for name, wave in (("a.fits.gz", 193), ("0123abcd", 171)):
+        plain = write_fits(src / f"{wave}.fits", aia_header(wave=wave))
+        (src / name).write_bytes(gzip.compress(plain.read_bytes()))
+        assert call(src / name).get("result", {}).get("status") == "added", name
+    assert lib.stats()["files"] == 2
 
 
 # ---- reindex -----------------------------------------------------------------
