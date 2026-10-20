@@ -14,6 +14,7 @@ struct DownloadsView: View {
                 List(model.jobs) { job in
                     JobRow(job: job)
                 }
+                .studioPanel()
             }
         }
         .navigationTitle("Downloads")
@@ -107,7 +108,7 @@ private struct JobRow: View {
         case "done": return .green
         case "partial": return .orange
         case "failed": return .red
-        case "active": return .accentColor
+        case "active": return StudioTheme.accent
         default: return .secondary
         }
     }

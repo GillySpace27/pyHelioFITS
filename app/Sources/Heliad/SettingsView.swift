@@ -5,12 +5,21 @@ struct SettingsView: View {
     @EnvironmentObject var model: AppModel
     @AppStorage("corePath") var corePath = ""
     @AppStorage("libraryPath") var libraryPath = ""
+    @AppStorage("appearance") var appearance = Appearance.dark.rawValue
     @State var jsocEmail = ""
     @State var vsoMirrors = ""
     @State var loaded = false
 
     var body: some View {
         Form {
+            Section("Appearance") {
+                Picker("Theme", selection: $appearance) {
+                    ForEach(Appearance.allCases) { Text($0.label).tag($0.rawValue) }
+                }
+                Text("HelioFITS Studio's Sunset themes. Images always sit on Peek's dark canvas.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Section("Archives") {
                 TextField("JSOC email", text: $jsocEmail, prompt: Text("registered at jsoc.stanford.edu"))
                     .onSubmit { Task { await model.setSetting("jsoc_email", jsocEmail) } }

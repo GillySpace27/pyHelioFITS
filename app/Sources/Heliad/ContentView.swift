@@ -70,7 +70,7 @@ private struct Sidebar: View {
                             Text("\(model.activeJobs)")
                                 .font(.caption.monospacedDigit())
                                 .padding(.horizontal, 6)
-                                .background(Capsule().fill(Color.accentColor.opacity(0.25)))
+                                .background(Capsule().fill(StudioTheme.accent.opacity(0.25)))
                         }
                     }
                 } icon: {

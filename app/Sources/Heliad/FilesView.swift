@@ -89,6 +89,7 @@ struct FilesView: View {
                         .padding(.bottom, 16)
                 }
             }
+            .background(StudioTheme.component)
             .overlay { emptyNote }
             .onChange(of: selection) {  // keep the viewer's frame in sight as it plays
                 if showViewer, selection.count == 1, let id = selection.first { proxy.scrollTo(id) }
@@ -116,6 +117,7 @@ struct FilesView: View {
             } primaryAction: { _ in
                 showViewer = true  // a double-click opens the frame viewer on that file
             }
+            .studioPanel()
             .overlay { emptyNote }
             if more {
                 Button("Show More") { Task { await load(reset: false) } }
@@ -283,7 +285,7 @@ private struct FileCell: View {
         VStack(spacing: 6) {
             ZStack {
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(Color.black)
+                    .fill(StudioTheme.canvas)
                 if let image {
                     Image(nsImage: image)
                         .resizable()
@@ -307,9 +309,9 @@ private struct FileCell: View {
         }
         .padding(6)
         .background(RoundedRectangle(cornerRadius: 8)
-            .fill(selected ? Color.accentColor.opacity(0.25) : Color.clear))
+            .fill(selected ? StudioTheme.accent.opacity(0.25) : Color.clear))
         .overlay(RoundedRectangle(cornerRadius: 8)
-            .stroke(selected ? Color.accentColor : Color.clear, lineWidth: 2))
+            .stroke(selected ? StudioTheme.accent : Color.clear, lineWidth: 2))
         .contentShape(Rectangle())
         .help(file.name)
         .task(id: file.fileId) {

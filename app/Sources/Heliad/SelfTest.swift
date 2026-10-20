@@ -49,6 +49,7 @@ enum SelfTest {
                     let started = Date()
                     let image = await model.thumbnail(for: file)
                     note("thumbnail", image.map { "\(Int($0.size.width))x\(Int($0.size.height)) in \(String(format: "%.1f", Date().timeIntervalSince(started))) s" } ?? "failed")
+                    note("renderer", model.lastThumbnailSource)
                 }
             } catch {
                 note("files", "error: \(error.localizedDescription)")

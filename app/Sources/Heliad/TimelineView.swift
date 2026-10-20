@@ -161,8 +161,8 @@ struct TimelineView: View {
                     let x0 = x(selected.lowerBound, span, width)
                     let x1 = x(selected.upperBound, span, width)
                     Rectangle()
-                        .fill(Color.accentColor.opacity(0.18))
-                        .overlay(Rectangle().stroke(Color.accentColor, lineWidth: 1))
+                        .fill(StudioTheme.accent.opacity(0.18))
+                        .overlay(Rectangle().stroke(StudioTheme.accent, lineWidth: 1))
                         .frame(width: max(x1 - x0, 1), height: geo.size.height)
                         .offset(x: x0)
                         .allowsHitTesting(false)
@@ -349,7 +349,7 @@ struct Strip: View {
             for (i, n) in counts.enumerated() where n > 0 {
                 let level = 0.35 + 0.65 * log(Double(n) + 1) / peak
                 let rect = CGRect(x: CGFloat(i) * width, y: 4, width: max(width, 1), height: size.height - 8)
-                context.fill(Path(rect), with: .color(.accentColor.opacity(level)))
+                context.fill(Path(rect), with: .color(StudioTheme.accent.opacity(level)))
             }
         }
     }
