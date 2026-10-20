@@ -278,7 +278,12 @@ def version_sort_key(version: str | None) -> tuple:
     return tuple((0, int(p)) if p.isdigit() else (1, p) for p in parts) or ((-1,),)
 
 
-class IncompleteFile(ValueError):
+class Unstorable(ValueError):
+    """The file itself cannot enter the library (cut off, or not readable as FITS), so offering
+    it again will not help. Any other error while ingesting (a full disk, say) may pass."""
+
+
+class IncompleteFile(Unstorable):
     """The file is shorter than its own headers say: a download cut off part way."""
 
 

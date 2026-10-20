@@ -214,7 +214,8 @@ bins of the range (the app's Timeline). Without `start` or `end`, the library's 
 
 Params: `path, source_url=None, query=None`. Adds one FITS file. The file is copied into the store
 (an APFS clone on a Mac, so no extra disk) and left where it was. `source_url` and `query` are
-recorded with it, for provenance. A file cut off in transit is refused (see [Errors](#errors)).
+recorded with it, for provenance. A file cut off in transit, or not readable as FITS, is refused
+with code -32001 (see [Errors](#errors)).
 
     {"status": "added", "file_id": 1, "relpath": "store/sdo/aia/1/193/2025/09/21/a.fits", "findings": []}
 
@@ -383,6 +384,7 @@ An error reply has `error` instead of `result`:
 | -32601 | no such method |
 | -32602 | wrong or missing params (`params` must be an object), or a bad `heliad://` link |
 | -32603 | the method failed; `message` names the exception, `data` holds a short traceback |
+| -32001 | `ingest.path`: the file can never enter the library (cut off, or not readable as FITS), so offering it again will not help. A -32603 from `ingest.path` (a full disk, say) may pass |
 
 ## The command line and the API
 
