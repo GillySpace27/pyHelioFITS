@@ -289,7 +289,12 @@ class Library:
                     path.unlink(missing_ok=True)
                 return IngestResult("duplicate", row["id"], row["relpath"])
 
-            meta = fitsmeta.read(path)
+            try:
+                meta = fitsmeta.read(path)
+            except OSError as exc:
+                if exc.errno is not None:  # the disk, not the file
+                    raise
+                raise fitsmeta.Unstorable(f"{path.name}: {exc}") from exc  # astropy cannot read it as FITS
             findings = checks.run(meta) + self._snap_wavelength(meta)
             relpath = self._store_relpath(meta, path.name, sha)
             dest = self.root / relpath

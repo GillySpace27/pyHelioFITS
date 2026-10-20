@@ -35,6 +35,7 @@ from .query import Query
 PARSE_ERROR, INVALID_REQUEST, METHOD_NOT_FOUND, INVALID_PARAMS, INTERNAL_ERROR = (
     -32700, -32600, -32601, -32602, -32603,
 )
+UNSTORABLE = -32001  # ingest.path: this file can never enter the library; do not offer it again
 
 # Methods slow enough that answering them in order would stall the app; none of
 # them writes to the index.
@@ -274,7 +275,10 @@ class Server:
 
     def ingest_path(self, path: str, source_url: str | None = None, query: dict | None = None) -> dict:
         q = Query.from_json(query) if query else None
-        return self.lib.ingest(path, source_url=source_url, query=q).to_dict()
+        try:
+            return self.lib.ingest(path, source_url=source_url, query=q).to_dict()
+        except fitsmeta.Unstorable as exc:
+            raise RpcError(UNSTORABLE, str(exc))
 
     def ingest_tree(self, path: str) -> dict:
         def progress(i, n, p):

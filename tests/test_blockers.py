@@ -1,5 +1,6 @@
 """Read-only opening, reindex, delete, truncation, download jobs and the schema 2 migration."""
 
+import gzip
 import io
 import json
 import sqlite3
@@ -7,7 +8,7 @@ import time
 
 import pytest
 
-from heliad import config, db, fitsmeta, jobs, library, views
+from heliad import config, db, fitsmeta, jobs, library, rpc, views
 from heliad.library import Library, ReadOnlyLibrary
 from heliad.query import Query
 from heliad.rpc import Server
@@ -100,6 +101,29 @@ def test_file_cut_inside_its_header_is_refused(lib, src):
         fh.truncate(1000)
     with pytest.raises(fitsmeta.IncompleteFile):
         lib.ingest(path)
+
+
+def test_ingest_path_says_which_refusals_are_final(lib, src):
+    """Studio stops offering a file the core calls unstorable, and offers again one that
+    failed for any other reason."""
+    server = Server(lib, out=io.StringIO())
+    call = lambda path: server.handle_line(json.dumps(  # noqa: E731
+        {"jsonrpc": "2.0", "id": 1, "method": "ingest.path", "params": {"path": str(path)}}))
+    cut = write_fits(src / "cut.fits", aia_header())
+    with open(cut, "r+b") as fh:
+        fh.truncate(1000)
+    junk = src / "junk.fits"
+    junk.write_bytes(b"NOTFITS = 1".ljust(80) + b"END".ljust(2800))  # whole, but astropy cannot read it
+    for path in (cut, junk):
+        assert call(path)["error"]["code"] == rpc.UNSTORABLE, path.name
+    assert call(src / "gone.fits")["error"]["code"] == rpc.INTERNAL_ERROR  # not the file's fault
+
+    # gzip-wrapped FITS, as Studio caches it: named .fits.gz, or by a bare digest before 2026-09-28
+    for name, wave in (("a.fits.gz", 193), ("0123abcd", 171)):
+        plain = write_fits(src / f"{wave}.fits", aia_header(wave=wave))
+        (src / name).write_bytes(gzip.compress(plain.read_bytes()))
+        assert call(src / name).get("result", {}).get("status") == "added", name
+    assert lib.stats()["files"] == 2
 
 
 # ---- reindex -----------------------------------------------------------------
