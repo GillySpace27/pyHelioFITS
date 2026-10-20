@@ -10,7 +10,9 @@ download.enqueue returns at once and the job reports through
 download.progress and download.finished. Every write, from any thread, goes
 through the Library's one writer connection.
 
-Methods are listed in Server.methods; each takes named params.
+Methods are listed in Server.methods; each takes named params. API below names
+each one's params and says what it does; `heliad api` prints it, and
+docs/api.md is the full reference with examples. A test keeps all three in step.
 
 `heliad serve` also lets other cores share the library through this one (see
 share.py): their requests arrive on their own connections and are answered
@@ -37,6 +39,86 @@ PARSE_ERROR, INVALID_REQUEST, METHOD_NOT_FOUND, INVALID_PARAMS, INTERNAL_ERROR =
 # Methods slow enough that answering them in order would stall the app; none of
 # them writes to the index.
 BACKGROUND = frozenset({"search", "library.thumbnail"})
+
+
+# method: (params, what it does). Params are as the method takes them, by name.
+API: dict[str, tuple[str, str]] = {
+    "heliad.hello": ("", "Versions, the library root, whether this core is read-only, and every method."),
+    "library.stats": ("", "Counts of datasets, observations, files, bytes, warnings and collisions."),
+    "library.datasets": ("", "Every dataset with its label, keywords, observation count, time span and bytes."),
+    "library.files": ("dataset_key=None, start=None, end=None, limit=500, offset=0",
+                      "Current files (the newest version of each observation), in time order."),
+    "library.checks": ("file_id", "The header checks recorded for one file."),
+    "library.verify": ("", "Recompute every checksum; lists missing and altered files, changes nothing."),
+    "library.versions": ("observation_id", "Every file of one observation, newest version first, marking the current one."),
+    "library.collisions": ("", "Observations holding two different files of the current version."),
+    "library.delete": ("file_ids=(), observation_ids=(), dataset_keys=(), dry_run=True",
+                       "Remove files from the library; a dry run unless dry_run is false."),
+    "library.reindex": ("dry_run=False", "Apply the current header rules to every file already kept."),
+    "library.thumbnail": ("file_id, size=256", "Path of a greyscale PNG preview, made on first request."),
+    "library.coverage": ("start=None, end=None, bins=240, dataset_keys=None, instrument=None, "
+                         "wavelength=None, wavelength_max=None",
+                         "Per dataset, how many observations fall in each equal bin of a time range."),
+    "ingest.path": ("path, source_url=None, query=None", "Add one FITS file to the library (copied, deduplicated by checksum)."),
+    "ingest.tree": ("path", "Add every FITS file under a folder; reports ingest.progress."),
+    "download.enqueue": ("query, source='fido'", "Queue a download; returns the job at once, then reports download.progress."),
+    "download.list": ("status=None, limit=50", "Download jobs, newest first."),
+    "download.get": ("job_id", "One download job, or null."),
+    "download.cancel": ("job_id", "Cancel a queued or running job."),
+    "download.retry": ("job_id", "Queue a partial or failed job again; it fetches only what is missing."),
+    "search": ("query, source='fido', bins=240", "Ask an archive what it holds for a query; downloads nothing."),
+    "query.from_url": ("url", "The action and query in a heliad:// link."),
+    "view.create": ("name, description=None, dataset_keys=None, start=None, end=None, observation_ids=None",
+                    "Create a named view (an event, say) or add observations to one."),
+    "view.materialize": ("name", "Build a view's folder of links and its manifest.csv."),
+    "view.rebuild_all": ("", "Rebuild every view's folder."),
+    "view.members": ("name", "The current files of a view."),
+    "view.list": ("", "Every view with its size, span and folder."),
+    "settings.get": ("", "Heliad's settings (jsoc_email, vso_mirrors, ...)."),
+    "settings.set": ("key, value=None", "Set a setting; a null value removes it."),
+}
+
+# Sent without an id, to every client of the core.
+NOTIFICATIONS: dict[str, tuple[str, str]] = {
+    "download.progress": ("job_id, phase, done, total", "A job's phase (searching, fetching, ingesting) and its count so far."),
+    "download.finished": ("job_id, status, error, result", "A job ended: done, partial, failed or cancelled."),
+    "ingest.progress": ("done, total, path", "Files handled so far by ingest.tree, every 25 files and at the end."),
+}
+
+
+def describe(name: str | None = None) -> str:
+    """What `heliad api` prints: every method and notification, or one method."""
+    if name is not None:
+        table = API if name in API else NOTIFICATIONS if name in NOTIFICATIONS else None
+        if table is None:
+            raise KeyError(name)
+        params, what = table[name]
+        kind = "notification" if table is NOTIFICATIONS else "method"
+        return f"{name}({params})  [{kind}]\n    {what}\n\nFull reference: docs/api.md, section {name}\n"
+    width = max(len(f"{n}({p})") for n, (p, _) in API.items() if len(p) < 40) + 2
+    lines = [
+        f"Heliad JSON-RPC API (heliad {__version__})",
+        "",
+        "Start a core with `heliad [--library DIR] serve`. Write one JSON-RPC 2.0 request per line",
+        "to its stdin; each reply, and each notification (no id), is one line on its stdout.",
+        "Params are named. A second `heliad serve` on the same library relays to the first.",
+        "Example:",
+        "  echo '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"library.stats\"}' | heliad serve",
+        "",
+        "Methods:",
+    ]
+    for table in (API, None, NOTIFICATIONS):
+        if table is None:
+            lines += ["", "Notifications:"]
+            continue
+        for n, (p, what) in table.items():
+            call = f"{n}({p})"
+            if len(call) >= width:
+                lines += [f"  {call}", f"  {'':<{width}}{what}"]
+            else:
+                lines.append(f"  {call:<{width}}{what}")
+    lines += ["", "One method in detail: heliad api METHOD. Full reference with examples: docs/api.md", ""]
+    return "\n".join(lines)
 
 
 class RpcError(Exception):
