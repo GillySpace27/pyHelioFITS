@@ -307,6 +307,7 @@ struct PeekPicture: View {
             .padding(.vertical, 3)
             .background(Color.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 3))
             .lineLimit(3)
+            .fixedSize()  // each caption line whole ("4096 x 4096 pixels"), clipped at the edge if long
     }
 
     /// Where the image sits in the square, aspect kept.
