@@ -15,9 +15,9 @@ let package = Package(
         // HelioFITS Peek's renderer (thumbnails, colormaps, colorbar, filters, limb), so library
         // files look in Heliad exactly as they do in Finder and Quick Look. Follows a branch;
         // Package.resolved pins the exact commit, and .github/workflows/follow-peek.yml opens a
-        // PR when Peek moves. The branch becomes "main" once Peek PR #82 (the root package) merges.
+        // PR when Peek moves. Peek PR #82 put the root package on main (2026-10-21).
         .package(url: "https://github.com/GillySpace27/HelioFITS-Peek.git",
-                 branch: "claude/shared-core-root-package"),
+                 branch: "main"),
     ],
     targets: [
         .target(name: "HeliadKit"),
