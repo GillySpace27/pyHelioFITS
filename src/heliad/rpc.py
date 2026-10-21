@@ -28,7 +28,7 @@ import traceback
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, TextIO
 
-from . import __version__, config, coverage, db, fitsmeta, jobs, views
+from . import __version__, config, coverage, db, fitsmeta, jobs, upgrade, views
 from .library import Library
 from .query import Query
 
@@ -39,7 +39,7 @@ UNSTORABLE = -32001  # ingest.path: this file can never enter the library; do no
 
 # Methods slow enough that answering them in order would stall the app; none of
 # them writes to the index.
-BACKGROUND = frozenset({"search", "library.thumbnail"})
+BACKGROUND = frozenset({"search", "library.thumbnail", "dataset.cadences"})
 
 
 # method: (params, what it does). Params are as the method takes them, by name.
@@ -47,7 +47,7 @@ API: dict[str, tuple[str, str]] = {
     "heliad.hello": ("", "Versions, the library root, whether this core is read-only, and every method."),
     "library.stats": ("", "Counts of datasets, observations, files, bytes, warnings and collisions."),
     "library.datasets": ("", "Every dataset with its label, keywords, observation count, time span and bytes."),
-    "library.files": ("dataset_key=None, start=None, end=None, limit=500, offset=0",
+    "library.files": ("dataset_key=None, start=None, end=None, limit=500, offset=0, include_rejected=False",
                       "Current files (the newest version of each observation), in time order."),
     "library.checks": ("file_id", "The header checks recorded for one file."),
     "library.verify": ("", "Recompute every checksum; lists missing and altered files, changes nothing."),
@@ -56,6 +56,15 @@ API: dict[str, tuple[str, str]] = {
     "library.delete": ("file_ids=(), observation_ids=(), dataset_keys=(), dry_run=True",
                        "Remove files from the library; a dry run unless dry_run is false."),
     "library.reindex": ("dry_run=False", "Apply the current header rules to every file already kept."),
+    "library.reject": ("observation_ids, reason", "Set observations aside (a bad frame): readers stop seeing them."),
+    "library.unreject": ("observation_ids", "Serve rejected observations to readers again."),
+    "library.rejected": ("dataset_key=None", "Rejected observations with their reason and current file."),
+    "library.refetch": ("observation_id", "Queue a job asking the archive again for one observation's frame."),
+    "dataset.query": ("dataset_key", "The query that asks the archive again for a dataset, stored or inferred."),
+    "dataset.cadences": ("dataset_key, start=None, end=None",
+                         "Compare a dataset's cadence with the archive's; lists the frames it lacks."),
+    "dataset.upgrade": ("dataset_key, sample_s=None, start=None, end=None, dry_run=True",
+                        "Queue a job fetching only the frames a dataset lacks; a dry run unless dry_run is false."),
     "library.thumbnail": ("file_id, size=256", "Path of a greyscale PNG preview, made on first request."),
     "library.coverage": ("start=None, end=None, bins=240, dataset_keys=None, instrument=None, "
                          "wavelength=None, wavelength_max=None",
@@ -141,8 +150,18 @@ class Server:
             "heliad.hello": self.hello,
             "library.stats": lambda: lib.stats(),
             "library.datasets": lambda: lib.datasets(),
-            "library.files": lambda dataset_key=None, start=None, end=None, limit=500, offset=0:
-                lib.current_files(dataset_key=dataset_key, start=start, end=end, limit=limit, offset=offset),
+            "library.files": lambda dataset_key=None, start=None, end=None, limit=500, offset=0, include_rejected=False:
+                lib.current_files(dataset_key=dataset_key, start=start, end=end, limit=limit, offset=offset,
+                                  include_rejected=include_rejected),
+            "library.reject": lambda observation_ids, reason: lib.reject(observation_ids, reason),
+            "library.unreject": lambda observation_ids: lib.unreject(observation_ids),
+            "library.rejected": lambda dataset_key=None: lib.rejected(dataset_key),
+            "library.refetch": lambda observation_id: upgrade.refetch(lib, self._jobs(), observation_id),
+            "dataset.query": lambda dataset_key: upgrade.dataset_query(lib, dataset_key),
+            "dataset.cadences": self.cadences,
+            "dataset.upgrade": lambda dataset_key, sample_s=None, start=None, end=None, dry_run=True:
+                upgrade.upgrade(lib, self.jobs if dry_run else self._jobs(), dataset_key,
+                                sample_s=sample_s, start=start, end=end, dry_run=dry_run),
             "library.checks": lambda file_id: lib.checks_for(file_id),
             "library.verify": lambda: lib.verify(),
             "library.versions": lambda observation_id: lib.versions(observation_id),
@@ -297,6 +316,12 @@ class Server:
             if times is not None:
                 part["coverage"] = coverage.times(times, q.start, q.end, bins)
         return result
+
+    def cadences(self, dataset_key: str, start: str | None = None, end: str | None = None) -> dict:
+        """dataset.cadences: an archive search at full cadence over the dataset's query."""
+        from . import sources  # sunpy and drms are optional; imported only when searching
+        resolve = self.jobs._source if self.jobs is not None else sources.get
+        return upgrade.cadences(self.lib, resolve, dataset_key, start, end, settings=config.load_settings())
 
     def query_from_url(self, url: str) -> dict:
         try:

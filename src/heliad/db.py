@@ -17,7 +17,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 READER_COMPAT = 1  # see the module docstring
 
 SCHEMA_V1 = """
@@ -168,7 +168,30 @@ ALTER TABLE jobs_v3 RENAME TO jobs;
 CREATE INDEX jobs_status ON jobs(status);
 """
 
-MIGRATIONS: dict[int, str] = {1: SCHEMA_V1, 2: SCHEMA_V2, 3: SCHEMA_V3}
+# Version 4: the cache editor. A rejected observation (a bad frame someone set
+# aside) leaves current_files, so readers stop seeing it; its files stay in the
+# store and unrejecting brings it back. current_files keeps exactly its columns,
+# so reader_compat stays 1. A job can carry options (an upgrade's missing_only).
+SCHEMA_V4 = """
+CREATE TABLE rejections (
+    observation_id  INTEGER PRIMARY KEY REFERENCES observations(id),
+    reason          TEXT NOT NULL,
+    rejected_at     TEXT NOT NULL
+);
+ALTER TABLE jobs ADD COLUMN options_json TEXT;
+DROP VIEW current_files;
+CREATE VIEW current_files AS
+SELECT f.id AS file_id, f.relpath, f.sha256, f.size, f.version,
+       o.id AS observation_id, o.date_obs,
+       d.id AS dataset_id, d.dataset_key, d.label, d.observatory, d.instrument,
+       d.detector, d.product, d.level, d.wavelength
+FROM observations o
+JOIN files f    ON f.id = o.current_file_id
+JOIN datasets d ON d.id = o.dataset_id
+WHERE NOT EXISTS (SELECT 1 FROM rejections r WHERE r.observation_id = o.id);
+"""
+
+MIGRATIONS: dict[int, str] = {1: SCHEMA_V1, 2: SCHEMA_V2, 3: SCHEMA_V3, 4: SCHEMA_V4}
 
 
 def _configure(conn: sqlite3.Connection) -> None:
@@ -220,6 +243,12 @@ def schema_version(conn: sqlite3.Connection) -> int:
         return 0
     row = conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
     return int(row["value"]) if row else 0
+
+
+def has_table(conn: sqlite3.Connection, name: str) -> bool:
+    """Whether the index has this table: a read-only Library may hold an older schema."""
+    return conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+                        (name,)).fetchone() is not None
 
 
 def migrate(conn: sqlite3.Connection) -> None:

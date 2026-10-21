@@ -4,12 +4,20 @@ A source is a module with
 
     search(query, *, settings) -> dict
         what the archive holds, for display; downloads nothing
-    fetch(query, staging, *, settings, phase) -> dict
-        fetch into the staging folder; returns {"found", "paths", "errors", "urls"}
+    fetch(query, staging, *, settings, phase, skip=None) -> dict
+        fetch into the staging folder; returns {"found", "paths", "errors", "urls"},
+        and "skipped" when skip left records out
 
 phase(name, done=None, total=None) reports progress and is where a cancel
 takes effect, so a source calls it between steps. Files already complete in
 staging are kept, so fetching again after an interruption resumes.
+
+skip(time) -> bool, when given, is asked about each record's time (ISO 8601
+text, or the archive's own form such as JSOC's T_REC) before anything is
+fetched; a record it answers true for is left out, and "found" counts only what
+is left. An upgrade passes one so that only the frames the library lacks are
+fetched. A source that cannot tell a record's time before fetching it says so
+and fetches everything; ingest then finds the copies it already holds.
 """
 
 from __future__ import annotations

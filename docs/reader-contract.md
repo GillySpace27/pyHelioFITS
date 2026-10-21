@@ -41,6 +41,12 @@ only writer; everything else follows these rules and only reads.
 | `dataset_id`, `dataset_key`, `label` | the dataset; `label` is for display, `dataset_key` for grouping |
 | `observatory`, `instrument`, `detector`, `product`, `level`, `wavelength` | the parts of the key; any can be NULL |
 
+`current_files` leaves out rejected observations: frames a person set aside in
+Heliad's cache editor (`library.reject` in [the API](api.md)). Their files stay in
+the store, and unrejecting one brings it back. Schema 4 added this; the columns are
+unchanged, so it is still reader_compat 1, and a reader simply stops seeing a
+rejected frame.
+
 Also stable at reader_compat 1: `datasets`, `views(name, description)` and
 `view_members(view_id, observation_id)` (join to `current_files` on `observation_id`).
 Other tables are Heliad's own and can change.
@@ -72,8 +78,11 @@ left unable to get data.
    fields (`start`, `end`, `instrument`, `wavelength`, `sample_s`, ...; see
    `Query.to_url`). Studio opens such a link to hand a search to the app; a `get` link
    shows the search with a Download button rather than downloading unasked.
-3. **Last:** Studio's download buttons are removed once the app is installed and
-   detected, so every search, download and delete goes through Heliad.
+3. ~~**Last:** Studio's download buttons are removed once the app is installed and
+   detected, so every search, download and delete goes through Heliad.~~
+   **Withdrawn on 2026-10-20 by Gilly.** Studio keeps every download function, and
+   Heliad manages and upgrades the cache (rejecting frames, refetching one,
+   densifying a dataset).
 
 Studio keeps JPIP streaming from Helioviewer (decision 10): it is viewing rather than
 downloading, and none of these steps touches it.

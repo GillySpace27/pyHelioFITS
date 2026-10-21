@@ -13,9 +13,11 @@ reach it. The first real export is its test.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from pathlib import Path
 
+from .. import coverage
 from ..library import is_fits
 from ..query import Query
 
@@ -68,7 +70,25 @@ def search(query: Query, *, settings: dict | None = None) -> dict:
             "times": [str(t) for t in keys["T_REC"]]}  # every record; the core bins them
 
 
-def fetch(query: Query, staging: Path, *, settings: dict, phase) -> dict:
+def record_time(record: str) -> str | None:
+    """T_REC from an export's record name, series[T_REC][...]: the first prime key.
+
+    That T_REC comes first holds for the series Heliad builds record sets for
+    (aia.lev1_*, hmi.*); for another series this may read a different key, which
+    then fails to parse as a time and the record is fetched.
+    """
+    m = re.match(r"^[^\[]+\[([^\]]+)\]", str(record))
+    return m.group(1) if m else None
+
+
+def fetch(query: Query, staging: Path, *, settings: dict, phase, skip=None) -> dict:
+    """Export the record set and download what staging lacks.
+
+    With skip, a record whose T_REC (read from the urls table's record column) it
+    claims is not downloaded; the export itself still covers the whole record set.
+    When the urls table has no record column, skip is not applied, everything is
+    downloaded, and ingest finds the copies the library already holds.
+    """
     rs = recordset(query)
     client = _client(settings)
     phase("exporting")
@@ -77,10 +97,17 @@ def fetch(query: Query, staging: Path, *, settings: dict, phase) -> dict:
     if not request.has_succeeded():
         raise RuntimeError(f"JSOC export {request.id} did not succeed (status {request.status})")
     urls = request.urls
-    phase("fetching", 0, len(urls))
+    wanted = list(range(len(urls)))
+    skipped = None
+    if skip is not None and "record" in urls.columns:
+        wanted = [i for i, rec in enumerate(urls["record"])
+                  if not ((t := record_time(rec)) and coverage.utc_text(t) and skip(t))]
+        skipped = len(urls) - len(wanted)
+    phase("fetching", 0, len(wanted))
     # Records already staged by an earlier, interrupted run are not fetched again.
     have = {p.name for p in staging.iterdir() if p.is_file()}
-    todo = [i for i, name in enumerate(urls["filename"]) if name not in have]
+    names = list(urls["filename"])
+    todo = [i for i in wanted if names[i] not in have]
     errors = []
     if todo:
         table = request.download(str(staging), index=todo)
@@ -89,5 +116,8 @@ def fetch(query: Query, staging: Path, *, settings: dict, phase) -> dict:
                 errors.append(f"{row['record']}: download failed")
     by_name = {row["filename"]: row["url"] for _, row in urls.iterrows()}
     paths = sorted(p for p in staging.iterdir() if p.is_file() and is_fits(p) and p.name in by_name)
-    return {"found": len(urls), "paths": paths, "errors": errors,
-            "urls": {p.name: by_name[p.name] for p in paths}}
+    out = {"found": len(wanted), "paths": paths, "errors": errors,
+           "urls": {p.name: by_name[p.name] for p in paths}}
+    if skipped is not None:
+        out["skipped"] = skipped
+    return out
