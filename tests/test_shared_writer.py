@@ -161,7 +161,11 @@ def test_both_clients_hear_a_download_from_either(lib, src):
     with socket.create_connection(("127.0.0.1", port), timeout=5) as stranger:
         stranger.sendall(b"not-the-token\n")
         stranger.sendall(b'{"jsonrpc":"2.0","id":1,"method":"library.stats"}\n')
-        assert stranger.makefile("rb").read() == b""
+        try:
+            answer = stranger.makefile("rb").read()
+        except ConnectionResetError:  # macOS resets a socket closed with the request unread
+            answer = b""
+        assert answer == b""
 
     feed.close()
     time.sleep(0.3)
