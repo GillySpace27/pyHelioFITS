@@ -1,13 +1,13 @@
 {
-  "originHash" : "9e2ebb7e21b8b623892897e2dc4f2df8802e892e2a423ab5abc66cce65d9e530",
+  "originHash" : "fc244d3c9823c70ac826f63eee019375af3c37f6fc22bd03a961b88c9ed919a7",
   "pins" : [
     {
       "identity" : "heliofits-peek",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/GillySpace27/HelioFITS-Peek.git",
       "state" : {
-        "branch" : "claude/shared-core-root-package",
-        "revision" : "24531c0ec0c821b8f2105eac47a3e55f1bb920a7"
+        "branch" : "main",
+        "revision" : "2b0c5e340e8000b87a0f283bff9fc19aecf9b135"
       }
     }
   ],
