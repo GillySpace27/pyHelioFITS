@@ -247,3 +247,55 @@ public struct LinkRequest: Decodable, Sendable {
     public let action: String   // search | get
     public let query: [String: JSONValue]
 }
+
+// MARK: - the cache editor (dataset.query, dataset.cadences, dataset.upgrade, library.rejected)
+
+/// The query that asks the archive again for a dataset (dataset.query): the newest one stored
+/// with its files, or one inferred from its headers, which `inferred` and `basis` say.
+public struct DatasetQuery: Decodable, Sendable {
+    public let query: [String: JSONValue]
+    public let source: String
+    public let inferred: Bool
+    public let basis: String
+}
+
+/// What the archive holds for a dataset against what the library holds (dataset.cadences).
+public struct CadenceReport: Decodable, Sendable {
+    public struct Side: Decodable, Sendable {
+        public let count: Int
+        public let medianSpacingS: Double?
+        public let rejected: Int?       // the library side only
+    }
+
+    public let datasetKey: String
+    public let query: [String: JSONValue]
+    public let source: String
+    public let toleranceS: Double
+    public let library: Side
+    public let archive: Side
+    public let missing: [String]        // archive record times the library has no frame for
+}
+
+/// A dry run of dataset.upgrade: the query a densify job would run and its options.
+public struct UpgradePlan: Decodable, Sendable {
+    public let dryRun: Bool
+    public let query: [String: JSONValue]
+    public let source: String
+    public let options: [String: JSONValue]
+    public let inferred: Bool
+    public let basis: String
+}
+
+/// One frame set aside as bad (library.rejected); its file stays in the store.
+public struct RejectedFrame: Decodable, Sendable, Identifiable, Hashable {
+    public let observationId: Int
+    public let datasetKey: String
+    public let label: String
+    public let dateObs: String
+    public let reason: String
+    public let rejectedAt: String
+    public let fileId: Int?
+    public let relpath: String?
+
+    public var id: Int { observationId }
+}

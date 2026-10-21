@@ -351,6 +351,71 @@ final class AppModel: ObservableObject {
         selection = .search
     }
 
+    // MARK: - the cache editor
+
+    func datasetQuery(_ datasetKey: String) async throws -> DatasetQuery {
+        try await core.call("dataset.query", ["dataset_key": .string(datasetKey)], as: DatasetQuery.self)
+    }
+
+    /// An archive search at full cadence over the dataset's range; downloads nothing.
+    func cadences(_ datasetKey: String) async throws -> CadenceReport {
+        try await core.call("dataset.cadences", ["dataset_key": .string(datasetKey)], as: CadenceReport.self)
+    }
+
+    func upgradePlan(_ datasetKey: String, sampleS: Double?) async throws -> UpgradePlan {
+        var params: [String: JSONValue] = ["dataset_key": .string(datasetKey), "dry_run": .bool(true)]
+        if let sampleS { params["sample_s"] = .double(sampleS) }
+        return try await core.call("dataset.upgrade", params, as: UpgradePlan.self)
+    }
+
+    /// Queue a job that fetches only the frames the dataset lacks, then show Downloads.
+    func densify(_ datasetKey: String, sampleS: Double?) async {
+        var params: [String: JSONValue] = ["dataset_key": .string(datasetKey), "dry_run": .bool(false)]
+        if let sampleS { params["sample_s"] = .double(sampleS) }
+        do {
+            _ = try await core.call("dataset.upgrade", params, as: Job.self)
+            await refreshJobs()
+            selection = .downloads
+        } catch {
+            report(error)
+        }
+    }
+
+    func rejected(_ datasetKey: String) async throws -> [RejectedFrame] {
+        try await core.call("library.rejected", ["dataset_key": .string(datasetKey)], as: [RejectedFrame].self)
+    }
+
+    /// Set frames aside as bad: readers (Studio's Heliad tab, views) stop seeing them, their
+    /// files stay in the store, and an upgrade never fetches them again.
+    func reject(_ files: [LibraryFile], reason: String) async {
+        await editRejections("library.reject", files.map(\.observationId), reason: reason)
+    }
+
+    func unreject(_ frames: [RejectedFrame]) async {
+        await editRejections("library.unreject", frames.map(\.observationId), reason: nil)
+    }
+
+    private func editRejections(_ method: String, _ ids: [Int], reason: String?) async {
+        var params: [String: JSONValue] = ["observation_ids": .array(ids.map { .int($0) })]
+        if let reason { params["reason"] = .string(reason) }
+        do {
+            _ = try await core.callRaw(method, params)
+            await refreshLibrary()
+        } catch {
+            report(error)
+        }
+    }
+
+    /// Ask the archive again for one frame; a newer version becomes current when it arrives.
+    func refetch(_ file: LibraryFile) async {
+        do {
+            _ = try await core.call("library.refetch", ["observation_id": .int(file.observationId)], as: Job.self)
+            await refreshJobs()
+        } catch {
+            report(error)
+        }
+    }
+
     // MARK: - deleting
 
     struct DeleteTarget {
