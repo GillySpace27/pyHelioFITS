@@ -55,6 +55,7 @@ struct EventPane: View {
                     }
                 }
             }
+            .studioPanel()
             .overlay {
                 if let problem {
                     Text(problem).foregroundStyle(.red)

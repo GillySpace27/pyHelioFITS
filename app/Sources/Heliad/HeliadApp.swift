@@ -6,12 +6,16 @@ struct HeliadApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var model = AppModel()
     @AppStorage("showFrameViewer") private var showViewer = false
+    @AppStorage("appearance") private var appearance = Appearance.dark.rawValue
 
     var body: some Scene {
         WindowGroup("Heliad", id: "main") {
             ContentView()
                 .environmentObject(model)
                 .frame(minWidth: 900, minHeight: 560)
+                .background(StudioTheme.background)
+                .tint(StudioTheme.accent)
+                .preferredColorScheme(scheme)
                 .onAppear {
                     appDelegate.model = model
                     if model.hello == nil, case .starting = model.coreState { model.startCore() }
@@ -45,8 +49,12 @@ struct HeliadApp: App {
         Settings {
             SettingsView()
                 .environmentObject(model)
+                .tint(StudioTheme.accent)
+                .preferredColorScheme(scheme)
         }
     }
+
+    private var scheme: ColorScheme? { (Appearance(rawValue: appearance) ?? .dark).colorScheme }
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {

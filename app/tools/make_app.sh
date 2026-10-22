@@ -15,8 +15,9 @@ IDENTITY="${SIGN_IDENTITY:--}"
 APP="build/Heliad.app"
 VERSION="$(git describe --tags --always 2>/dev/null || echo dev)"
 
-swift build -c release
-BIN="$(swift build -c release --show-bin-path)/Heliad"
+# Build exactly the dependencies Package.resolved names; a stale resolved file fails here.
+swift build -c release --disable-automatic-resolution
+BIN="$(swift build -c release --disable-automatic-resolution --show-bin-path)/Heliad"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"

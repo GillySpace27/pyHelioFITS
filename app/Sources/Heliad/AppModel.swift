@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import HeliadKit
+import HelioFITSCore
 
 enum SidebarItem: Hashable {
     case search
@@ -46,12 +47,17 @@ final class AppModel: ObservableObject {
     private(set) var launch: CoreClient.Launch?
     private var thumbnails: [Int: NSImage] = [:]
     private var failedThumbnails: Set<Int> = []
-    /// The frame viewer's larger previews, oldest dropped first so a long playback stays bounded.
-    private var previews: [Int: NSImage] = [:]
-    private var previewOrder: [Int] = []
-    private var previewsInFlight: [Int: Task<String?, Never>] = [:]  // the rendered PNG's path
+    /// The frame viewer's files, read by Peek's renderer, oldest dropped first so a long
+    /// playback stays bounded (each holds its pages at previewSize).
+    private var peeks: [Int: FITSPreviewModel] = [:]
+    private var peekOrder: [Int] = []
+    private var peeksInFlight: [Int: Task<FITSPreviewModel?, Never>] = [:]
+    private var failedPeeks: Set<Int> = []
     static let previewSize = 1024
-    static let previewsKept = 150
+    static let peeksKept = 60
+    static let thumbnailSize = 256
+    /// Which renderer drew the last thumbnail: "peek", or "core" when Peek could not read the file.
+    private(set) var lastThumbnailSource = ""
     private var pendingLinks: [URL] = []
 
     var libraryRoot: String? { hello?.libraryRoot }
@@ -88,8 +94,9 @@ final class AppModel: ObservableObject {
         coreState = .starting
         thumbnails.removeAll()
         failedThumbnails.removeAll()
-        previews.removeAll()
-        previewOrder.removeAll()
+        peeks.removeAll()
+        peekOrder.removeAll()
+        failedPeeks.removeAll()
         Task {
             await core.stop(grace: 8)  // it holds the library lock until it exits
             startCore()
@@ -162,11 +169,20 @@ final class AppModel: ObservableObject {
         return try await core.call("library.files", params, as: [LibraryFile].self)
     }
 
-    /// The file's preview: from the core's cache when it is there, else rendered by the core.
+    /// The file's thumbnail as HelioFITS Peek draws it in Finder; the core's greyscale one when
+    /// Peek cannot read the file.
     func thumbnail(for file: LibraryFile) async -> NSImage? {
         if let image = thumbnails[file.fileId] { return image }
         if failedThumbnails.contains(file.fileId) { return nil }
         guard let root = libraryRoot else { return nil }
+        let fits = file.url(libraryRoot: root).path
+        if let drawn = await PeekRender.shared.thumbnail(path: fits, sha256: file.sha256, size: Self.thumbnailSize) {
+            let image = NSImage(cgImage: drawn, size: .zero)
+            thumbnails[file.fileId] = image
+            lastThumbnailSource = "peek"
+            return image
+        }
+        lastThumbnailSource = "core"
         let cached = file.thumbnailURL(libraryRoot: root)
         var path = cached.path
         if !FileManager.default.fileExists(atPath: path) {
@@ -186,30 +202,40 @@ final class AppModel: ObservableObject {
         return image
     }
 
-    /// A larger preview for the frame viewer: the core renders it once at previewSize and
-    /// caches it beside the thumbnail. Asking twice while it renders waits for the one render.
-    func preview(for file: LibraryFile) async -> NSImage? {
-        if let image = previews[file.fileId] { return image }
-        let task: Task<String?, Never>
-        if let running = previewsInFlight[file.fileId] {
+    /// The frame viewer's look at a file: Peek's model of it, with every page in its colormap,
+    /// the solar WCS, colorbar, readout and filters. Asking twice while it loads waits for the
+    /// one load. Nil when Peek cannot read the file.
+    func peek(for file: LibraryFile) async -> FITSPreviewModel? {
+        if let m = peeks[file.fileId] { return m }
+        if failedPeeks.contains(file.fileId) { return nil }
+        guard let root = libraryRoot else { return nil }
+        let task: Task<FITSPreviewModel?, Never>
+        if let running = peeksInFlight[file.fileId] {
             task = running
         } else {
-            let params: [String: JSONValue] = ["file_id": .int(file.fileId), "size": .int(Self.previewSize)]
-            task = Task { [core] in
-                try? await core.call("library.thumbnail", params, as: RenderedPreview.self).path
-            }
-            previewsInFlight[file.fileId] = task
+            let path = file.url(libraryRoot: root).path
+            task = Task { await PeekRender.shared.model(path: path, maxSide: Self.previewSize) }
+            peeksInFlight[file.fileId] = task
         }
-        let path = await task.value
-        previewsInFlight[file.fileId] = nil
-        if let image = previews[file.fileId] { return image }  // the other waiter got there first
-        guard let path, let image = NSImage(contentsOfFile: path) else { return nil }
-        previews[file.fileId] = image
-        previewOrder.append(file.fileId)
-        if previewOrder.count > Self.previewsKept {
-            previews[previewOrder.removeFirst()] = nil
+        let loaded = await task.value
+        peeksInFlight[file.fileId] = nil
+        if let m = peeks[file.fileId] { return m }  // the other waiter got there first
+        guard let loaded else {
+            failedPeeks.insert(file.fileId)
+            return nil
         }
-        return image
+        peeks[file.fileId] = loaded
+        peekOrder.append(file.fileId)
+        if peekOrder.count > Self.peeksKept {
+            peeks[peekOrder.removeFirst()] = nil
+        }
+        return loaded
+    }
+
+    /// The viewer's picture of a file as it first opens (the starting page, default stretch).
+    func preview(for file: LibraryFile) async -> NSImage? {
+        guard let image = await peek(for: file)?.image() else { return nil }
+        return NSImage(cgImage: image, size: .zero)
     }
 
     func checks(for file: LibraryFile) async -> [FileCheck] {
@@ -350,7 +376,7 @@ final class AppModel: ObservableObject {
             _ = try await core.call("library.delete", params, as: DeleteSummary.self)
             for id in target.fileIds {
                 thumbnails[id] = nil
-                previews[id] = nil
+                peeks[id] = nil
             }
             if case .dataset(let key) = selection, target.datasetKeys.contains(key) { selection = .search }
             await refreshLibrary()
@@ -418,7 +444,3 @@ final class AppModel: ObservableObject {
     }
 }
 
-/// library.thumbnail's answer: where the PNG is.
-private struct RenderedPreview: Decodable {
-    let path: String
-}

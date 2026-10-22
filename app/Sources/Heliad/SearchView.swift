@@ -100,7 +100,7 @@ struct SearchView: View {
             Button("Dismiss") { model.linkAskedToDownload = false }
         }
         .padding(10)
-        .background(Color.accentColor.opacity(0.15))
+        .background(StudioTheme.accent.opacity(0.15))
     }
 
     @ViewBuilder private var results: some View {
@@ -283,7 +283,7 @@ private struct Gaps: View {
             for i in offered.indices where offered[i] > 0 {
                 let missing = i >= kept.count || kept[i] == 0
                 let rect = CGRect(x: CGFloat(i) * width, y: 4, width: max(width, 1), height: size.height - 8)
-                context.fill(Path(rect), with: .color(missing ? .orange : .accentColor.opacity(0.25)))
+                context.fill(Path(rect), with: .color(missing ? .orange : StudioTheme.accent.opacity(0.25)))
             }
         }
     }
