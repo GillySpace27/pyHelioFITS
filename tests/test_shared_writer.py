@@ -161,7 +161,10 @@ def test_both_clients_hear_a_download_from_either(lib, src):
     with socket.create_connection(("127.0.0.1", port), timeout=5) as stranger:
         stranger.sendall(b"not-the-token\n")
         stranger.sendall(b'{"jsonrpc":"2.0","id":1,"method":"library.stats"}\n')
-        assert stranger.makefile("rb").read() == b""
+        try:
+            assert stranger.makefile("rb").read() == b""
+        except ConnectionResetError:
+            pass  # closed with our second line unread: macOS sends RST, which is still "dropped"
 
     feed.close()
     time.sleep(0.3)

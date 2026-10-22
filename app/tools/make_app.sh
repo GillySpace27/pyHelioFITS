@@ -22,6 +22,19 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Heliad"
 
+# The icon (app/icon, made by make_app_icon.py): a compiled asset catalog when actool is here,
+# because macOS 26 draws a .icns-only app on a grey plate at 16 and 32 px (measured for HelioFITS
+# Studio, whose release/make_app_icon.py this follows). actool also writes AppIcon.icns for older
+# systems; without actool the app gets the prebuilt .icns under that name.
+if xcrun --find actool >/dev/null 2>&1; then
+    xcrun actool icon/Assets.xcassets --compile "$APP/Contents/Resources" --platform macosx \
+        --minimum-deployment-target 14.0 --app-icon AppIcon \
+        --output-partial-info-plist build/actool-info.plist >/dev/null
+else
+    echo "actool not found (needs Xcode): the app gets the .icns only" >&2
+    cp icon/Heliad.icns "$APP/Contents/Resources/AppIcon.icns"
+fi
+
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -31,6 +44,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleName</key><string>Heliad</string>
     <key>CFBundleDisplayName</key><string>Heliad</string>
     <key>CFBundleExecutable</key><string>Heliad</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
+    <key>CFBundleIconName</key><string>AppIcon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>0.1.0</string>
     <key>CFBundleVersion</key><string>${VERSION}</string>
