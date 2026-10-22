@@ -6,7 +6,10 @@ the .icns carries the art masked to macOS's squircle (824 of 1024 px, exponent 4
 catalog gets the unmasked square, because macOS applies its own shape to a catalog icon and insets
 art that is already a squircle onto a grey plate.
 
-  python3 make_app_icon.py   ->  AppIcon.appiconset/, Heliad.icns, heliad_icon_1024.png, preview.png
+  python3 make_app_icon.py   ->  Assets.xcassets/AppIcon.appiconset/, Heliad.icns,
+                                  heliad_icon_1024.png, preview.png
+
+tools/make_app.sh copies Heliad.icns into the app and compiles Assets.xcassets with actool.
 
 Needs cairosvg, Pillow and numpy.
 """
@@ -65,8 +68,12 @@ def main():
     shaped = masked(art)
     shaped.save(os.path.join(OUT, "heliad_icon_1024.png"))
 
-    cat = os.path.join(OUT, "AppIcon.appiconset")
+    assets = os.path.join(OUT, "Assets.xcassets")
+    cat = os.path.join(assets, "AppIcon.appiconset")
     os.makedirs(cat, exist_ok=True)
+    with open(os.path.join(assets, "Contents.json"), "w") as f:
+        json.dump({"info": {"version": 1, "author": "xcode"}}, f, indent=2)
+        f.write("\n")
     images = []
     for size, scale, px in APPICONSET:
         name = f"icon_{size}@{scale}.png"
