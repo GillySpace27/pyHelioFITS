@@ -218,3 +218,18 @@ def test_release_with_slightly_different_wavelength_is_a_new_version(lib, src):
     assert "wavelength_snapped" in [f.code for f in r.findings]
     assert lib.ingest(fe).status == "added"  # a different line is a different dataset
     assert sorted(d["wavelength"] for d in lib.datasets()) == [5303, 5508]
+
+
+def test_level_is_the_level_token_when_the_keyword_carries_more():
+    # SUVI L1b writes LEVEL = 'National Aeronautics and Space Administration (NASA) L1b'
+    # (read from a G18 Fe195 file, 2025-09-18); the agency is not part of the level.
+    suvi = {"TELESCOP": "G18", "INSTRUME": "GOES-R Series Solar Ultraviolet Imager (SUVI)",
+            "LEVEL": "National Aeronautics and Space Administration (NASA) L1b",
+            "WAVELNTH": 195.0, "DATE-OBS": "2025-09-18T23:19:03.781Z"}
+    meta = fitsmeta.from_header(suvi, "OR_SUVI-L1b-Fe195_G18_s20252612319037.fits")
+    assert meta.level == "1B"
+    assert "NATIONAL" not in meta.label.upper()
+    assert meta.label.endswith("195 Å L1B")
+    # The forms that already worked keep their meaning.
+    for raw, level in (("L1b", "1B"), ("1A", "1A"), (2, "2"), ("1.5", "1.5"), ("Level 2", "2")):
+        assert fitsmeta.from_header({"INSTRUME": "X", "LEVEL": raw}, "x.fits").level == level, raw

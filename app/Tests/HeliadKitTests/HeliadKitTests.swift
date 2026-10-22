@@ -151,6 +151,20 @@ final class IndexTimeTests: XCTestCase {
         let week = try XCTUnwrap(IndexTime.date("2025-09-28"))
         XCTAssertEqual(IndexTime.step(from: start, to: week, count: 8), 86400)
     }
+
+    // A library spanning 2012 to 2026 at four ticks once put a tick every year and stopped
+    // after four, so the labels piled up over the first years (Gilly, 2026-10-22).
+    func testTicksSpreadAcrossSpansLongerThanTheLargestStep() throws {
+        let start = try XCTUnwrap(IndexTime.date("2012-08-30T00:00:00"))
+        let end = try XCTUnwrap(IndexTime.date("2026-09-02T21:15:14"))
+        let count = 4
+        let step = IndexTime.step(from: start, to: end, count: count)
+        XCTAssertLessThanOrEqual(end.timeIntervalSince(start) / step, Double(count))
+        let ticks = IndexTime.ticks(from: start, to: end, count: count)
+        XCTAssertGreaterThanOrEqual(ticks.count, 2)
+        let last = try XCTUnwrap(ticks.last)
+        XCTAssertLessThanOrEqual(end.timeIntervalSince(last), step, "the ticks reach the end of the span")
+    }
 }
 
 final class QueryFieldsTests: XCTestCase {
