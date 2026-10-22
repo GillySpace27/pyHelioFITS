@@ -9,7 +9,8 @@ art that is already a squircle onto a grey plate.
   python3 make_app_icon.py   ->  Assets.xcassets/AppIcon.appiconset/, Heliad.icns,
                                   heliad_icon_1024.png, preview.png
 
-tools/make_app.sh copies Heliad.icns into the app and compiles Assets.xcassets with actool.
+tools/make_app.sh compiles Assets.xcassets with actool, or copies Heliad.icns in as AppIcon.icns
+where actool is missing.
 
 Needs cairosvg, Pillow and numpy.
 """
