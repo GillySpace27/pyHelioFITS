@@ -1,28 +1,45 @@
 #!/usr/bin/env python3
-"""Write heliad_icon.svg: the Heliad app icon master, an open book with a sun printed across its pages.
+"""Write heliad_icon.svg: the Heliad app icon master, an open book: the Sun on the right page and
+lines of header text on the left, for the data and the metadata Heliad keeps.
 
 Colours are Studio's Sunset theme (app/Sources/Heliad/Theme.swift): the dark background and
 accent family behind, Sunset Light's paper and orange on the book.
 """
 import math, os
 
-CX, CY = 512, 578          # sun centre, on the gutter
-R_DISC, R_IN = 94, 114
+CX, CY = 682, 566          # sun centre, on the right page
+R_DISC, R_IN = 64, 78
 N_RAYS, HALF = 16, 6.5     # rays and their half-width in degrees at the base
-R_LONG, R_SHORT = 182, 150 # alternate long and short rays
-R_GUTTER = 162
+R_LONG, R_SHORT = 124, 102 # alternate long and short rays
 
 rays = []
 for i in range(N_RAYS):
     a = math.radians(360 * i / N_RAYS - 90)
     h = math.radians(HALF)
     r = R_LONG if i % 2 == 0 else R_SHORT
-    if i % (N_RAYS // 2) == 0:
-        r = R_GUTTER   # up and down the gutter, where the pages dip
     p = [(CX + R_IN * math.cos(a - h), CY + R_IN * math.sin(a - h)),
          (CX + r * math.cos(a), CY + r * math.sin(a)),
          (CX + R_IN * math.cos(a + h), CY + R_IN * math.sin(a + h))]
     rays.append("M%.1f,%.1f L%.1f,%.1f L%.1f,%.1f Z" % sum(p, ()))
+
+# Header text on the left page: each line a short keyword squiggle, a gap, then a value squiggle,
+# like a FITS header card. Lines sag toward the gutter as the page does.
+def squiggle(x0, x1, y0, phase):
+    pts = []
+    x = x0
+    while x <= x1:
+        t = (x - 186) / 326
+        y = y0 + 34 * t ** 2.6 + 2.6 * math.sin(x / 3.2 + phase)
+        pts.append("%.1f,%.1f" % (x, y))
+        x += 1.5
+    return "M" + " L".join(pts)
+
+CARDS = [(118, 214), (100, 250), (126, 196), (92, 236), (112, 260), (104, 180), (120, 222)]
+text = []
+for k, (key, val_end) in enumerate(CARDS):
+    y = 452 + 42 * k
+    text.append(squiggle(222, 222 + key - 70, y, k * 1.7))
+    text.append(squiggle(222 + key - 40, min(222 + val_end, 470), y, k * 2.3 + 1))
 
 LEFT = "M512,402 C432,350 300,338 186,366 L186,756 C300,730 432,738 512,786 Z"
 RIGHT = "M512,402 C592,350 724,338 838,366 L838,756 C724,730 592,738 512,786 Z"
@@ -84,6 +101,7 @@ svg = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width=
 
   <!-- the sun, printed across both pages -->
   <g clip-path="url(#pages)">
+    <path d="{' '.join(text)}" fill="none" stroke="#7A6450" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
     <path d="{' '.join(rays)}" fill="#E0782A"/>
     <circle cx="{CX}" cy="{CY}" r="{R_DISC}" fill="url(#disc)"/>
     <rect x="400" y="300" width="112" height="520" fill="url(#foldL)"/>
