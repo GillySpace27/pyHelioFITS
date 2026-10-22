@@ -61,10 +61,14 @@ public enum IndexTime {
         86400, 2 * 86400, 7 * 86400, 14 * 86400, 30 * 86400, 91 * 86400, 182 * 86400, 365 * 86400,
     ]
 
-    /// The smallest step that puts at most `count` ticks across [start, end].
+    /// The smallest step that puts at most `count` ticks across [start, end]. Past the largest
+    /// step it is a whole number of years, so a library spanning decades still fits.
     public static func step(from start: Date, to end: Date, count: Int) -> TimeInterval {
         let span = max(end.timeIntervalSince(start), 0.001)
-        return steps.first { span / $0 <= Double(max(count, 1)) } ?? steps[steps.count - 1]
+        let count = Double(max(count, 1))
+        if let step = steps.first(where: { span / $0 <= count }) { return step }
+        let year = steps[steps.count - 1]
+        return (span / count / year).rounded(.up) * year
     }
 
     /// Tick times inside [start, end] at whole multiples of the step, counted from the epoch,
