@@ -210,20 +210,22 @@ def test_delete_last_file_removes_observation_and_dataset(lib, src):
 # ---- download jobs -----------------------------------------------------------
 
 class FakeSource:
-    """Stands in for an archive: writes what it is told into staging."""
+    """Stands in for an archive: writes what it is told into staging, leaving out
+    the files whose DATE-OBS skip claims, as a real source does."""
 
     def __init__(self, src, files=(), fail=None, during=None):
         self.src, self.files, self.fail, self.during = src, files, fail, during
         self.calls = 0
 
-    def fetch(self, query, staging, *, settings, phase):
+    def fetch(self, query, staging, *, settings, phase, skip=None):
         self.calls += 1
         phase("searching")
         if self.during:
             self.during()
-        phase("fetching", 0, len(self.files))
+        files = [f for f in self.files if not (skip and skip(f[1].get("DATE-OBS", "")))]
+        phase("fetching", 0, len(files))
         paths = []
-        for name, header, cut in self.files:
+        for name, header, cut in files:
             p = staging / name
             if not p.exists():
                 write_fits(p, header)
@@ -233,8 +235,11 @@ class FakeSource:
             paths.append(p)
         if self.fail:
             raise RuntimeError(self.fail)
-        return {"found": len(paths), "paths": paths, "errors": [],
-                "urls": {p.name: f"https://archive.example/{p.name}" for p in paths}}
+        out = {"found": len(paths), "paths": paths, "errors": [],
+               "urls": {p.name: f"https://archive.example/{p.name}" for p in paths}}
+        if skip is not None:
+            out["skipped"] = len(self.files) - len(files)
+        return out
 
 
 QUERY = Query(start="2025-09-21T16:00:00", end="2025-09-21T17:00:00", instrument="AIA", wavelength=193.0)

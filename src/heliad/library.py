@@ -433,9 +433,22 @@ class Library:
         return [dict(r) for r in rows]
 
     def current_files(self, *, dataset_key: str | None = None, start: str | None = None,
-                      end: str | None = None, limit: int | None = None, offset: int = 0) -> list[dict]:
+                      end: str | None = None, limit: int | None = None, offset: int = 0,
+                      include_rejected: bool = False) -> list[dict]:
+        """The newest file of every observation, as readers see it in current_files.
+
+        include_rejected adds the observations the cache editor set aside, and gives
+        every row `rejected`: the reason, or None.
+        """
         start, end = time_bound(start), time_bound(end)
         sql, args = "SELECT * FROM current_files WHERE 1 = 1", []
+        if include_rejected and db.has_table(self.reader, "rejections"):
+            sql = ("SELECT * FROM (SELECT f.id AS file_id, f.relpath, f.sha256, f.size, f.version, "
+                   "o.id AS observation_id, o.date_obs, d.id AS dataset_id, d.dataset_key, d.label, "
+                   "d.observatory, d.instrument, d.detector, d.product, d.level, d.wavelength, "
+                   "r.reason AS rejected FROM observations o JOIN files f ON f.id = o.current_file_id "
+                   "JOIN datasets d ON d.id = o.dataset_id "
+                   "LEFT JOIN rejections r ON r.observation_id = o.id) WHERE 1 = 1")
         if dataset_key:
             sql += " AND dataset_key = ?"
             args.append(dataset_key)
@@ -448,6 +461,21 @@ class Library:
         sql += " ORDER BY date_obs, file_id"
         if limit:
             sql += f" LIMIT {int(limit)} OFFSET {max(0, int(offset))}"
+        return [dict(r) for r in self.reader.execute(sql, args).fetchall()]
+
+    def rejected(self, dataset_key: str | None = None) -> list[dict]:
+        """Observations set aside by reject(), with the reason and their current file."""
+        if not db.has_table(self.reader, "rejections"):
+            return []
+        sql = ("SELECT o.id AS observation_id, d.dataset_key, d.label, o.date_obs, r.reason, "
+               "r.rejected_at, f.id AS file_id, f.relpath FROM rejections r "
+               "JOIN observations o ON o.id = r.observation_id JOIN datasets d ON d.id = o.dataset_id "
+               "LEFT JOIN files f ON f.id = o.current_file_id")
+        args = []
+        if dataset_key:
+            sql += " WHERE d.dataset_key = ?"
+            args.append(dataset_key)
+        sql += " ORDER BY o.date_obs, o.id"
         return [dict(r) for r in self.reader.execute(sql, args).fetchall()]
 
     def checks_for(self, file_id: int) -> list[dict]:
@@ -483,6 +511,62 @@ class Library:
             "GROUP BY o.id HAVING COUNT(f.id) > 1 ORDER BY d.label, o.date_obs"
         ).fetchall()
         return [dict(r) for r in rows]
+
+    # ---- reject --------------------------------------------------------------
+
+    def reject(self, observation_ids, reason: str) -> dict:
+        """Set observations aside: current_files, coverage and views stop showing them.
+
+        Nothing is deleted; unreject() brings them back. An upgrade counts a rejected
+        observation as one the library has, so it is never fetched again. Rejecting
+        one already rejected replaces its reason.
+        """
+        self._require_writer()
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError("a rejection needs a reason")
+        ids = sorted({int(i) for i in observation_ids})
+        with self._write_lock:
+            q = ",".join("?" * len(ids))
+            known = {r[0] for r in self.conn.execute(
+                f"SELECT id FROM observations WHERE id IN ({q})", ids)} if ids else set()
+            if set(ids) - known:
+                raise KeyError(f"no observation {sorted(set(ids) - known)}")
+            self.conn.execute("BEGIN IMMEDIATE")
+            try:
+                self.conn.executemany(
+                    "INSERT INTO rejections(observation_id, reason, rejected_at) VALUES (?, ?, ?) "
+                    "ON CONFLICT(observation_id) DO UPDATE SET reason = excluded.reason, "
+                    "rejected_at = excluded.rejected_at", [(i, reason.strip(), now()) for i in ids])
+                self.conn.execute("COMMIT")
+            except BaseException:
+                self.conn.execute("ROLLBACK")
+                raise
+        return {"rejected": len(ids), "observation_ids": ids, "views_rebuilt": self._rebuild_views_of(ids)}
+
+    def unreject(self, observation_ids) -> dict:
+        """Undo reject(): the observations are served to readers again."""
+        self._require_writer()
+        ids = sorted({int(i) for i in observation_ids})
+        if not ids:
+            return {"unrejected": 0, "observation_ids": [], "views_rebuilt": []}
+        with self._write_lock:
+            q = ",".join("?" * len(ids))
+            n = self.conn.execute(f"DELETE FROM rejections WHERE observation_id IN ({q})", ids).rowcount
+        return {"unrejected": n, "observation_ids": ids, "views_rebuilt": self._rebuild_views_of(ids)}
+
+    def _rebuild_views_of(self, observation_ids: list[int]) -> list[str]:
+        """Rebuild the folders of views holding these observations; their names."""
+        if not observation_ids:
+            return []
+        q = ",".join("?" * len(observation_ids))
+        with self._write_lock:
+            names = [r[0] for r in self.conn.execute(
+                "SELECT DISTINCT v.name FROM views v JOIN view_members m ON m.view_id = v.id "
+                f"WHERE m.observation_id IN ({q}) ORDER BY v.name", observation_ids)]
+        from . import views  # views imports this module
+        for name in names:
+            views.materialize(self, name)
+        return names
 
     # ---- delete --------------------------------------------------------------
 
@@ -538,6 +622,7 @@ class Library:
                                         (oid,)).fetchall()
                     if not left:
                         conn.execute("DELETE FROM view_members WHERE observation_id = ?", (oid,))
+                        conn.execute("DELETE FROM rejections WHERE observation_id = ?", (oid,))
                         conn.execute("DELETE FROM observations WHERE id = ?", (oid,))
                         removed_obs.append(oid)
                         emptied_datasets.add(obs["dataset_id"])
@@ -670,6 +755,10 @@ class Library:
                 for m in members:
                     view_files.setdefault(m["view_id"], set()).update(obs_files.get(m["observation_id"], []))
                 conn.execute("DELETE FROM view_members")
+                # A rejection follows the files of its observation, as a view membership does.
+                rejected = [(obs_files.get(r["observation_id"], []), r["reason"], r["rejected_at"])
+                            for r in conn.execute("SELECT * FROM rejections").fetchall()]
+                conn.execute("DELETE FROM rejections")
                 conn.execute("UPDATE observations SET current_file_id = NULL")
                 ds_ids: dict[str, int] = {}
                 for key, meta in new_ds.items():
@@ -717,6 +806,9 @@ class Library:
                 for vid, fids in view_files.items():
                     conn.executemany("INSERT OR IGNORE INTO view_members(view_id, observation_id) VALUES (?, ?)",
                                      [(vid, file_obs_new[f]) for f in fids])
+                for fids, reason, rejected_at in rejected:
+                    conn.executemany("INSERT OR IGNORE INTO rejections(observation_id, reason, rejected_at) "
+                                     "VALUES (?, ?, ?)", [(file_obs_new[f], reason, rejected_at) for f in fids])
                 db.set_meta(conn, "rules_version", fitsmeta.RULES_VERSION)
                 conn.execute("ROLLBACK" if dry_run else "COMMIT")
             except BaseException:

@@ -60,7 +60,28 @@ def mirrors(settings: dict) -> list[str]:
     return [s.strip() for s in value.split(",") if s.strip()]
 
 
-def fetch(query: Query, staging: Path, *, settings: dict, phase, max_conn: int = 4) -> dict:
+def _without_skipped(result, skip) -> tuple[list, int]:
+    """Each block's rows whose "Start Time" skip does not claim, and how many were left out.
+
+    A block with no "Start Time" column is kept whole. Slicing a QueryResponseTable
+    with a boolean mask keeps its client (checked offline against sunpy 8.0);
+    that Fido.fetch then gets exactly those records from each archive is not
+    verified here, since the build container cannot reach one.
+    """
+    import numpy as np
+
+    blocks, skipped = [], 0
+    for block in result:
+        if "Start Time" in block.colnames:
+            keep = np.array([not skip(_jsonable(t)) for t in block["Start Time"]], dtype=bool)
+            skipped += int((~keep).sum())
+            block = block[keep]
+        if len(block):
+            blocks.append(block)
+    return blocks, skipped
+
+
+def fetch(query: Query, staging: Path, *, settings: dict, phase, max_conn: int = 4, skip=None) -> dict:
     """Search, then fetch every result into staging.
 
     Records the first fetch could not get are asked for again from the other
@@ -70,6 +91,9 @@ def fetch(query: Query, staging: Path, *, settings: dict, phase, max_conn: int =
     once the server answers, so a staged VSO file is found by looking in
     staging rather than through Fido. Each fetch is one call and cannot be
     interrupted part way.
+
+    With skip, records whose start time it claims are dropped from each block
+    before anything is fetched, and the mirrors are asked only for what is left.
     """
     from sunpy.net import Fido
     from sunpy.net.vso import VSOClient
@@ -77,12 +101,20 @@ def fetch(query: Query, staging: Path, *, settings: dict, phase, max_conn: int =
     phase("searching")
     result = Fido.search(*query.to_fido(settings.get("jsoc_email")))
     found = getattr(result, "file_num", None)
+    blocks, skipped = [result], None
+    if skip is not None:
+        blocks, skipped = _without_skipped(result, skip)
+        found = sum(len(b) for b in blocks)
     target = str(staging / "{file}")
     phase("fetching", 0, found)
-    fetched = Fido.fetch(result, path=target, overwrite=False, max_conn=max_conn, progress=False)
-    errors = [str(e) for e in fetched.errors]
-    attempts = [{"site": "default", "failed": len(fetched.errors)}]
-    vso = [block for block in result if isinstance(getattr(block, "client", None), VSOClient)]
+    if blocks:
+        fetched = Fido.fetch(*blocks, path=target, overwrite=False, max_conn=max_conn, progress=False)
+        errors = [str(e) for e in fetched.errors]
+    else:  # everything the search found is already in the library
+        errors = []
+    attempts = [{"site": "default", "failed": len(errors)}]
+    vso = [block for block in (result if skip is None else blocks)
+           if isinstance(getattr(block, "client", None), VSOClient)]
     for site in mirrors(settings) if vso else []:
         if not errors:
             break
@@ -91,8 +123,11 @@ def fetch(query: Query, staging: Path, *, settings: dict, phase, max_conn: int =
                            progress=False, site=site)
         errors = [str(e) for e in again.errors]
         attempts.append({"site": site, "failed": len(again.errors)})
-    return {"found": found, "paths": _fits_in(staging), "errors": errors,
-            "attempts": attempts, "urls": {}}
+    out = {"found": found, "paths": _fits_in(staging), "errors": errors,
+           "attempts": attempts, "urls": {}}
+    if skipped is not None:
+        out["skipped"] = skipped
+    return out
 
 
 def _fits_in(staging: Path) -> list[Path]:
