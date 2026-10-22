@@ -18,7 +18,7 @@ from astropy.time import Time
 # Bump whenever a change here can move a file to a different dataset or
 # observation. The index records the version its keys were built with, and
 # `heliad reindex` rebuilds them when the two differ.
-RULES_VERSION = 3
+RULES_VERSION = 4
 
 # Keywords copied into the index for every file, so readers can filter and
 # display without opening the FITS file.
@@ -31,7 +31,11 @@ INDEXED_KEYWORDS = (
     "R_SUN", "DSUN_OBS", "QUALITY", "OBS_MODE",
 )
 
-_WAVE_TO_ANGSTROM = {"angstrom": 1.0, "a": 1.0, "nm": 10.0, "um": 1e4, "m": 1e10}
+_WAVE_TO_ANGSTROM = {
+    "angstrom": 1.0, "angstroms": 1.0, "a": 1.0,
+    "nm": 10.0, "nanometer": 10.0, "nanometers": 10.0, "nanometre": 10.0, "nanometres": 10.0,
+    "um": 1e4, "micron": 1e4, "micrometer": 1e4, "m": 1e10,
+}
 _VERSION_IN_NAME = re.compile(r"[_-]v(\d+[a-z]?|[a-z]{1,2}\d*|\d+(?:\.\d+)+)\.(?:fits|fts|fit)(?:\.gz)?$", re.I)
 _LEVEL_IN_NAME = re.compile(r"(?:^|[_.-])l(?:ev)?([0-9](?:\.[0-9])?)(?:[_.-]|$)", re.I)
 _PUNCH_NAME = re.compile(r"^PUNCH_L(\w)_([A-Z0-9]{3})", re.I)
@@ -72,7 +76,7 @@ class FitsMeta:
         if self.detector and self.detector != self.instrument:
             bits.append(self.detector)
         if self.wavelength is not None:
-            bits.append(f"{self.wavelength:g} Å")
+            bits.append(_wavelength_text(self.wavelength))
         if self.product:
             bits.append(self.product)
         if self.level:
@@ -140,6 +144,13 @@ def _json_value(value):
     if isinstance(value, float):
         return value if math.isfinite(value) else str(value)
     return str(value)
+
+
+def _wavelength_text(angstrom: float) -> str:
+    """EUV bands read in Å (193 Å); visible light in nm (530 nm), the way each community writes them."""
+    if angstrom >= 1000:
+        return f"{angstrom / 10:g} nm"
+    return f"{angstrom:g} Å"
 
 
 def _wavelength(header: fits.Header) -> float | None:
