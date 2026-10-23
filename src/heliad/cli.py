@@ -13,6 +13,7 @@
     heliad get    [--via fido|jsoc] --start T --end T [...]   download and ingest
     heliad jobs [--status S]         download jobs, newest first
     heliad reindex [--dry-run]       apply the current header rules to every file
+    heliad fix-extensions [--dry-run]  add .fits / .fits.gz to stored files without one
     heliad delete [--file ID] [--observation ID] [--dataset KEY] [--yes]
     heliad settings [KEY [VALUE] | --unset KEY]
     heliad serve                     JSON-RPC on stdin/stdout; relays to the
@@ -94,6 +95,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--limit", type=int, default=50)
     p = sub.add_parser("reindex")
     p.add_argument("--dry-run", action="store_true")
+    p = sub.add_parser("fix-extensions", help="add .fits or .fits.gz to stored files that have no FITS suffix")
+    p.add_argument("--dry-run", action="store_true", help="count what would be renamed; change nothing")
     p = sub.add_parser("delete")
     p.add_argument("--file", type=int, action="append", dest="file_ids", default=[])
     p.add_argument("--observation", type=int, action="append", dest="observation_ids", default=[])
@@ -215,6 +218,17 @@ def _run(lib: Library, ns) -> int:
         def progress(i, n):
             print(f"  read {i}/{n}", file=sys.stderr)
         _print(lib.reindex(dry_run=ns.dry_run, progress=progress))
+    elif ns.cmd == "fix-extensions":
+        def progress(i, n):
+            print(f"  checked {i}/{n}", file=sys.stderr)
+        result = lib.fix_extensions(dry_run=ns.dry_run, progress=progress)
+        _print(result)
+        verb = "would rename" if ns.dry_run else "renamed"
+        done = result["fits"] + result["fits_gz"] if ns.dry_run else result["renamed"]
+        print(f"{result['candidates']} stored files without a FITS suffix: {verb} {done} "
+              f"({result['fits']} .fits, {result['fits_gz']} .fits.gz); not FITS {result['not_fits']}, "
+              f"missing {result['missing']}, open elsewhere {result['open']}, "
+              f"failed {len(result['failed'])}", file=sys.stderr)
     elif ns.cmd == "delete":
         result = lib.delete(file_ids=ns.file_ids, observation_ids=ns.observation_ids,
                             dataset_keys=ns.dataset_keys, dry_run=not ns.yes)

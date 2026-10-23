@@ -195,6 +195,30 @@ transaction. File ids, paths and checksums never change.
     {"files": 3, "datasets_before": 2, "datasets_after": 2, "observations_before": 2,
      "observations_after": 2, "files_moved": 0, "current_changed": 0, "dry_run": true}
 
+### `library.fix_extensions`
+
+Params: `dry_run=True`. **A dry run unless `dry_run` is false.** Gives every stored file whose
+name has no FITS suffix one: `.fits`, or `.fits.gz` when the file starts with gzip's magic bytes
+(`1f 8b`); a file that starts with neither, or a name already ending in `.gz`, is left alone
+(`not_fits`). Ingest does the same for new files (Studio's oldest cache files are named by a bare
+SHA-256). The CLI is `heliad fix-extensions [--dry-run]`; both run in the writer, under its lock.
+
+For each file, in this order: rename it in its folder; in one transaction, point `files.relpath`
+at the new name and record the old one in `file_aliases`; then leave a relative symlink at the old
+name, so a saved Studio session holding the old path still opens. A run that stops between steps is
+finished by the next one (a renamed file whose row still has the old name is found by its new name
+and checksum; a missing link is made from `file_aliases`), and a second run changes nothing. Where
+symlinks cannot be made the alias is still recorded (`links_skipped`). A file another process has
+open is skipped (`open`) when that is cheap to see: `open_check` says how (`proc` on Linux, `lsof`
+on macOS, `unavailable` elsewhere, where nothing is skipped). Views are rebuilt afterwards;
+thumbnails are keyed by checksum and survive. Deleting a file removes its aliases and old-name links.
+
+    {"candidates": 2, "renamed": 2, "fits": 1, "fits_gz": 1, "not_fits": 0, "missing": 0, "open": 0,
+     "failed": [], "links_made": 2, "links_skipped": 0, "open_check": "proc", "dry_run": false,
+     "examples": [{"from": "store/sdo/aia/1/171/2025/09/21/0123abcd",
+                   "to": "store/sdo/aia/1/171/2025/09/21/0123abcd.fits.gz"}, ...],
+     "views_rebuilt": ["event"]}
+
 ### `library.thumbnail`
 
 Params: `file_id, size=256`. A greyscale PNG preview, north up, made on first request and kept
