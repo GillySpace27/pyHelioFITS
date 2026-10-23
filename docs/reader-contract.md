@@ -51,6 +51,19 @@ Also stable at reader_compat 1: `datasets`, `views(name, description)` and
 `view_members(view_id, observation_id)` (join to `current_files` on `observation_id`).
 Other tables are Heliad's own and can change.
 
+Schema 5 (still reader_compat 1) adds stable ids. `datasets.dataset_uid` and
+`views.view_uid` are UUIDs that never change, and `current_files` gains
+`dataset_uid` as its last column; every earlier column is unchanged. A
+`dataset_key` can change when Heliad's header rules do (a reindex then renames the
+dataset), but its `dataset_uid` stays, and `dataset_aliases(old_key, dataset_uid)`
+maps each key it had before. A reader that saved a dataset should save its
+`dataset_uid`, and look a saved key up in `datasets` first, then in
+`dataset_aliases`. `file_aliases(old_relpath, file_id, sha256)` does the same for a
+stored file whose `relpath` changed (always resolve through `files.relpath`). Links
+to a dataset take the form `heliad://dataset/<dataset_uid>?start=<iso>&end=<iso>`.
+Check for these columns and tables before using them: a library not yet opened by
+a Heliad with schema 5 does not have them.
+
 Files under `store/` are read-only and never rewritten in place. A new version is
 a new file, and `current_files` points at it once its row is committed.
 

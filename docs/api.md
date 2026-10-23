@@ -403,6 +403,46 @@ Otherwise the queued job, as `download.get` returns it. When it ends, its `resul
      "ingest": {"added": 3}, "skipped": 3},
      "options": {"dataset_key": "sdo/aia/-/-/1/193", "missing_only": true, "tolerance_s": 6.0}}
 
+## Stable dataset ids
+
+A `dataset_key` is built from header rules, so a rules change can rename a dataset (PUNCH's
+`.../530` became `.../5300` once `WAVEUNIT = 'nanometer'` was read). Since schema 5 every dataset
+also has a `dataset_uid`, a random UUID that never changes, and `library.datasets` lists it.
+`library.reindex` gives a renamed dataset's uid (and its row and `dataset_id`) to the new key that
+holds most of its files by sha256, records the old key in `dataset_aliases`, and lists each rename
+in its result as `datasets_renamed: [{old_key, new_key, dataset_uid}]`. Save the uid, not the key,
+in anything that has to find a dataset again.
+
+In the examples below the uid is an illustration, not a real one.
+
+The link form is `heliad://dataset/<dataset_uid>?start=<iso>&end=<iso>` (start and end optional).
+The Mac app opens it by selecting the dataset; `dataset.from_url` reads one.
+
+### `dataset.get`
+
+Params: `dataset_uid=None, dataset_key=None` (exactly one). The dataset as `library.datasets`
+lists it, plus `resolved_by`: `"uid"`, `"key"`, or `"alias"` when `dataset_key` is an old key a
+reindex renamed. Null when nothing matches.
+
+    {"id": 3, "dataset_key": "punch/wfi+nfi/-/cam/3/5300", "dataset_uid": "0b6f8d2e-8a1f-4c1e-9d55-2f3c7e1a4b90",
+     "label": "PUNCH WFI+NFI 530 nm CAM L3", ..., "observations": 12, "resolved_by": "alias"}
+
+### `dataset.resolve`
+
+Params: `key`. A uid, a current key, or an old key, to `{dataset_uid, dataset_key, resolved_by}`;
+null when none matches. A current key wins over an alias of the same text.
+
+    {"dataset_uid": "0b6f8d2e-8a1f-4c1e-9d55-2f3c7e1a4b90", "dataset_key": "punch/wfi+nfi/-/cam/3/5300",
+     "resolved_by": "alias"}
+
+### `dataset.from_url`
+
+Params: `url`. The parts of a `heliad://dataset/<uid>` link and the dataset it names (null if this
+library has no such uid). Unknown parameters are refused.
+
+    {"dataset_uid": "0b6f8d2e-8a1f-4c1e-9d55-2f3c7e1a4b90", "start": "2025-09-21T16:00:00",
+     "end": "2025-09-21T17:00:00", "dataset": {"dataset_key": "punch/wfi+nfi/-/cam/3/5300", ...}}
+
 ## View methods
 
 A view is a named selection of observations, such as an event. It always resolves to the newest
