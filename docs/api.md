@@ -19,6 +19,7 @@ writer.
 - [Cache editor methods](#cache-editor-methods)
 - [View methods](#view-methods)
 - [Settings methods](#settings-methods)
+- [Processing record methods](#processing-record-methods)
 - [Notifications](#notifications)
 - [Errors](#errors)
 - [The command line and the API](#the-command-line-and-the-api)
@@ -456,6 +457,92 @@ Params: `key, value=None`. Sets one setting; a null `value` removes it. Returns 
 Known keys: `jsoc_email` (the address registered with JSOC exports) and `vso_mirrors` (VSO
 mirrors to retry, comma-separated, or `none`).
 
+## Processing record methods
+
+A processing record (format `hfrecord` 1.x, schema in `src/heliad/schemas/hfrecord-1.schema.json`)
+says what made an exported image or movie: each layer's dataset, its source files by SHA-256, and
+the steps applied to them in order. HelioFITS Studio writes it beside the export
+(`<export file name>.hfrec.json`, the complete copy) and inside it where the container takes one. These
+methods read records; neither writes anything.
+
+### `record.read`
+
+Params: `path`, an exported file or a sidecar. Answers in the background, like `search`. The core
+looks, in this order, for:
+
+1. a sidecar named for the whole export file, `<file>.hfrec.json` (`frame.png.hfrec.json`, the
+   canonical name), then `<basename>.hfrec.json` (`frame.hfrec.json`) as a fallback, or `path`
+   itself when it ends in `.hfrec.json`;
+2. a PNG `tEXt`, `zTXt` or `iTXt` chunk with keyword `hfrecord`;
+3. an OpenEXR string header attribute `hfrecord` (the header is parsed directly; OpenEXR is not needed);
+4. an MP4 or MOV metadata tag `hfrecord`, through `ffprobe -show_format` when `ffprobe` is on
+   `PATH` (without it movies are skipped, and `skipped` says so);
+5. a FITS extension named `HFRECORD` (bytes as an 8-bit image, or text in a table's first column),
+   then an `hfrecord.json` in the FITS file's folder (Send to Python);
+6. only when none of those holds a record: Studio's older `hfstudio` block (PNG chunk, EXR
+   attribute or movie comment), converted into a minimal record with `legacy: true`. Its layers and
+   steps are read from the saved scene; its sources are archive addresses with no SHA-256.
+
+A record whose `hfrecord` major version is not 1, or whose `reader_compat` is above 1, is refused
+with error -32002. A higher minor version (1.7, say) is read; keys this core does not know are kept
+and ignored.
+
+    {"jsonrpc":"2.0","id":1,"method":"record.read","params":{"path":"/Users/you/Exports/connect.png"}}
+
+Result: `found` (false, with `record` and `view` null, when the file carries no record), `path`,
+`record` (as written), `found_in` (`kind`: sidecar, png, exr, mp4, fits or folder; `container`, such
+as `png:tEXt:hfrecord`; `path`), `legacy`, `valid` and `errors` (checked against the schema; an
+invalid record is still returned), `skipped` (places that held something unreadable),
+`output_check` (sidecars only: the export's `sha256` against `output.sha256`, `matches` true, false
+or null when the export is not beside it) and `view`, the rows to show as they are:
+
+    {"found":true,"legacy":false,"valid":true,"errors":[],"found_in":{"kind":"sidecar","container":"sidecar","path":".../connect.hfrec.json"},
+     "view":{"summary":"HelioFITS Studio <version>, still at 2025-09-21T20:32:00Z.\n1. PUNCH ...",
+       "producer":"HelioFITS Studio <VERSION> (build ..., commit ...)","created":"2026-10-22T00:00:00Z",
+       "output":[{"name":"kind","value":"still"},...],"scene":[{"name":"time","value":"2025-09-21T20:32:00Z"},...],
+       "layers":[{"drawn":2,"name":"SDO AIA 193 Å L1","dataset_key":"sdo/aia/-/-/1/193","dataset_uid":null,
+         "dataset_label":"SDO AIA 193 Å L1","frames":1,"filter":"no filter","lut":"SDO-AIA 193 Å","varies":false,
+         "steps":[{"index":1,"op":"select_plane","stage":"decode","automatic":false,"params":[{"name":"plane","value":"0"}],
+           "resolved":[],"varies":false,"automation":[],"reference":null,"caveat":null,"citation":null,"stamp":null,...},...],
+         "acknowledgement":null,"studio":{"dataset":"sdo/aia/-/-/1/193","start":"2025-09-21T20:32:04.840",
+           "end":"2025-09-21T20:32:04.840","args":["-dataset","sdo/aia/-/-/1/193","-start","...","-end","..."]}},...],
+       "caveats":[...],"citations":[...],"acknowledgements":[],"provenance":[],"not_guaranteed_to_rebuild":[],
+       "studio":{...}}}
+
+`view.layers` lists the top layer first; `drawn` is each layer's index in the record, whose order
+is drawing order (0 at the bottom). Parameter values are text (JSON for anything but a string).
+`known_op` is false for an op this core does not know; show it verbatim. `studio` is the command
+line that opens a layer's dataset in Studio over its sources' time span: `-dataset` takes the
+record's `dataset_uid` when it has one, else its `dataset_key`. The view's own `studio` is the
+layer Studio marked master, else the top layer.
+
+### `record.resolve`
+
+Params: `record`, as `record.read` returned it. Looks every source up in the index by `sha256`
+(`files.sha256` is unique). A record's dataset is matched by `dataset_uid` when both the record and
+the index have one, else by `dataset_key`.
+
+    {"jsonrpc":"2.0","id":2,"method":"record.resolve","params":{"record":{...}}}
+
+Per source, `status` is `in_library` (the observation's current file), `superseded` (kept, but a
+newer version is current; `current` names it), `missing`, or `no_hash` (a Helioviewer frame or a
+legacy record, with nothing to look up). Kept sources carry `relpath`, `file_id`,
+`observation_id` and `rejected` (the reason, when set aside). `missing_by_dataset` groups the
+missing sources with their time span, widened by the dataset's tolerance, and `fetch`, the call
+that would get them:
+
+    {"counts":{"in_library":1,"superseded":1,"missing":2,"no_hash":1},"complete":false,
+     "layers":[{"layer":0,"name":"...","dataset_key":"...","dataset_in_library":"...","sources":[{"source":0,"sha256":"...","status":"superseded",...}]},...],
+     "missing_by_dataset":[{"dataset":"sdo/aia/-/-/1/193","dataset_key":"sdo/aia/-/-/1/193","in_library":true,"count":1,
+       "sha256":["..."],"start":"2025-09-21T20:32:58.840","end":"2025-09-21T20:33:10.840",
+       "fetch":{"method":"dataset.upgrade","params":{"dataset_key":"sdo/aia/-/-/1/193","start":"...","end":"...","dry_run":false},
+         "inferred":false,"note":"..."},"reason":null}]}
+
+For a dataset the library keeps, `fetch` is `dataset.upgrade` over the span (missing frames only,
+through the dataset's own query). For one it does not, `fetch` is `download.enqueue` with a query
+inferred from the record's dataset fields (`inferred: true`), or null with a `reason` when the
+record names no instrument or no times. Send `fetch.method` with `fetch.params` to fetch.
+
 ## Notifications
 
 Sent without an `id`, to every client of the core.
@@ -490,6 +577,8 @@ An error reply has `error` instead of `result`:
 | -32601 | no such method |
 | -32602 | wrong or missing params (`params` must be an object), or a bad `heliad://` link |
 | -32603 | the method failed; `message` names the exception, `data` holds a short traceback |
+| -32002 | `record.read`, `record.resolve`: a processing record of a format this core does not read (another major version, or a higher `reader_compat`) |
+| -32003 | `record.read`: the file named is a sidecar (`.hfrec.json`) that is not a readable record |
 | -32001 | `ingest.path`: the file can never enter the library (cut off, or not readable as FITS), so offering it again will not help. A -32603 from `ingest.path` (a full disk, say) may pass |
 
 ## The command line and the API

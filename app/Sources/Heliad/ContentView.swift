@@ -18,6 +18,15 @@ struct ContentView: View {
                 detail
             }
         }
+        .dropDestination(for: URL.self) { urls, _ in
+            // An export dropped on the window: show its processing record.
+            guard model.coreState == .ready, let url = urls.first(where: \.isFileURL) else { return false }
+            model.openRecord(url)
+            return true
+        }
+        .sheet(item: $model.recordFile) { file in
+            RecordInspector(file: file)
+        }
         .alert("Heliad", isPresented: Binding(get: { model.alert != nil }, set: { if !$0 { model.alert = nil } })) {
             Button("OK", role: .cancel) { model.alert = nil }
         } message: {

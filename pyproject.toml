@@ -11,13 +11,16 @@ dependencies = ["astropy>=6", "numpy"]
 
 [project.optional-dependencies]
 archives = ["sunpy[net]>=6", "drms"]
-test = ["pytest"]
+test = ["pytest", "jsonschema"]
 
 [project.scripts]
 heliad = "heliad.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+heliad = ["schemas/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

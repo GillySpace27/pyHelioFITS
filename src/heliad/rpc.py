@@ -29,6 +29,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, TextIO
 
 from . import __version__, config, coverage, db, fitsmeta, jobs, upgrade, views
+from . import record as hfrecord
 from .library import Library
 from .query import Query
 
@@ -36,10 +37,12 @@ PARSE_ERROR, INVALID_REQUEST, METHOD_NOT_FOUND, INVALID_PARAMS, INTERNAL_ERROR =
     -32700, -32600, -32601, -32602, -32603,
 )
 UNSTORABLE = -32001  # ingest.path: this file can never enter the library; do not offer it again
+RECORD_UNSUPPORTED = -32002  # record.*: a processing record of a format this core does not read
+RECORD_UNREADABLE = -32003   # record.read: the file named is a sidecar that is not a record
 
 # Methods slow enough that answering them in order would stall the app; none of
 # them writes to the index.
-BACKGROUND = frozenset({"search", "library.thumbnail", "dataset.cadences"})
+BACKGROUND = frozenset({"search", "library.thumbnail", "dataset.cadences", "record.read"})
 
 
 # method: (params, what it does). Params are as the method takes them, by name.
@@ -84,6 +87,8 @@ API: dict[str, tuple[str, str]] = {
     "view.rebuild_all": ("", "Rebuild every view's folder."),
     "view.members": ("name", "The current files of a view."),
     "view.list": ("", "Every view with its size, span and folder."),
+    "record.read": ("path", "The processing record of an exported image or movie, with rows ready to show."),
+    "record.resolve": ("record", "Look a record's sources up in the library by SHA-256; groups the missing by dataset."),
     "settings.get": ("", "Heliad's settings (jsoc_email, vso_mirrors, ...)."),
     "settings.set": ("key, value=None", "Set a setting; a null value removes it."),
 }
@@ -185,6 +190,8 @@ class Server:
             "view.members": lambda name: views.members(lib, name),
             "view.list": lambda: views.list_views(lib),
             "library.coverage": lambda **kw: coverage.library(lib, **kw),
+            "record.read": self.record_read,
+            "record.resolve": self.record_resolve,
             "search": self.search,
         }
 
@@ -329,6 +336,25 @@ class Server:
         except ValueError as exc:
             raise RpcError(INVALID_PARAMS, str(exc))
         return {"action": action, "query": json.loads(q.to_json())}
+
+    def record_read(self, path: str) -> dict:
+        """record.read: reads the file and its sidecar only; the index is not touched."""
+        try:
+            return hfrecord.read(path)
+        except hfrecord.UnsupportedRecord as exc:
+            raise RpcError(RECORD_UNSUPPORTED, str(exc))
+        except FileNotFoundError as exc:
+            raise RpcError(INVALID_PARAMS, str(exc))
+        except hfrecord.RecordError as exc:
+            raise RpcError(RECORD_UNREADABLE, str(exc))
+
+    def record_resolve(self, record: dict) -> dict:
+        try:
+            return hfrecord.resolve(self.lib.reader, record)
+        except hfrecord.UnsupportedRecord as exc:
+            raise RpcError(RECORD_UNSUPPORTED, str(exc))
+        except hfrecord.RecordError as exc:
+            raise RpcError(INVALID_PARAMS, str(exc))
 
     def _jobs(self) -> jobs.JobRunner:
         if self.jobs is None:

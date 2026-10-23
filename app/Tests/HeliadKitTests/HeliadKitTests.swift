@@ -305,3 +305,66 @@ final class CoreClientTests: XCTestCase {
         await client.stop()
     }
 }
+
+final class RecordModelTests: XCTestCase {
+    func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
+        try HeliadJSON.decoder().decode(T.self, from: Data(json.utf8))
+    }
+
+    /// Shaped like the core's record.read for the example CONNECT still, cut to one layer and two steps.
+    func testRecordRead() throws {
+        let read = try decode(RecordRead.self, """
+        {"found":true,"path":"/x/still.png","legacy":false,"valid":true,"errors":[],"skipped":[],
+         "found_in":{"kind":"sidecar","container":"sidecar","path":"/x/still.png.hfrec.json"},"output_check":null,
+         "record":{"hfrecord":"1.0","reader_compat":1,"layers":[{"id":"a","name":"SDO AIA 193 Å L1","sources":[],"steps":[]}]},
+         "view":{"summary":"S","producer":"HelioFITS Studio 1","producer_stamp":null,"dirty":false,
+          "created":"2026-10-22T00:00:00Z","record_id":"00000000-0000-4000-8000-000000000000","format":"1.0",
+          "output":[{"name":"kind","value":"still"}],"scene":[{"name":"time","value":"2025-09-21T20:32:00Z"}],
+          "layers":[{"drawn":0,"id":"a","name":"SDO AIA 193 Å L1","enabled":true,"dataset_key":"sdo/aia/-/-/1/193",
+            "dataset_uid":null,"dataset_label":"SDO AIA 193 Å L1","frames":1,"shortened":false,"source_spec":"heliad_library",
+            "filter":"no filter","lut":"SDO-AIA 193 Å","automatic_steps":0,"varies":false,
+            "steps":[{"index":1,"op":"clip","known_op":true,"stage":"decode","algorithm":null,"implementation":null,
+              "automatic":false,"params":[{"name":"clippingMode","value":"Percentile05"}],"resolved":[{"name":"low","value":"null"}],
+              "units":[],"varies":false,"varies_params":[],"automation":[],"changed_by_user":null,"reference":null,
+              "caveat":"Percentile05 ignores clippingMin/Max","citation":null,"stamp":null}],
+            "caveats":[],"acknowledgement":null,
+            "studio":{"dataset":"sdo/aia/-/-/1/193","start":"2025-09-21T20:32:04.840","end":"2025-09-21T20:32:04.840",
+              "args":["-dataset","sdo/aia/-/-/1/193","-start","2025-09-21T20:32:04.840","-end","2025-09-21T20:32:04.840"]}}],
+          "caveats":[],"citations":["Müller et al. (2017)"],"acknowledgements":[],"provenance":[],"heliad_view":null,
+          "snapshot":[],"not_guaranteed_to_rebuild":[],"studio":null}}
+        """)
+        XCTAssertTrue(read.found)
+        XCTAssertEqual(read.foundIn?.path, "/x/still.png.hfrec.json")
+        let layer = try XCTUnwrap(read.view?.layers.first)
+        XCTAssertEqual(layer.title, "SDO AIA 193 Å L1")
+        XCTAssertEqual(layer.steps[0].params[0].value, "Percentile05")
+        XCTAssertEqual(layer.studio?.args.first, "-dataset")
+        // The record is kept as written, keys unchanged, to send back to record.resolve.
+        XCTAssertEqual(read.record?["reader_compat"], .int(1))
+        let none = try decode(RecordRead.self, #"{"found":false,"path":"/x/plain.png","record":null,"view":null}"#)
+        XCTAssertFalse(none.found)
+        XCTAssertNil(none.view)
+    }
+
+    func testRecordResolution() throws {
+        let r = try decode(RecordResolution.self, """
+        {"counts":{"in_library":1,"superseded":0,"missing":1,"no_hash":0},"complete":false,
+         "layers":[{"layer":0,"name":"AIA","dataset_key":"sdo/aia/-/-/1/193","dataset_uid":null,"dataset_in_library":"sdo/aia/-/-/1/193",
+           "sources":[{"layer":0,"source":0,"sha256":"ab","date_obs":"2025-09-21T20:32:04.840","original_name":"a.fits",
+             "status":"in_library","in_library":true,"dataset_key":"sdo/aia/-/-/1/193","relpath":"store/a.fits","file_id":1,
+             "observation_id":1,"rejected":null,"current":null},
+            {"layer":0,"source":1,"sha256":"cd","date_obs":"2025-09-21T20:33:04.840","original_name":null,
+             "status":"missing","in_library":false,"dataset_key":"sdo/aia/-/-/1/193","relpath":null,"file_id":null,
+             "observation_id":null,"rejected":null,"current":null}]}],
+         "missing_by_dataset":[{"dataset":"sdo/aia/-/-/1/193","dataset_key":"sdo/aia/-/-/1/193","dataset_uid":null,
+           "label":"SDO AIA 193 Å L1","in_library":true,"sha256":["cd"],"count":1,"start":"2025-09-21T20:32:58.840",
+           "end":"2025-09-21T20:33:10.840","reason":null,
+           "fetch":{"method":"dataset.upgrade","params":{"dataset_key":"sdo/aia/-/-/1/193","start":"2025-09-21T20:32:58.840",
+             "end":"2025-09-21T20:33:10.840","dry_run":false},"inferred":false,"note":"fetches the frames the dataset lacks"}}]}
+        """)
+        XCTAssertEqual(r.counts["missing"], 1)
+        XCTAssertEqual(r.layer(drawn: 0)?.missing, 1)
+        XCTAssertEqual(r.missingByDataset[0].fetch?.method, "dataset.upgrade")
+        XCTAssertEqual(r.missingByDataset[0].fetch?.params["dry_run"], .bool(false))
+    }
+}
