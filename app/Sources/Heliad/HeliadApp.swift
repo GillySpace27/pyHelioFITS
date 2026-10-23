@@ -34,6 +34,10 @@ struct HeliadApp: App {
                     .keyboardShortcut("d", modifiers: [.command, .shift])
                 Button("Timeline") { model.selection = .timeline }
                     .keyboardShortcut("t", modifiers: [.command, .shift])
+                Divider()
+                Button("Open Processing Record…") { model.chooseRecord() }
+                    .keyboardShortcut("o", modifiers: .command)
+                    .disabled(model.coreState != .ready)
             }
             CommandGroup(after: .sidebar) {
                 // Hidden by default: the viewer is for checking what is kept, not for making images.
