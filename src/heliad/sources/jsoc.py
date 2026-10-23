@@ -17,7 +17,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from .. import coverage
+from .. import times
 from ..library import is_fits
 from ..query import Query
 
@@ -27,7 +27,10 @@ class NoEmail(RuntimeError):
 
 
 def _iso(t: str) -> datetime:
-    return datetime.fromisoformat(t.replace("Z", "+00:00")).replace(tzinfo=None)
+    when = times.parse(t)
+    if when is None:
+        raise ValueError(f"not a time: {t!r}")
+    return when
 
 
 def recordset(query: Query) -> str:
@@ -101,7 +104,7 @@ def fetch(query: Query, staging: Path, *, settings: dict, phase, skip=None) -> d
     skipped = None
     if skip is not None and "record" in urls.columns:
         wanted = [i for i, rec in enumerate(urls["record"])
-                  if not ((t := record_time(rec)) and coverage.utc_text(t) and skip(t))]
+                  if not ((t := record_time(rec)) and times.parse(t) and skip(t))]
         skipped = len(urls) - len(wanted)
     phase("fetching", 0, len(wanted))
     # Records already staged by an earlier, interrupted run are not fetched again.

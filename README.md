@@ -47,6 +47,11 @@ through VSO) run against the real archives; the JSOC export route written but no
     heliad delete --dataset KEY                     # shows what would go; add --yes to delete
     heliad serve        # JSON-RPC 2.0, one JSON object per line on stdin/stdout
     heliad api          # the methods serve answers
+    heliad --json stats # any command: the JSON-RPC result instead of a table
+
+Every time a command, a query or an archive hands the core is read by `heliad.times` (ISO 8601
+with T or a space, with or without Z or an offset, JSOC's `_TAI` form) and written in the index's
+own form, `2025-09-21T16:00:00.000` UTC.
 
 ## API
 

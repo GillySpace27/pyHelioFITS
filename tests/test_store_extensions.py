@@ -3,6 +3,7 @@ and for files already kept through `heliad fix-extensions`."""
 
 import gzip
 import io
+import json
 import os
 import sys
 
@@ -143,10 +144,12 @@ def test_cli_fix_extensions_prints_counts(tmp_path, src, monkeypatch, capsys):
         lib.ingest(_bare(src, "89abcdef", 304))
     monkeypatch.undo()
     assert cli.main(["--library", str(root), "fix-extensions", "--dry-run"]) == 0
-    err = capsys.readouterr().err
-    assert "1 stored files without a FITS suffix: would rename 1 (1 .fits, 0 .fits.gz)" in err
+    out = capsys.readouterr().out
+    assert "1 stored files without a FITS suffix: would rename 1 (1 .fits, 0 .fits.gz)" in out
+    assert cli.main(["--library", str(root), "--json", "fix-extensions", "--dry-run"]) == 0
+    assert json.loads(capsys.readouterr().out)["candidates"] == 1
     assert cli.main(["--library", str(root), "fix-extensions"]) == 0
-    assert "renamed 1" in capsys.readouterr().err
+    assert "renamed 1" in capsys.readouterr().out
 
 
 def test_clone_or_copy_reflinks_on_linux_and_copies_otherwise(tmp_path, monkeypatch):

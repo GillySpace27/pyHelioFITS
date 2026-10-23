@@ -12,9 +12,9 @@ undated rather than dropped.
 
 from __future__ import annotations
 
-import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
+from . import times as _times
 from .library import WAVELENGTH_BAND_TOLERANCE, Library
 
 DEFAULT_BINS = 240
@@ -124,36 +124,14 @@ def _undated(conn, key: str) -> int:
 
 # ---- the archives' side --------------------------------------------------------
 
-_JSOC_TIME = re.compile(r"^(\d{4})\.(\d{2})\.(\d{2})_(\d{2}):(\d{2}):(\d{2}(?:\.\d+)?)_(TAI|UTC)$")
-
-
 def utc_text(value) -> str | None:
-    """A record time from an archive as ISO 8601 UTC text, or None when it is not one.
+    """A record time from an archive as index text, or None when it is not one.
 
-    Fido rows carry ISO text already (astropy's isot). JSOC's T_REC comes either as
-    ISO text ending in Z or in JSOC's own form, 2025.09.21_16:00:00_TAI; a TAI time
-    is moved to UTC by the TAI-UTC offset that ERFA's leap-second table gives for
-    that day, so both sides of the search pane are on the same clock.
+    Fido rows carry ISO text already (astropy's isot); JSOC's T_REC comes as ISO text
+    ending in Z or as 2025.09.21_16:00:00_TAI, moved to UTC. The forms are times.parse's;
+    this name stays for callers that import it from here.
     """
-    if not isinstance(value, str):
-        return None
-    text = value.strip()
-    m = _JSOC_TIME.match(text)
-    if m:
-        y, mo, d, h, mi, s, scale = m.groups()
-        sec = float(s)
-        when = datetime(int(y), int(mo), int(d), int(h), int(mi)) + timedelta(seconds=sec)
-        if scale == "TAI":
-            import erfa  # comes with astropy; its leap-second table needs no network
-            when -= timedelta(seconds=float(erfa.dat(when.year, when.month, when.day, 0.5)))
-        return _text(when)
-    try:
-        when = datetime.fromisoformat(text.removesuffix("Z").replace(" ", "T"))
-    except ValueError:
-        return None
-    if when.tzinfo is not None:
-        when = when.astimezone(timezone.utc).replace(tzinfo=None)
-    return _text(when)
+    return _times.index_text(value)
 
 
 def times(values, start: str, end: str, bins: int = DEFAULT_BINS) -> dict:
@@ -187,4 +165,4 @@ def times(values, start: str, end: str, bins: int = DEFAULT_BINS) -> dict:
 
 
 def _text(when: datetime) -> str:
-    return when.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
+    return _times.text(when)

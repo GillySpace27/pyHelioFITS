@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import checks, config, db, fitsmeta, thumbs
+from . import checks, config, db, fitsmeta, thumbs, times
 from .query import Query
 
 FITS_SUFFIXES = (".fits", ".fts", ".fit", ".fits.gz", ".fts.gz", ".fit.gz")
@@ -193,13 +193,7 @@ def time_bound(text: str | None) -> str | None:
     16:30:00.000 and leaves it out. Text that is not a time is passed on as it is."""
     if not text:
         return text
-    try:
-        when = datetime.fromisoformat(text.strip().removesuffix("Z").replace(" ", "T"))
-    except ValueError:
-        return text
-    if when.tzinfo is not None:
-        when = when.astimezone(timezone.utc).replace(tzinfo=None)
-    return when.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
+    return times.index_text(text) or text
 
 @dataclass
 class IngestResult:

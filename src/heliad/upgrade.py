@@ -24,9 +24,7 @@ import bisect
 import re
 import statistics
 from dataclasses import asdict, replace
-from datetime import datetime, timedelta, timezone
-
-from . import coverage, db, sources
+from . import db, sources, times
 from .library import Library
 from .query import Query
 
@@ -34,17 +32,8 @@ MIN_TOLERANCE_S = 1.0
 MAX_TOLERANCE_S = 60.0
 
 
-def seconds(text) -> float | None:
-    """A time as seconds since 1970 UTC (any form coverage.utc_text reads), or None."""
-    iso = coverage.utc_text(text)
-    if iso is None:
-        return None
-    return datetime.fromisoformat(iso).replace(tzinfo=timezone.utc).timestamp()
-
-
-def _iso(value: float) -> str:
-    when = datetime(1970, 1, 1) + timedelta(milliseconds=round(value * 1000))
-    return when.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
+seconds = times.seconds      # a time as seconds since 1970 UTC (any form times.parse reads), or None
+_iso = times.from_seconds    # the index form of such a number
 
 
 def median_spacing(times) -> float | None:
@@ -88,7 +77,7 @@ def skip_function(conn, dataset_key: str, tol: float):
     have = observation_times(conn, dataset_key)
 
     def skip(when) -> bool:
-        t = seconds(when if isinstance(when, str) else getattr(when, "isot", str(when)))
+        t = seconds(when)
         return t is not None and near(have, t, tol)
     return skip
 
