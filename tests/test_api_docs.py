@@ -1,6 +1,7 @@
 """The API's three descriptions agree: the methods Server answers, the API table that
 `heliad api` prints, and docs/api.md. A method added without its docs fails here."""
 
+import argparse
 import inspect
 import io
 import os
@@ -56,6 +57,29 @@ def test_every_method_and_notification_has_a_docs_section_naming_its_params():
         section = _section(name)
         for param in re.findall(r"(\w+)(?:=|,|$)", params):
             assert f"`{param}" in section or param in section, f"{name}: docs do not mention {param}"
+
+
+def test_every_alias_answers_as_its_method(methods):
+    for old, new in rpc.ALIASES.items():
+        assert methods[old] is methods[new], old
+        assert API[old][0] == API[new][0], old
+        assert new in API[old][1]
+
+
+def _cli_commands() -> set[str]:
+    from heliad.cli import build_parser
+    (sub,) = [a for a in build_parser()._actions if isinstance(a, argparse._SubParsersAction)]
+    return set(sub.choices)
+
+
+def test_every_command_is_in_the_cli_table_and_names_real_methods():
+    table = DOCS[DOCS.index("## The command line and the API"):]
+    rows = re.findall(r"^\| `heliad ([a-z-]+)[^|]*\| (.*) \|$", table, re.M)
+    listed = {cmd for cmd, _ in rows}
+    assert _cli_commands() == listed
+    for cmd, methods in rows:
+        for name in re.findall(r"`([a-z_]+\.[a-z_]+)`", methods):
+            assert name in API and name not in rpc.ALIASES, f"{cmd}: {name}"
 
 
 def test_every_notification_the_core_sends_is_listed():

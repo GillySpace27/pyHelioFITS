@@ -24,6 +24,12 @@ from __future__ import annotations
 
 import importlib
 
+class ArchiveError(RuntimeError):
+    """The archive could not be asked, or refused: the network, a server error, or a
+    setting it needs (a JSOC email). The message says which. A bad query is a
+    ValueError, not this."""
+
+
 SOURCES = {
     "fido": "heliad.sources.fido",  # VSO, JSOC and every client sunpy registers
     "jsoc": "heliad.sources.jsoc",  # JSOC export by record set, through drms

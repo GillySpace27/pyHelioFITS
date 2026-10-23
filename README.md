@@ -29,7 +29,11 @@ through VSO) run against the real archives; the JSOC export route written but no
   for the app's Timeline; an archive search returns its records' times binned the same way
   (JSOC's TAI record times moved to UTC), so the two can be drawn one above the other.
 - **Links**: `heliad://search?...` and `heliad://get?...` carry a query (the same field names)
-  from another program to the Heliad app.
+  from another program to the Heliad app, and `heliad://dataset/<uid>?start=&end=` names one
+  dataset over a range; `link.parse` reads either.
+- **Cache editing**: `reject` sets bad frames aside (readers stop seeing them), `refetch` asks
+  the archive again for one, `cadences` compares a dataset's cadence with the archive's, and
+  `upgrade` fetches only the frames a dataset lacks. Each is a command and a method.
 - **Rules version**: when the rules that turn headers into datasets change, `heliad stats`
   says `reindex_due`, and `heliad reindex` applies them to every file already kept.
 
@@ -43,6 +47,10 @@ through VSO) run against the real archives; the JSOC export route written but no
     heliad get --start 2025-09-21T16:00 --end 2025-09-21T16:10 --instrument AIA --wavelength 193
     heliad settings jsoc_email you@example.org      # JSOC exports need a registered address
     heliad get --via jsoc --jsoc-series aia.lev1_euv_12s --start ... --end ... --wavelength 193
+    heliad coverage --start 2025-09-21T16:00 --end 2025-09-21T17:00 --bins 12
+    heliad reject 42 --reason "smeared by a flare"  # readers stop seeing it; unreject brings it back
+    heliad cadences sdo/aia/-/-/1/193               # the archive's cadence against the library's
+    heliad upgrade sdo/aia/-/-/1/193 --sample 12    # shows the plan; add --yes to fetch what is missing
     heliad reindex --dry-run && heliad reindex
     heliad delete --dataset KEY                     # shows what would go; add --yes to delete
     heliad serve        # JSON-RPC 2.0, one JSON object per line on stdin/stdout
