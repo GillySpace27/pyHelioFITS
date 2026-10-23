@@ -76,7 +76,7 @@ def load(library_root: str | os.PathLike | None = None) -> Config:
         return Config(Path(env).expanduser().resolve())
     path = config_path()
     if path.exists():
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
         return Config(Path(data["library_root"]).expanduser())
     return Config(default_library_root())
 
@@ -91,7 +91,7 @@ def write(cfg: Config, schema_version: int) -> Path:
     path = config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(cfg.to_json(schema_version), indent=2) + "\n")
+    tmp.write_text(json.dumps(cfg.to_json(schema_version), indent=2) + "\n", encoding="utf-8")
     tmp.replace(path)
     return path
 
@@ -109,7 +109,7 @@ def settings_path() -> Path:
 
 def load_settings() -> dict:
     path = settings_path()
-    data = json.loads(path.read_text()) if path.exists() else {}
+    data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
     for key, env in SETTING_ENV.items():
         if os.environ.get(env):
             data[key] = os.environ[env]
@@ -118,14 +118,14 @@ def load_settings() -> dict:
 
 def save_setting(key: str, value: str | None) -> dict:
     path = settings_path()
-    data = json.loads(path.read_text()) if path.exists() else {}
+    data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
     if value is None:
         data.pop(key, None)
     else:
         data[key] = value
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+    tmp.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     tmp.replace(path)
     return data
 

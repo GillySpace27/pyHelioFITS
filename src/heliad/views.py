@@ -12,9 +12,11 @@ import csv
 import os
 import re
 import shutil
+import stat
+import sys
 from pathlib import Path
 
-from .library import Library, now, time_bound
+from .library import Library, now, protect, time_bound
 
 MARKER = ".heliad-view"
 LINK_MODES = ("symlink", "hardlink", "copy")
@@ -115,6 +117,40 @@ def _link(target: Path, link: Path, modes: tuple[str, ...]) -> str:
     raise OSError(f"could not link {link} -> {target}: {last}")
 
 
+def _remove_tree(lib: Library, folder: Path) -> None:
+    """Remove a view folder Heliad built.
+
+    A copied or hard-linked member is read-only like its store file, and Windows will not
+    delete a read-only file, so there the attribute is cleared and the delete tried again.
+    A hard link shares the attribute with its store file, so the store files the folder's
+    manifest names are made read-only again afterwards. On macOS and Linux the first
+    delete succeeds and none of this runs.
+    """
+    members: list[str] = []
+    if os.name == "nt":
+        try:
+            with open(folder / "manifest.csv", newline="", encoding="utf-8") as fh:
+                members = [r["path"] for r in csv.DictReader(fh) if r.get("path")]
+        except (OSError, ValueError, KeyError):
+            pass
+    cleared = []
+
+    def retry(func, path, _exc):
+        if os.name != "nt":
+            raise
+        os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
+        cleared.append(path)
+        func(path)
+
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(folder, onexc=retry)
+    else:
+        shutil.rmtree(folder, onerror=retry)
+    if cleared:
+        for relpath in members:
+            protect(lib.abspath(relpath))
+
+
 def materialize(lib: Library, name: str, *, modes: tuple[str, ...] = LINK_MODES) -> dict:
     """Write views/<name>/ : manifest.csv plus one folder of links per dataset.
 
@@ -127,12 +163,12 @@ def materialize(lib: Library, name: str, *, modes: tuple[str, ...] = LINK_MODES)
         raise FileExistsError(f"{final} exists and was not made by Heliad; not touching it")
     build = final.with_name(f".{final.name}.building")
     if build.exists():
-        shutil.rmtree(build)
+        _remove_tree(lib, build)
     build.mkdir(parents=True)
     used: dict[str, int] = {}
     fields = ["dataset", "date_obs", "version", "path", "sha256", "size",
               "source_url", "query_json", "link"]
-    with open(build / "manifest.csv", "w", newline="") as fh:
+    with open(build / "manifest.csv", "w", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=fields)
         writer.writeheader()
         for r in rows:
@@ -153,10 +189,10 @@ def materialize(lib: Library, name: str, *, modes: tuple[str, ...] = LINK_MODES)
     if final.exists():
         old = final.with_name(f".{final.name}.old")
         if old.exists():
-            shutil.rmtree(old)
+            _remove_tree(lib, old)
         final.rename(old)
         build.rename(final)
-        shutil.rmtree(old)
+        _remove_tree(lib, old)
     else:
         build.rename(final)
     return {"name": name, "path": str(final), "files": len(rows), "link_modes": used}

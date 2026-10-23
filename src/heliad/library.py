@@ -62,6 +62,31 @@ def clone_or_copy(src: Path, dst: Path) -> str:
     return "copy"
 
 
+def remove_file(path: Path) -> None:
+    """Unlink a file, even a read-only one on Windows.
+
+    POSIX lets the owner of a folder delete a read-only file in it; Windows refuses with
+    PermissionError until the read-only attribute is cleared. Store files are read-only,
+    so on Windows this clears the attribute and tries again. Elsewhere it is a plain unlink.
+    """
+    try:
+        path.unlink()
+    except PermissionError:
+        if os.name != "nt":
+            raise
+        os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
+        path.unlink()
+
+
+def protect(path: Path) -> None:
+    """Make a stored file read-only again (a hard link shares the attribute on Windows,
+    so clearing it to delete a link clears it on the store file too)."""
+    try:
+        os.chmod(path, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+    except FileNotFoundError:
+        pass
+
+
 class LibraryLocked(RuntimeError):
     pass
 
@@ -81,6 +106,10 @@ class _RootLock:
         try:
             if os.name == "nt":
                 import msvcrt
+                # msvcrt locks bytes from the current position, and "a+" opens at the end,
+                # which is past the pid a running writer wrote: every process must lock
+                # the same byte (0) or a second writer would get a lock of its own.
+                self._fh.seek(0)
                 msvcrt.locking(self._fh.fileno(), msvcrt.LK_NBLCK, 1)
             else:
                 import fcntl
@@ -96,6 +125,13 @@ class _RootLock:
 
     def release(self) -> None:
         if self._fh is not None:
+            if os.name == "nt":
+                import msvcrt
+                try:
+                    self._fh.seek(0)
+                    msvcrt.locking(self._fh.fileno(), msvcrt.LK_UNLCK, 1)
+                except OSError:
+                    pass  # closing the file releases it too
             self._fh.close()
             self._fh = None
 
@@ -285,8 +321,10 @@ class Library:
                 "SELECT id, relpath FROM files WHERE sha256 = ?", (sha,)
             ).fetchone()
             if row:
-                if consume:
-                    path.unlink(missing_ok=True)
+                if consume and path.exists():
+                    remove_file(path)  # may be a read-only hard link to the stored copy (jobs._restage)
+                    if os.name == "nt":
+                        protect(self.abspath(row["relpath"]))
                 return IngestResult("duplicate", row["id"], row["relpath"])
 
             try:
@@ -647,7 +685,7 @@ class Library:
                 p = self.abspath(f["relpath"])
                 thumbs.remove(self.root, f["sha256"])
                 try:
-                    p.unlink()
+                    remove_file(p)
                     released += f["size"]
                     self._prune_empty_dirs(p.parent)
                 except FileNotFoundError:

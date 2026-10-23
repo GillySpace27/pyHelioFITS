@@ -79,7 +79,7 @@ def test_view_projection_and_manifest(lib, src):
     out = views.materialize(lib, "2025-09-21 CONNECT")
     assert out["files"] == 2
     folder = lib.cfg.views_dir / "2025-09-21_CONNECT"
-    manifest = (folder / "manifest.csv").read_text().splitlines()
+    manifest = (folder / "manifest.csv").read_text(encoding="utf-8").splitlines()
     assert len(manifest) == 3 and manifest[0].startswith("dataset,date_obs")
     links = [p for p in folder.rglob("*.fits")]
     assert len(links) == 2 and all(p.resolve().is_file() for p in links)
