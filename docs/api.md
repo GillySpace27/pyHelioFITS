@@ -117,7 +117,7 @@ The same fields, URL-encoded, make a `heliad://search?...` or `heliad://get?...`
 Params: none. Versions, the library, and every method this core answers. Call it first to check
 that the core is new enough.
 
-    {"name": "heliad", "version": "0.0.1", "schema_version": 4, "reader_compat": 1, "rules_version": 3,
+    {"name": "heliad", "version": "0.1.0", "schema_version": 4, "reader_compat": 1, "rules_version": 3,
      "reindex_due": false, "readonly": false, "library_root": ".../library",
      "db_path": ".../library/heliad.sqlite", "methods": ["download.cancel", "download.enqueue", ...]}
 
@@ -495,7 +495,11 @@ An error reply has `error` instead of `result`:
 ## The command line and the API
 
 Every `heliad` command is a thin layer over the same library code. Commands that only read open
-the library read-only, so they work while a core holds it.
+the library read-only, so they work while a core holds it. A command prints a table or a few lines
+for a person; with `--json` it prints exactly the method's result. Exit codes: 0 done; 1 the
+operation ran and reported a problem (`verify` found missing or altered files, `get` ended partial
+or failed, `import` had errors); 2 bad arguments or no library; 3 the library is locked by another
+core that is not serving it.
 
 | Command | Method |
 |---|---|

@@ -141,5 +141,5 @@ def test_python_dash_m_runs_the_cli(tmp_path, monkeypatch):
     import sys
 
     monkeypatch.setenv("HELIAD_HOME", str(tmp_path / "home"))
-    out = subprocess.run([sys.executable, "-m", "heliad", "settings"], capture_output=True, text=True)
+    out = subprocess.run([sys.executable, "-m", "heliad", "--json", "settings"], capture_output=True, text=True)
     assert out.returncode == 0 and out.stdout.strip().startswith("{")

@@ -14,6 +14,8 @@ BUNDLE_ID="io.github.gillyspace27.heliad"
 IDENTITY="${SIGN_IDENTITY:--}"
 APP="build/Heliad.app"
 VERSION="$(git describe --tags --always 2>/dev/null || echo dev)"
+# The one version string is pyproject.toml's; the core reports it in heliad.hello.
+SHORT_VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' ../pyproject.toml)"
 
 # Build exactly the dependencies Package.resolved names; a stale resolved file fails here.
 swift build -c release --disable-automatic-resolution
@@ -48,7 +50,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundleIconName</key><string>AppIcon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.1.0</string>
+    <key>CFBundleShortVersionString</key><string>${SHORT_VERSION}</string>
     <key>CFBundleVersion</key><string>${VERSION}</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>NSHighResolutionCapable</key><true/>

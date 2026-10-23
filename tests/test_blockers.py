@@ -55,7 +55,7 @@ def test_library_flag_does_not_redirect_the_default(tmp_path, monkeypatch):
 def test_cli_read_commands_run_beside_a_writer(lib, src, capsys):
     from heliad import cli
     lib.ingest(write_fits(src / "a.fits", aia_header()))
-    assert cli.main(["--library", str(lib.root), "stats"]) == 0
+    assert cli.main(["--library", str(lib.root), "--json", "stats"]) == 0
     assert json.loads(capsys.readouterr().out)["files"] == 1
 
 
