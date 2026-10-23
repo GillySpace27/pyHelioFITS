@@ -49,10 +49,15 @@ def squircle(size=S, frac=BODY, n=N, ss=4):
     return m.resize((size, size), Image.BOX)
 
 
-def masked(img):
-    """Art inside the squircle body, as macOS draws an icon: what the .icns and previews carry."""
-    out = img.copy()
-    out.putalpha(squircle())
+def masked(img, frac=BODY):
+    """Art scaled into the squircle body, as an .icns draws it (macOS before 26 shapes nothing).
+
+    frac=1 is the shape macOS 26 gives the asset catalog's full square, which the preview uses."""
+    body = round(S * frac)
+    inner = img.resize((body, body), Image.LANCZOS)
+    out = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    out.paste(inner, ((S - body) // 2, (S - body) // 2))
+    out.putalpha(squircle(frac=frac))
     px = np.array(out)
     px[px[..., 3] == 0, :3] = 0
     return Image.fromarray(px)
@@ -67,7 +72,8 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     art = render()
     shaped = masked(art)
-    shaped.save(os.path.join(OUT, "heliad_icon_1024.png"))
+    dock = masked(art, 0.98)   # the catalog's full square under macOS 26's shape
+    dock.save(os.path.join(OUT, "heliad_icon_1024.png"))
 
     assets = os.path.join(OUT, "Assets.xcassets")
     cat = os.path.join(assets, "AppIcon.appiconset")
@@ -86,13 +92,13 @@ def main():
 
     shaped.save(os.path.join(OUT, "Heliad.icns"), sizes=[(16, 16), (32, 32), (64, 64), (128, 128),
                                                          (256, 256), (512, 512), (1024, 1024)])
-    preview(shaped, os.path.join(OUT, "preview.png"))
+    preview(dock, os.path.join(OUT, "preview.png"))
 
 
 def preview(shaped, path):
     """The icon at Dock and Finder sizes on Sunset Dark and Sunset Light, with its siblings if present."""
-    sizes = [512, 256, 128, 64, 32, 16]
-    W, pad = 1180, 40
+    sizes = [512, 256, 128, 64, 48, 32, 16]
+    W, pad = 1260, 40
     sheet = Image.new("RGBA", (W, 2 * 600), (0, 0, 0, 255))
     for row, bg in enumerate([(0x22, 0x1E, 0x33), (0xF6, 0xEF, 0xE6)]):
         y0 = row * 600
