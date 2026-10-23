@@ -95,7 +95,7 @@ public struct Job: Decodable, Sendable, Identifiable, Equatable {
     public var title: String {
         var parts: [String] = []
         if let instrument = query["instrument"]?.stringValue { parts.append(instrument) }
-        if let wave = query["wavelength"]?.doubleValue { parts.append("\(JSONValue.double(wave).display) Å") }
+        if let wave = query["wavelength"]?.doubleValue { parts.append(Wavelength.text(wave)) }
         if let series = query["jsoc_series"]?.stringValue { parts.append(series) }
         let start = query["start"]?.stringValue ?? "?"
         let end = query["end"]?.stringValue ?? "?"

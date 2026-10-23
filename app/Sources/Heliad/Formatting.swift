@@ -1,4 +1,5 @@
 import Foundation
+import HeliadKit
 
 enum Format {
     static func bytes(_ n: Int64) -> String {
@@ -57,6 +58,6 @@ enum Format {
 
     static func wavelength(_ w: Double?) -> String {
         guard let w else { return "" }
-        return w.rounded() == w ? "\(Int(w)) Å" : String(format: "%.1f Å", w)
+        return Wavelength.text(w)
     }
 }
