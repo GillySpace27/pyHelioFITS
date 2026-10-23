@@ -253,8 +253,9 @@ def test_schema_3_library_migrates_to_4(tmp_path):
     conn.close()
 
     conn = db.connect_writer(path)
-    assert db.schema_version(conn) == 4 and db.meta_value(conn, "reader_compat") == "1"
-    assert [r[1] for r in conn.execute("PRAGMA table_info(current_files)")] == before
+    # Migrates on through every later schema; 5 only appends dataset_uid to current_files.
+    assert db.schema_version(conn) == db.SCHEMA_VERSION and db.meta_value(conn, "reader_compat") == "1"
+    assert [r[1] for r in conn.execute("PRAGMA table_info(current_files)")] == [*before, "dataset_uid"]
     assert conn.execute("SELECT COUNT(*) FROM current_files").fetchone()[0] == 1
     assert conn.execute("SELECT options_json FROM jobs").fetchone()[0] is None
     conn.execute("INSERT INTO rejections(observation_id, reason, rejected_at) VALUES (1, 'bad', 't')")

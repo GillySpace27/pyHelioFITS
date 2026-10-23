@@ -191,6 +191,43 @@ final class WavelengthTests: XCTestCase {
     }
 }
 
+final class DatasetLinkTests: XCTestCase {
+    func testDatasetLinkDecodesWithItsDataset() throws {
+        let link = try HeliadJSON.decoder().decode(DatasetLink.self, from: Data("""
+        {"dataset_uid":"9f1c","start":"2025-09-21T20:00:00","end":null,
+         "dataset":{"id":3,"dataset_key":"punch/wfi+nfi/-/cam/3/5300","label":"PUNCH WFI+NFI 530 nm CAM L3",
+                    "observatory":"PUNCH","instrument":"WFI+NFI","detector":null,"product":"CAM","level":"3",
+                    "wavelength":5300.0,"observations":2,"first":"2025-09-21T20:00:00.000",
+                    "last":"2025-09-21T20:01:00.000","bytes":5760,"dataset_uid":"9f1c","resolved_by":"uid"}}
+        """.utf8))
+        XCTAssertEqual(link.datasetUid, "9f1c")
+        XCTAssertEqual(link.start, "2025-09-21T20:00:00")
+        XCTAssertNil(link.end)
+        XCTAssertEqual(link.dataset?.datasetUid, "9f1c")
+        XCTAssertEqual(link.dataset?.datasetKey, "punch/wfi+nfi/-/cam/3/5300")
+        let missing = try HeliadJSON.decoder().decode(DatasetLink.self, from: Data("""
+        {"dataset_uid":"nope","start":null,"end":null,"dataset":null}
+        """.utf8))
+        XCTAssertNil(missing.dataset)
+    }
+
+    func testStudioLaunchForADataset() throws {
+        let d = try HeliadJSON.decoder().decode(Dataset.self, from: Data("""
+        {"id":3,"dataset_key":"k","label":"L","observatory":null,"instrument":null,"detector":null,
+         "product":null,"level":null,"wavelength":null,"observations":2,
+         "first":"2025-09-21T20:00:00.000","last":"2025-09-21T20:01:00.000","bytes":1,"dataset_uid":"u1"}
+        """.utf8))
+        let whole = try XCTUnwrap(StudioLaunch.forDataset(d, start: nil, end: ""))
+        XCTAssertEqual(whole.args, ["-dataset", "u1", "-start", "2025-09-21T20:00:00.000",
+                                    "-end", "2025-09-21T20:01:00.000"])
+        let typed = try XCTUnwrap(StudioLaunch.forDataset(d, start: "2025-09-21 20:00:30Z", end: nil))
+        XCTAssertEqual(typed.start, "2025-09-21T20:00:30.000")
+        XCTAssertNil(StudioLaunch.forDataset(d, start: "yesterday", end: nil))
+        XCTAssertEqual(StudioLaunch.link(datasetUid: "u1", start: "2025-09-21T20:00:00", end: nil)?.absoluteString,
+                       "heliad://dataset/u1?start=2025-09-21T20:00:00")
+    }
+}
+
 final class QueryFieldsTests: XCTestCase {
     func testValidQuery() throws {
         var f = QueryFields()

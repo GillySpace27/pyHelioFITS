@@ -475,6 +475,10 @@ final class AppModel: ObservableObject {
     }
 
     private func openLink(_ url: URL) async {
+        if url.host == "dataset" {
+            await openDatasetLink(url)
+            return
+        }
         do {
             let link = try await core.call("query.from_url", ["url": .string(url.absoluteString)], as: LinkRequest.self)
             searchFields = QueryFields(query: link.query)
@@ -483,6 +487,46 @@ final class AppModel: ObservableObject {
             NSApp.activate(ignoringOtherApps: true)
         } catch {
             report(error)
+        }
+    }
+
+    /// heliad://dataset/<uid>?start=&end=: select that dataset, at that range when given.
+    /// The uid survives a reindex that renamed the dataset's key.
+    private func openDatasetLink(_ url: URL) async {
+        do {
+            let link = try await core.call("dataset.from_url", ["url": .string(url.absoluteString)], as: DatasetLink.self)
+            guard let dataset = link.dataset else {
+                alert = "This library has no dataset \(link.datasetUid)."
+                return
+            }
+            await refreshLibrary()  // the sidebar lists it under its current key
+            showFiles(dataset.datasetKey, start: link.start ?? "", end: link.end ?? "")
+            NSApp.activate(ignoringOtherApps: true)
+        } catch {
+            report(error)
+        }
+    }
+
+    /// HelioFITS Studio's bundle id (release/deploy_release.sh in the Studio repository).
+    /// Mirrors PR #18 (claude/processing-record-reader); keep one copy when both are merged.
+    static let studioBundleID = "space.gilly.hfstudio"
+
+    /// Launch HelioFITS Studio on a layer's dataset and time span. The -dataset, -start and -end
+    /// options are being added to Studio separately; a Studio without them ignores or refuses
+    /// them. macOS passes arguments only when Studio is not already running.
+    /// (Same as PR #18's; keep one copy when both are merged.)
+    func openInStudio(_ launch: StudioLaunch) {
+        guard let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: Self.studioBundleID) else {
+            alert = "HelioFITS Studio is not installed (no application with bundle id \(Self.studioBundleID))."
+            return
+        }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.arguments = launch.args
+        configuration.activates = true
+        NSWorkspace.shared.openApplication(at: app, configuration: configuration) { [weak self] _, error in
+            guard let error else { return }
+            let text = "HelioFITS Studio did not open: \(error.localizedDescription)"
+            Task { @MainActor in self?.alert = text }
         }
     }
 
