@@ -1,0 +1,61 @@
+{
+  "requested_utc": "2024-05-14T16:51:00Z",
+  "imageScale_arcsec_per_px": 1.9,
+  "frame_px": 1200,
+  "channels": {
+    "94": {
+      "image_date_utc": "2024-05-14 16:50:47",
+      "sourceId": 8,
+      "closest_image_url": "https://api.helioviewer.org/v2/getClosestImage/?date=2024-05-14T16:51:00Z&sourceId=8",
+      "screenshot_url": "https://api.helioviewer.org/v2/takeScreenshot/?date=2024-05-14T16:51:00Z&imageScale=1.9&layers=[SDO,AIA,AIA,94,1,100]&events=&eventLabels=false&scale=false&watermark=false&x0=0&y0=0&width=1200&height=1200&display=true"
+    },
+    "131": {
+      "image_date_utc": "2024-05-14 16:50:43",
+      "sourceId": 9,
+      "closest_image_url": "https://api.helioviewer.org/v2/getClosestImage/?date=2024-05-14T16:51:00Z&sourceId=9",
+      "screenshot_url": "https://api.helioviewer.org/v2/takeScreenshot/?date=2024-05-14T16:51:00Z&imageScale=1.9&layers=[SDO,AIA,AIA,131,1,100]&events=&eventLabels=false&scale=false&watermark=false&x0=0&y0=0&width=1200&height=1200&display=true"
+    },
+    "171": {
+      "image_date_utc": "2024-05-14 16:51:09",
+      "sourceId": 10,
+      "closest_image_url": "https://api.helioviewer.org/v2/getClosestImage/?date=2024-05-14T16:51:00Z&sourceId=10",
+      "screenshot_url": "https://api.helioviewer.org/v2/takeScreenshot/?date=2024-05-14T16:51:00Z&imageScale=1.9&layers=[SDO,AIA,AIA,171,1,100]&events=&eventLabels=false&scale=false&watermark=false&x0=0&y0=0&width=1200&height=1200&display=true"
+    },
+    "193": {
+      "image_date_utc": "2024-05-14 16:50:56",
+      "sourceId": 11,
+      "closest_image_url": "https://api.helioviewer.org/v2/getClosestImage/?date=2024-05-14T16:51:00Z&sourceId=11",
+      "screenshot_url": "https://api.helioviewer.org/v2/takeScreenshot/?date=2024-05-14T16:51:00Z&imageScale=1.9&layers=[SDO,AIA,AIA,193,1,100]&events=&eventLabels=false&scale=false&watermark=false&x0=0&y0=0&width=1200&height=1200&display=true"
+    },
+    "211": {
+      "image_date_utc": "2024-05-14 16:50:46",
+      "sourceId": 12,
+      "closest_image_url": "https://api.helioviewer.org/v2/getClosestImage/?date=2024-05-14T16:51:00Z&sourceId=12",
+      "screenshot_url": "https://api.helioviewer.org/v2/takeScreenshot/?date=2024-05-14T16:51:00Z&imageScale=1.9&layers=[SDO,AIA,AIA,211,1,100]&events=&eventLabels=false&scale=false&watermark=false&x0=0&y0=0&width=1200&height=1200&display=true"
+    },
+    "304": {
+      "image_date_utc": "2024-05-14 16:51:05",
+      "sourceId": 13,
+      "closest_image_url": "https://api.helioviewer.org/v2/getClosestImage/?date=2024-05-14T16:51:00Z&sourceId=13",
+      "screenshot_url": "https://api.helioviewer.org/v2/takeScreenshot/?date=2024-05-14T16:51:00Z&imageScale=1.9&layers=[SDO,AIA,AIA,304,1,100]&events=&eventLabels=false&scale=false&watermark=false&x0=0&y0=0&width=1200&height=1200&display=true"
+    },
+    "335": {
+      "image_date_utc": "2024-05-14 16:50:49",
+      "sourceId": 14,
+      "closest_image_url": "https://api.helioviewer.org/v2/getClosestImage/?date=2024-05-14T16:51:00Z&sourceId=14",
+      "screenshot_url": "https://api.helioviewer.org/v2/takeScreenshot/?date=2024-05-14T16:51:00Z&imageScale=1.9&layers=[SDO,AIA,AIA,335,1,100]&events=&eventLabels=false&scale=false&watermark=false&x0=0&y0=0&width=1200&height=1200&display=true"
+    },
+    "1600": {
+      "image_date_utc": "2024-05-14 16:51:02",
+      "sourceId": 15,
+      "closest_image_url": "https://api.helioviewer.org/v2/getClosestImage/?date=2024-05-14T16:51:00Z&sourceId=15",
+      "screenshot_url": "https://api.helioviewer.org/v2/takeScreenshot/?date=2024-05-14T16:51:00Z&imageScale=1.9&layers=[SDO,AIA,AIA,1600,1,100]&events=&eventLabels=false&scale=false&watermark=false&x0=0&y0=0&width=1200&height=1200&display=true"
+    },
+    "1700": {
+      "image_date_utc": "2024-05-14 16:51:17",
+      "sourceId": 16,
+      "closest_image_url": "https://api.helioviewer.org/v2/getClosestImage/?date=2024-05-14T16:51:00Z&sourceId=16",
+      "screenshot_url": "https://api.helioviewer.org/v2/takeScreenshot/?date=2024-05-14T16:51:00Z&imageScale=1.9&layers=[SDO,AIA,AIA,1700,1,100]&events=&eventLabels=false&scale=false&watermark=false&x0=0&y0=0&width=1200&height=1200&display=true"
+    }
+  }
+}
