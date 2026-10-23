@@ -256,9 +256,9 @@ class Library:
             return row["id"]
         return self.conn.execute(
             "INSERT INTO datasets(dataset_key, observatory, instrument, detector, product, "
-            "level, wavelength, label) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "level, wavelength, label, dataset_uid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (meta.dataset_key, meta.observatory, meta.instrument, meta.detector,
-             meta.product, meta.level, meta.wavelength, meta.label),
+             meta.product, meta.level, meta.wavelength, meta.label, db.new_uid()),
         ).lastrowid
 
     def ingest(
@@ -446,6 +446,7 @@ class Library:
             sql = ("SELECT * FROM (SELECT f.id AS file_id, f.relpath, f.sha256, f.size, f.version, "
                    "o.id AS observation_id, o.date_obs, d.id AS dataset_id, d.dataset_key, d.label, "
                    "d.observatory, d.instrument, d.detector, d.product, d.level, d.wavelength, "
+                   + ("d.dataset_uid, " if db.has_column(self.reader, "datasets", "dataset_uid") else "") +
                    "r.reason AS rejected FROM observations o JOIN files f ON f.id = o.current_file_id "
                    "JOIN datasets d ON d.id = o.dataset_id "
                    "LEFT JOIN rejections r ON r.observation_id = o.id) WHERE 1 = 1")
@@ -685,6 +686,12 @@ class Library:
         for a file that is missing, taken from the indexed keywords. File ids, paths
         and checksums never change; datasets and observations keep their ids when
         their key is unchanged; views keep every file they held.
+
+        A dataset whose key changes (PUNCH /530 became /5300 when WAVEUNIT 'nanometer'
+        was read) keeps its row, id and dataset_uid: a new key takes over the old
+        dataset that held most of its files (by sha256), and the old key is recorded in
+        dataset_aliases so resolve_dataset() still finds it. A summary's
+        "datasets_renamed" lists each {old_key, new_key, dataset_uid}.
         """
         self._require_writer()
         conn = self.conn
@@ -707,6 +714,9 @@ class Library:
                 if progress and (i % 200 == 0 or i == len(files)):
                     progress(i, len(files))
             old_ds = {r["dataset_key"]: r["id"] for r in conn.execute("SELECT id, dataset_key FROM datasets")}
+            old_ds_uid = {r["id"]: r["dataset_uid"] for r in conn.execute("SELECT id, dataset_uid FROM datasets")}
+            obs_ds = {r["id"]: r["dataset_id"] for r in conn.execute("SELECT id, dataset_id FROM observations")}
+            sha_old_ds = {f["sha256"]: obs_ds.get(f["observation_id"]) for f in files}
             old_obs = {r["obs_key"]: r["id"] for r in conn.execute("SELECT id, obs_key FROM observations")}
             old_current = {r["id"]: r["current_file_id"] for r in conn.execute(
                 "SELECT id, current_file_id FROM observations")}
@@ -737,12 +747,16 @@ class Library:
                 # Newest version wins; among equals the earliest ingested stays, as in ingest.
                 current[key] = max(fids, key=lambda i: (fitsmeta.version_sort_key(version[i]), -i))
 
+            renamed = self._carry_datasets(new_ds, old_ds, sha_old_ds,
+                                           {f["sha256"]: metas[f["id"]].dataset_key for f in files})
             file_obs_old = {f["id"]: f["observation_id"] for f in files}
             summary = {
                 "files": len(files),
                 "datasets_before": len(old_ds), "datasets_after": len(new_ds),
                 "observations_before": len(old_obs), "observations_after": len(groups),
                 "files_moved": 0, "current_changed": 0, "dry_run": dry_run,
+                "datasets_renamed": [{"old_key": old, "new_key": new, "dataset_uid": old_ds_uid[did]}
+                                     for new, (old, did) in sorted(renamed.items())],
             }
             conn.execute("BEGIN IMMEDIATE")
             try:
@@ -768,10 +782,19 @@ class Library:
                         conn.execute("UPDATE datasets SET observatory=?, instrument=?, detector=?, product=?, "
                                      "level=?, wavelength=?, label=? WHERE id = ?", (*cols, old_ds[key]))
                         ds_ids[key] = old_ds[key]
+                    elif key in renamed:
+                        old_key, did = renamed[key]
+                        conn.execute("UPDATE datasets SET dataset_key=?, observatory=?, instrument=?, detector=?, "
+                                     "product=?, level=?, wavelength=?, label=? WHERE id = ?", (key, *cols, did))
+                        conn.execute("INSERT INTO dataset_aliases(old_key, dataset_uid, recorded_at) VALUES (?, ?, ?) "
+                                     "ON CONFLICT(old_key) DO UPDATE SET dataset_uid = excluded.dataset_uid, "
+                                     "recorded_at = excluded.recorded_at", (old_key, old_ds_uid[did], now()))
+                        ds_ids[key] = did
                     else:
                         ds_ids[key] = conn.execute(
                             "INSERT INTO datasets(dataset_key, observatory, instrument, detector, product, "
-                            "level, wavelength, label) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (key, *cols)).lastrowid
+                            "level, wavelength, label, dataset_uid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            (key, *cols, db.new_uid())).lastrowid
                 obs_ids: dict[str, int] = {}
                 for key, fids in groups.items():
                     meta = metas[current[key]]  # dated by its current file, as in ingest
@@ -818,6 +841,77 @@ class Library:
             from . import views
             summary["views_rebuilt"] = [r["name"] for r in views.rebuild_all(self)]
         return summary
+
+    @staticmethod
+    def _carry_datasets(new_ds: dict, old_ds: dict[str, int], sha_old_ds: dict[str, int | None],
+                        sha_new_key: dict[str, str]) -> dict[str, tuple[str, int]]:
+        """Which renamed dataset takes over which old one: {new_key: (old_key, old_id)}.
+
+        A new key that was not a key before inherits the old dataset holding more than
+        half of its files, matched by sha256 (a file's checksum never changes), as long as
+        that old key is not itself still a key. When several new keys could take the same
+        old dataset (a dataset split in two), the one with the most of its files wins; the
+        others start with a uid of their own.
+        """
+        still = set(new_ds)
+        key_of = {did: key for key, did in old_ds.items()}
+        votes: dict[str, dict[int, int]] = {}
+        sizes: dict[str, int] = {}
+        for sha, new_key in sha_new_key.items():
+            sizes[new_key] = sizes.get(new_key, 0) + 1
+            did = sha_old_ds.get(sha)
+            if new_key not in old_ds and did is not None and key_of.get(did) not in still:
+                tally = votes.setdefault(new_key, {})
+                tally[did] = tally.get(did, 0) + 1
+        offers = []
+        for new_key, tally in votes.items():
+            did, n = max(tally.items(), key=lambda kv: (kv[1], -kv[0]))
+            if 2 * n > sizes[new_key]:
+                offers.append((n, new_key, did))
+        out: dict[str, tuple[str, int]] = {}
+        taken: set[int] = set()
+        for n, new_key, did in sorted(offers, key=lambda o: (-o[0], o[1])):
+            if did not in taken:
+                taken.add(did)
+                out[new_key] = (key_of[did], did)
+        return out
+
+    # ---- stable ids ------------------------------------------------------------
+
+    def dataset(self, *, dataset_uid: str | None = None, dataset_key: str | None = None) -> dict | None:
+        """One dataset as library.datasets lists it, by uid or by key, or None.
+
+        A key that is no longer a dataset's key is looked up in dataset_aliases, so a
+        key saved before a reindex renamed the dataset still finds it. The result says
+        how it was found: "resolved_by" is "uid", "key" or "alias".
+        """
+        if (dataset_uid is None) == (dataset_key is None):
+            raise ValueError("give exactly one of dataset_uid and dataset_key")
+        if dataset_key is not None:
+            found = self.resolve_dataset(dataset_key)
+            if found is None:
+                return None
+            dataset_uid, how = found["dataset_uid"], found["resolved_by"]
+        else:
+            how = "uid"
+        row = next((d for d in self.datasets() if d.get("dataset_uid") == dataset_uid), None)
+        return None if row is None else {**row, "resolved_by": how}
+
+    def resolve_dataset(self, key_or_uid: str) -> dict | None:
+        """{dataset_uid, dataset_key, resolved_by} for a uid, a current key or an old
+        key recorded in dataset_aliases; None when nothing matches. A current key wins
+        over an alias of the same text."""
+        conn = self.reader
+        if not db.has_column(conn, "datasets", "dataset_uid"):
+            return None
+        for how, sql in (("uid", "SELECT dataset_uid, dataset_key FROM datasets WHERE dataset_uid = ?"),
+                         ("key", "SELECT dataset_uid, dataset_key FROM datasets WHERE dataset_key = ?"),
+                         ("alias", "SELECT d.dataset_uid, d.dataset_key FROM dataset_aliases a "
+                                   "JOIN datasets d ON d.dataset_uid = a.dataset_uid WHERE a.old_key = ?")):
+            row = conn.execute(sql, (key_or_uid,)).fetchone()
+            if row:
+                return {"dataset_uid": row["dataset_uid"], "dataset_key": row["dataset_key"], "resolved_by": how}
+        return None
 
     # ---- thumbnails ----------------------------------------------------------
 

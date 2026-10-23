@@ -15,9 +15,11 @@ schema_version, so adding a table does not lock Studio out.
 from __future__ import annotations
 
 import sqlite3
+import uuid
 from pathlib import Path
+from typing import Callable
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 READER_COMPAT = 1  # see the module docstring
 
 SCHEMA_V1 = """
@@ -191,7 +193,57 @@ JOIN datasets d ON d.id = o.dataset_id
 WHERE NOT EXISTS (SELECT 1 FROM rejections r WHERE r.observation_id = o.id);
 """
 
-MIGRATIONS: dict[int, str] = {1: SCHEMA_V1, 2: SCHEMA_V2, 3: SCHEMA_V3, 4: SCHEMA_V4}
+# Version 5: stable ids. dataset_key is derived from header rules, so a rules change
+# (PUNCH 530 -> 5300) renames a dataset; dataset_uid does not change with it. reindex
+# carries the uid to the renamed dataset and records the old key in dataset_aliases,
+# so a link or a Studio session that saved the old key still finds the dataset.
+# file_aliases does the same for a stored file whose relpath changed. Existing rows
+# get a uid in the Python step below (SQLite has no UUID function). current_files
+# gains dataset_uid as its last column; every earlier column keeps its name and
+# meaning, so reader_compat stays 1.
+SCHEMA_V5 = """
+ALTER TABLE datasets ADD COLUMN dataset_uid TEXT;
+ALTER TABLE views ADD COLUMN view_uid TEXT;
+CREATE TABLE dataset_aliases (
+    old_key      TEXT PRIMARY KEY,   -- a dataset_key this dataset had before
+    dataset_uid  TEXT NOT NULL,
+    recorded_at  TEXT
+);
+CREATE TABLE file_aliases (
+    old_relpath  TEXT PRIMARY KEY,   -- where the file was stored before
+    file_id      INTEGER NOT NULL REFERENCES files(id),
+    sha256       TEXT NOT NULL,
+    recorded_at  TEXT
+);
+DROP VIEW current_files;
+CREATE VIEW current_files AS
+SELECT f.id AS file_id, f.relpath, f.sha256, f.size, f.version,
+       o.id AS observation_id, o.date_obs,
+       d.id AS dataset_id, d.dataset_key, d.label, d.observatory, d.instrument,
+       d.detector, d.product, d.level, d.wavelength, d.dataset_uid
+FROM observations o
+JOIN files f    ON f.id = o.current_file_id
+JOIN datasets d ON d.id = o.dataset_id
+WHERE NOT EXISTS (SELECT 1 FROM rejections r WHERE r.observation_id = o.id);
+"""
+
+
+def new_uid() -> str:
+    """A dataset_uid or view_uid: a random UUID (version 4) as lowercase text."""
+    return str(uuid.uuid4())
+
+
+def _mint_uids(conn: sqlite3.Connection) -> None:
+    """Schema 5, after its SQL: a uid for every dataset and view, then the unique indexes."""
+    for table, column in (("datasets", "dataset_uid"), ("views", "view_uid")):
+        ids = [r[0] for r in conn.execute(f"SELECT id FROM {table} WHERE {column} IS NULL")]
+        conn.executemany(f"UPDATE {table} SET {column} = ? WHERE id = ?", [(new_uid(), i) for i in ids])
+        conn.execute(f"CREATE UNIQUE INDEX {table}_{column} ON {table}({column})")
+
+
+MIGRATIONS: dict[int, str] = {1: SCHEMA_V1, 2: SCHEMA_V2, 3: SCHEMA_V3, 4: SCHEMA_V4, 5: SCHEMA_V5}
+# Steps SQL cannot express, run after a version's SQL in the same transaction.
+MIGRATION_STEPS: dict[int, Callable[[sqlite3.Connection], None]] = {5: _mint_uids}
 
 
 def _configure(conn: sqlite3.Connection) -> None:
@@ -207,7 +259,7 @@ def connect_writer(path: Path) -> sqlite3.Connection:
     _configure(conn)
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA synchronous = NORMAL")
-    migrate(conn)
+    migrate(conn, backup_to=path)
     return conn
 
 
@@ -251,7 +303,12 @@ def has_table(conn: sqlite3.Connection, name: str) -> bool:
                         (name,)).fetchone() is not None
 
 
-def migrate(conn: sqlite3.Connection) -> None:
+def has_column(conn: sqlite3.Connection, table: str, column: str) -> bool:
+    """Whether a table has a column: a read-only Library may hold an older schema."""
+    return any(r[1] == column for r in conn.execute(f"PRAGMA table_info({table})"))
+
+
+def migrate(conn: sqlite3.Connection, backup_to: Path | None = None) -> None:
     current = schema_version(conn)
     if current > SCHEMA_VERSION:
         raise RuntimeError(
@@ -259,6 +316,16 @@ def migrate(conn: sqlite3.Connection) -> None:
         )
     if current == SCHEMA_VERSION:
         return
+    if current > 0 and backup_to is not None:
+        # The index as it was before this Heliad changed it, so a migration that goes
+        # wrong costs nothing: index.sqlite.schema4.bak, say. An older backup is kept.
+        target = backup_to.with_name(f"{backup_to.name}.schema{current}.bak")
+        if not target.exists():
+            copy = sqlite3.connect(target)
+            try:
+                conn.backup(copy)
+            finally:
+                copy.close()
     # Rebuilding a table that others reference needs foreign keys off (it has no
     # effect inside a transaction); each step checks them itself before committing.
     conn.execute("PRAGMA foreign_keys = OFF")
@@ -274,6 +341,8 @@ def _migrate_to(conn: sqlite3.Connection, version: int) -> None:
     try:
         for statement in _split(MIGRATIONS[version]):
             conn.execute(statement)
+        if version in MIGRATION_STEPS:
+            MIGRATION_STEPS[version](conn)
         broken = conn.execute("PRAGMA foreign_key_check").fetchall()
         if broken:
             raise RuntimeError(f"migration to schema {version} broke {len(broken)} references")

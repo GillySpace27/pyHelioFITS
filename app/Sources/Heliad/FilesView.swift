@@ -41,6 +41,12 @@ struct FilesView: View {
         .navigationSubtitle("\(dataset.observations) observations · \(Format.span(dataset.first, dataset.last)) UTC")
         .toolbar {
             ToolbarItemGroup {
+                Button {
+                    model.openInStudio(dataset, start: start.isEmpty ? dataset.first : start,
+                                       end: end.isEmpty ? dataset.last : end)
+                } label: { Label("Open in Studio", systemImage: "sun.max") }
+                    .disabled(dataset.datasetUid == nil)
+                    .help("Open this dataset in HelioFITS Studio over the range shown")
                 Button { upgrading = true } label: { Label("Upgrade", systemImage: "arrow.up.circle") }
                     .help("Check the archive's cadence, fetch missing frames, and review frames set aside")
                 Toggle(isOn: $showViewer) { Label("Frame Viewer", systemImage: "play.rectangle") }

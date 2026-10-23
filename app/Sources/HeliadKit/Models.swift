@@ -41,6 +41,8 @@ public struct Dataset: Decodable, Sendable, Identifiable, Hashable {
     public let first: String?
     public let last: String?
     public let bytes: Int64
+    /// Stable across reindexing (schema 5); nil from a core older than that.
+    public let datasetUid: String?
 }
 
 /// One row of library.files (the current_files view): the newest version of an observation.
@@ -246,6 +248,43 @@ public struct FileCheck: Decodable, Sendable, Hashable {
 public struct LinkRequest: Decodable, Sendable {
     public let action: String   // search | get
     public let query: [String: JSONValue]
+}
+
+/// dataset.from_url: a heliad://dataset/<uid>?start=&end= link, and the dataset it names
+/// (nil when this library has no dataset with that uid).
+public struct DatasetLink: Decodable, Sendable {
+    public let datasetUid: String
+    public let start: String?
+    public let end: String?
+    public let dataset: Dataset?
+}
+
+/// How the app asks macOS to open HelioFITS Studio on one dataset. Studio is found by its
+/// app name through Launch Services (`open -a`), the release name first and then the
+/// developer launcher's (extra/make-dev-launcher.sh in the Studio repo).
+public enum StudioLaunch {
+    public static let appNames = ["HelioFITS Studio", "HelioFITS Studio (dev)"]
+
+    /// Arguments for /usr/bin/open: `-a <app> --args -dataset <uid> [-start <iso>] [-end <iso>]`.
+    public static func openArguments(app: String, datasetUid: String, start: String?, end: String?) -> [String] {
+        var args = ["-a", app, "--args", "-dataset", datasetUid]
+        if let start, !start.isEmpty { args += ["-start", start] }
+        if let end, !end.isEmpty { args += ["-end", end] }
+        return args
+    }
+
+    /// A link to the same dataset and range, for Studio or a note: heliad://dataset/<uid>?start=&end=
+    public static func link(datasetUid: String, start: String?, end: String?) -> URL? {
+        var parts = URLComponents()
+        parts.scheme = "heliad"
+        parts.host = "dataset"
+        parts.path = "/" + datasetUid
+        let items = [("start", start), ("end", end)].compactMap { name, value in
+            value.flatMap { $0.isEmpty ? nil : URLQueryItem(name: name, value: $0) }
+        }
+        if !items.isEmpty { parts.queryItems = items }
+        return parts.url
+    }
 }
 
 // MARK: - the cache editor (dataset.query, dataset.cadences, dataset.upgrade, library.rejected)

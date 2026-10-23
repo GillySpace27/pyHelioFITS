@@ -475,6 +475,10 @@ final class AppModel: ObservableObject {
     }
 
     private func openLink(_ url: URL) async {
+        if url.host == "dataset" {
+            await openDatasetLink(url)
+            return
+        }
         do {
             let link = try await core.call("query.from_url", ["url": .string(url.absoluteString)], as: LinkRequest.self)
             searchFields = QueryFields(query: link.query)
@@ -483,6 +487,53 @@ final class AppModel: ObservableObject {
             NSApp.activate(ignoringOtherApps: true)
         } catch {
             report(error)
+        }
+    }
+
+    /// heliad://dataset/<uid>?start=&end=: select that dataset, at that range when given.
+    /// The uid survives a reindex that renamed the dataset's key.
+    private func openDatasetLink(_ url: URL) async {
+        do {
+            let link = try await core.call("dataset.from_url", ["url": .string(url.absoluteString)], as: DatasetLink.self)
+            guard let dataset = link.dataset else {
+                alert = "This library has no dataset \(link.datasetUid)."
+                return
+            }
+            await refreshLibrary()  // the sidebar lists it under its current key
+            showFiles(dataset.datasetKey, start: link.start ?? "", end: link.end ?? "")
+            NSApp.activate(ignoringOtherApps: true)
+        } catch {
+            report(error)
+        }
+    }
+
+    /// Open HelioFITS Studio on a dataset: `open -a "HelioFITS Studio" --args -dataset <uid>
+    /// -start <iso> -end <iso>`. Studio is found by name; the developer launcher's name is
+    /// tried when the release app is not installed.
+    func openInStudio(_ dataset: Dataset, start: String?, end: String?) {
+        guard let uid = dataset.datasetUid else {
+            alert = "This core is too old to give datasets a stable id; update Heliad's core."
+            return
+        }
+        Task.detached {
+            var failure = ""
+            for app in StudioLaunch.appNames {
+                let p = Process()
+                p.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+                p.arguments = StudioLaunch.openArguments(app: app, datasetUid: uid, start: start, end: end)
+                let err = Pipe()
+                p.standardError = err
+                do {
+                    try p.run()
+                    p.waitUntilExit()
+                    if p.terminationStatus == 0 { return }
+                    failure = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+                } catch {
+                    failure = error.localizedDescription
+                }
+            }
+            let message = "Could not open HelioFITS Studio. \(failure.trimmingCharacters(in: .whitespacesAndNewlines))"
+            await MainActor.run { self.alert = message }
         }
     }
 
