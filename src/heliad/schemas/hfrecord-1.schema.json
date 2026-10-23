@@ -1,0 +1,591 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gilly.space/heliosoftware/spec/hfrecord-1.schema.json",
+  "title": "HelioFITS processing record, format 1.0",
+  "description": "Per-layer processing record for an export: sources by SHA-256, ordered steps with parameters, and the producer's own scene for a rebuild. It is the detailed companion of the suite provenance format (heliosoftware/spec/provenance.md): an export writes both, and this record never holds a path on the person's computer, a user name or a machine id. Readers ignore keys they do not know; writers only add keys within a major version (suite rule 5). An embedded copy describes the file as it was written; image editors may strip it. Only a sidecar's output.sha256 proves the pixels are the ones described.",
+  "type": "object",
+  "required": [
+    "hfrecord",
+    "reader_compat",
+    "record_id",
+    "created",
+    "producer",
+    "output",
+    "layers"
+  ],
+  "properties": {
+    "hfrecord": {
+      "description": "Format version, MAJOR.MINOR. A minor bump adds optional keys only. A major bump changes meaning; a reader refuses a record whose reader_compat is above its own.",
+      "type": "string",
+      "pattern": "^1\\.[0-9]+$"
+    },
+    "reader_compat": {
+      "description": "The oldest reader version that can read this record correctly. Same rule as Heliad's index reader_compat.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "record_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "created": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC, seconds precision."
+    },
+    "producer": {
+      "type": "object",
+      "required": [
+        "program",
+        "version"
+      ],
+      "properties": {
+        "program": {
+          "type": "string",
+          "examples": [
+            "HelioFITS Studio",
+            "punch-composite-studio"
+          ]
+        },
+        "version": {
+          "type": "string"
+        },
+        "build_id": {
+          "type": "string"
+        },
+        "commit": {
+          "type": "string"
+        },
+        "dirty": {
+          "type": "boolean",
+          "description": "True when the build had uncommitted changes; such a record cannot promise a rebuild."
+        },
+        "stamp": {
+          "type": "string",
+          "description": "Studio's AppInfo.stamp() line, verbatim."
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "required": [
+        "kind",
+        "media_type"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "still",
+            "movie",
+            "frame_series",
+            "exr_series",
+            "fits_data"
+          ]
+        },
+        "media_type": {
+          "type": "string",
+          "examples": [
+            "image/png",
+            "video/mp4",
+            "image/x-exr",
+            "application/fits"
+          ]
+        },
+        "file_name": {
+          "type": "string",
+          "description": "Base name of the export as written. Sidecars only."
+        },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "Of the export file. Present in a sidecar, null when the record is embedded in the file it describes."
+        },
+        "width": {
+          "type": "integer"
+        },
+        "height": {
+          "type": "integer"
+        },
+        "frames": {
+          "type": "integer"
+        },
+        "fps": {
+          "type": "number"
+        },
+        "codec": {
+          "type": "string"
+        },
+        "bit_depth": {
+          "type": "integer"
+        },
+        "colorspace": {
+          "type": "string"
+        },
+        "display_referred": {
+          "type": "boolean",
+          "description": "True when pixel values are rendered colours, not measured quantities."
+        }
+      }
+    },
+    "scene": {
+      "description": "Scene-wide geometry and timing, shared by every layer. Producer vocabulary kept as written; see the design note for the mapping.",
+      "type": "object",
+      "properties": {
+        "time": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "time_range": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "cadence": {},
+        "projection": {
+          "type": "string"
+        },
+        "viewpoint": {
+          "type": "object"
+        },
+        "camera_width": {},
+        "radial_transform": {
+          "type": "object"
+        },
+        "overlays": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "compare": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "Studio's Compare (HS-11) state when on: which layers, divider, palette."
+        }
+      }
+    },
+    "layers": {
+      "description": "Image layers in drawing order: index 0 is drawn first (bottom).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/layer"
+      }
+    },
+    "frame_map": {
+      "description": "Movies and series only: which source each layer showed in each output frame. Columnar to stay small.",
+      "type": "object",
+      "properties": {
+        "times": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "by_layer": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "description": "layer id -> per output frame, an index into that layer's sources, or null when the layer showed nothing."
+        }
+      }
+    },
+    "caveats": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "citations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "native_ref": {
+      "description": "Set instead of native when the same file already carries the producer's scene: 'png:tEXt:hfstudio', 'exr:attr:hfstudio' or 'mp4:comment'. Avoids writing the scene twice.",
+      "type": "string"
+    },
+    "native": {
+      "description": "The producer's own scene, verbatim and portable (home written as ~). This is what a rebuild loads; the normalized fields above are for people, agents and Heliad.",
+      "type": "object",
+      "properties": {
+        "studio_session": {
+          "type": "object",
+          "description": "Provenance.session() 'scene': the .jhv JSON."
+        },
+        "python_session": {
+          "type": "object",
+          "description": "The .studio session file's JSON plus the render params dict."
+        }
+      }
+    },
+    "summary": {
+      "type": "string",
+      "description": "Generated plain text for people: program, time, one line per layer (dataset, frame count, filter, colour table, caveat), citations. Readers show it first."
+    },
+    "provenance": {
+      "type": "object",
+      "description": "The suite provenance object (provenance.md fields: product, version, instrument, observed, credit, rhef, citation), repeated so one file holds both."
+    },
+    "heliad_view": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "The Heliad view or event the sources came from, when there was one.",
+      "properties": {
+        "view_uid": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "description": "When the scene was read.",
+      "properties": {
+        "taken": {
+          "enum": [
+            "export_start"
+          ]
+        },
+        "changed_during_export": {
+          "type": "boolean"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "layer": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "sources",
+        "steps"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Studio AbstractLayer id, or the Python layer name."
+        },
+        "name": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "dataset": {
+          "type": "object",
+          "description": "Heliad's dataset identity when the layer's files are in the library.",
+          "properties": {
+            "dataset_key": {
+              "type": "string",
+              "examples": [
+                "sdo/aia/-/-/1/193"
+              ]
+            },
+            "label": {
+              "type": "string"
+            },
+            "observatory": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "instrument": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "detector": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "product": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "level": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "wavelength": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "dataset_uid": {
+              "type": "string",
+              "description": "Heliad's permanent dataset id (survives reindex); absent for files outside the library."
+            }
+          }
+        },
+        "source_spec": {
+          "description": "How the layer asked for data: re-runnable when the sources themselves are missing.",
+          "type": "object",
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "heliad_library",
+                "fits_request",
+                "helioviewer_api",
+                "uri_list",
+                "local_files"
+              ]
+            },
+            "request": {
+              "type": "object",
+              "description": "FitsRequest.toJson() or APIRequest.toJson() verbatim."
+            }
+          }
+        },
+        "sources": {
+          "description": "Every file the layer read, in time order. sha256 is the identity; Heliad resolves it through files.sha256.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/source"
+          }
+        },
+        "source_count": {
+          "type": "integer",
+          "description": "Set when sources was shortened to fit an embedded container."
+        },
+        "source_set_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "SHA-256 of the layer's source sha256 values, sorted, joined by newline. Lets a shortened record still be matched to a full one."
+        },
+        "steps": {
+          "description": "Ordered operations from decoded file to the layer's contribution to the frame, user-set and automatic alike.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/step"
+          }
+        },
+        "native": {
+          "type": "object",
+          "description": "This layer's entry from the producer's scene, verbatim."
+        },
+        "acknowledgement": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The instrument team's required acknowledgement line for this dataset, when known."
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "date_obs": {
+          "type": "string"
+        },
+        "heliad_obs_key": {
+          "type": "string"
+        },
+        "file_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "original_name": {
+          "type": "string"
+        },
+        "size": {
+          "type": "integer"
+        },
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Archive address, never a local path."
+        },
+        "helioviewer": {
+          "type": "object",
+          "description": "For JPIP or API layers: server, sourceId, image id. No file hash exists for these."
+        },
+        "in_library": {
+          "type": "boolean",
+          "description": "Whether the writer found this hash in its Heliad library."
+        }
+      }
+    },
+    "step": {
+      "type": "object",
+      "required": [
+        "op",
+        "params"
+      ],
+      "properties": {
+        "op": {
+          "description": "Shared vocabulary. Unknown ops are shown verbatim by readers.",
+          "enum": [
+            "instrument_correction",
+            "select_plane",
+            "clip",
+            "stretch",
+            "image_filter",
+            "sequence_filter",
+            "levels",
+            "radial_gain",
+            "difference",
+            "sharpen",
+            "rhef_upsilon",
+            "colormap",
+            "channel_mask",
+            "geometric_mask",
+            "pointing",
+            "opacity_blend",
+            "radial_transform",
+            "reproject",
+            "feather"
+          ]
+        },
+        "stage": {
+          "enum": [
+            "decode",
+            "cpu",
+            "gpu",
+            "render"
+          ],
+          "description": "Where it runs, so a reader knows which steps share a buffer."
+        },
+        "algorithm": {
+          "type": "string",
+          "examples": [
+            "RHEF",
+            "MGN",
+            "WOW",
+            "Gamma"
+          ]
+        },
+        "implementation": {
+          "type": "string",
+          "examples": [
+            "hfstudio-java",
+            "hfstudio-glsl",
+            "sunkit-image"
+          ]
+        },
+        "automatic": {
+          "type": "boolean",
+          "description": "True when the program applied it without a user setting (for example LASCO EXPTIME division)."
+        },
+        "params": {
+          "type": "object",
+          "description": "Parameter names as the producer writes them (Studio: imageParams keys)."
+        },
+        "resolved": {
+          "type": "object",
+          "description": "Values the step derived from the data at export time, e.g. the percentile clip bounds actually used."
+        },
+        "units": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "citation": {
+          "type": "string"
+        },
+        "caveat": {
+          "type": "string"
+        },
+        "stamp": {
+          "type": "string",
+          "description": "An algorithm's own provenance line, e.g. RHEFStamp.line()."
+        },
+        "varies": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "Set when a parameter changed during a movie: names the parameters and points into native automation tracks. params then holds the value at the first frame.",
+          "properties": {
+            "params": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "automation": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Automation track ids in the native scene."
+            },
+            "changed_by_user": {
+              "type": "boolean"
+            }
+          }
+        },
+        "reference": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "For difference steps: the frame subtracted. kind running = previous frame, base = a fixed source index.",
+          "properties": {
+            "kind": {
+              "enum": [
+                "running",
+                "base",
+                "compare"
+              ]
+            },
+            "source_index": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "layer_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

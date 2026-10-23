@@ -203,7 +203,7 @@ def test_aspiics_products_are_separate_datasets(src):
                     {**base, "BTYPE": "Polarization angle"})
     a, b = fitsmeta.read(pb), fitsmeta.read(pa)
     assert a.obs_key != b.obs_key
-    assert a.label == "Proba-3 ASPIICS 5513 Å Polarized brightness L3"
+    assert a.label == "Proba-3 ASPIICS 551.3 nm Polarized brightness L3"
 
 
 def test_release_with_slightly_different_wavelength_is_a_new_version(lib, src):
@@ -218,6 +218,16 @@ def test_release_with_slightly_different_wavelength_is_a_new_version(lib, src):
     assert "wavelength_snapped" in [f.code for f in r.findings]
     assert lib.ingest(fe).status == "added"  # a different line is a different dataset
     assert sorted(d["wavelength"] for d in lib.datasets()) == [5303, 5508]
+
+
+def test_wavelength_unit_spelled_out_is_converted(src):
+    """PUNCH writes WAVEUNIT = 'nanometer'; the unit used to be unknown and 530 was read as 530 Å."""
+    f = write_fits(src / "PUNCH_L3_CAM_20250921203200_v0l.fits",
+                   {**punch_header(), "WAVELNTH": 530, "WAVEUNIT": "nanometer"})
+    meta = fitsmeta.read(f)
+    assert meta.wavelength == 5300.0
+    assert "530 nm" in meta.label
+    assert fitsmeta.RULES_VERSION >= 5  # keys built at 530 are stale until `heliad reindex`
 
 
 def test_level_is_the_level_token_when_the_keyword_carries_more():

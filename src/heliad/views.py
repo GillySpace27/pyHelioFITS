@@ -16,6 +16,7 @@ import stat
 import sys
 from pathlib import Path
 
+from . import db
 from .library import Library, now, protect, time_bound
 
 MARKER = ".heliad-view"
@@ -39,8 +40,8 @@ def create(lib: Library, name: str, *, description: str | None = None,
         try:
             row = conn.execute("SELECT id FROM views WHERE name = ?", (name,)).fetchone()
             view_id = row["id"] if row else conn.execute(
-                "INSERT INTO views(name, description, created_at) VALUES (?, ?, ?)",
-                (name, description, now()),
+                "INSERT INTO views(name, description, created_at, view_uid) VALUES (?, ?, ?, ?)",
+                (name, description, now(), db.new_uid()),
             ).lastrowid
             ids = list(observation_ids or [])
             if dataset_keys or start or end:
@@ -74,7 +75,7 @@ def create(lib: Library, name: str, *, description: str | None = None,
 def list_views(lib: Library) -> list[dict]:
     """Every view with its size and span, and where its folder of links is (or would be)."""
     rows = lib.reader.execute(
-        "SELECT v.id AS view_id, v.name, v.kind, v.description, v.created_at, "
+        "SELECT v.id AS view_id, v.view_uid, v.name, v.kind, v.description, v.created_at, "
         "COUNT(c.file_id) AS observations, COUNT(DISTINCT c.dataset_key) AS datasets, "
         "COALESCE(SUM(c.size), 0) AS bytes, MIN(c.date_obs) AS first, MAX(c.date_obs) AS last "
         "FROM views v LEFT JOIN view_members m ON m.view_id = v.id "

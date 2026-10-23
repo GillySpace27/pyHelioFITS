@@ -18,6 +18,12 @@ struct FilesFilter: Equatable {
     let end: String
 }
 
+/// An exported file (or its .hfrec.json sidecar) whose processing record the inspector shows.
+struct RecordFile: Identifiable, Equatable {
+    let url: URL
+    var id: String { url.path }
+}
+
 /// What the window shows, kept in step with the core.
 @MainActor
 final class AppModel: ObservableObject {
@@ -42,6 +48,8 @@ final class AppModel: ObservableObject {
     @Published var alert: String?
     /// Bumped whenever files may have changed, so open file lists reload.
     @Published var libraryGeneration = 0
+    /// The file whose processing record is open in the Record inspector.
+    @Published var recordFile: RecordFile?
 
     let core = CoreClient()
     private(set) var launch: CoreClient.Launch?
@@ -464,9 +472,74 @@ final class AppModel: ObservableObject {
                                        forType: .string)
     }
 
+    // MARK: - processing records
+
+    /// HelioFITS Studio's bundle id (release/deploy_release.sh in the Studio repository).
+    static let studioBundleID = "space.gilly.hfstudio"
+
+    /// Show the Record inspector for an exported file or a sidecar.
+    func openRecord(_ url: URL) {
+        recordFile = RecordFile(url: url)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// File > Open Processing Record: pick an export (PNG, EXR, movie, FITS) or a .hfrec.json.
+    func chooseRecord() {
+        let panel = NSOpenPanel()
+        panel.title = "Open Processing Record"
+        panel.message = "Choose an exported image or movie, or its .hfrec.json record."
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        if panel.runModal() == .OK, let url = panel.url { openRecord(url) }
+    }
+
+    func readRecord(_ url: URL) async throws -> RecordRead {
+        try await core.call("record.read", ["path": .string(url.path)], as: RecordRead.self)
+    }
+
+    func resolveRecord(_ record: JSONValue) async throws -> RecordResolution {
+        try await core.call("record.resolve", ["record": record], as: RecordResolution.self)
+    }
+
+    /// Run the fetch record.resolve planned for one dataset's missing sources (dataset.upgrade or
+    /// download.enqueue), then show Downloads.
+    func fetchMissing(_ group: RecordResolution.MissingGroup) async {
+        guard let fetch = group.fetch else { return }
+        do {
+            _ = try await core.callRaw(fetch.method, fetch.params)
+            await refreshJobs()
+            selection = .downloads
+        } catch {
+            report(error)
+        }
+    }
+
+    /// Launch HelioFITS Studio on a layer's dataset and time span. The -dataset, -start and -end
+    /// options are being added to Studio separately; a Studio without them ignores or refuses
+    /// them. macOS passes arguments only when Studio is not already running.
+    func openInStudio(_ launch: StudioLaunch) {
+        guard let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: Self.studioBundleID) else {
+            alert = "HelioFITS Studio is not installed (no application with bundle id \(Self.studioBundleID))."
+            return
+        }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.arguments = launch.args
+        configuration.activates = true
+        NSWorkspace.shared.openApplication(at: app, configuration: configuration) { [weak self] _, error in
+            guard let error else { return }
+            let text = "HelioFITS Studio did not open: \(error.localizedDescription)"
+            Task { @MainActor in self?.alert = text }
+        }
+    }
+
     // MARK: - heliad:// links
 
     func open(_ url: URL) {
+        if url.isFileURL {  // a file handed to the app: show its processing record
+            openRecord(url)
+            return
+        }
         guard coreState == .ready else {
             pendingLinks.append(url)
             return
@@ -475,11 +548,32 @@ final class AppModel: ObservableObject {
     }
 
     private func openLink(_ url: URL) async {
+        if url.host == "dataset" {
+            await openDatasetLink(url)
+            return
+        }
         do {
             let link = try await core.call("query.from_url", ["url": .string(url.absoluteString)], as: LinkRequest.self)
             searchFields = QueryFields(query: link.query)
             linkAskedToDownload = link.action == "get"
             selection = .search
+            NSApp.activate(ignoringOtherApps: true)
+        } catch {
+            report(error)
+        }
+    }
+
+    /// heliad://dataset/<uid>?start=&end=: select that dataset, at that range when given.
+    /// The uid survives a reindex that renamed the dataset's key.
+    private func openDatasetLink(_ url: URL) async {
+        do {
+            let link = try await core.call("dataset.from_url", ["url": .string(url.absoluteString)], as: DatasetLink.self)
+            guard let dataset = link.dataset else {
+                alert = "This library has no dataset \(link.datasetUid)."
+                return
+            }
+            await refreshLibrary()  // the sidebar lists it under its current key
+            showFiles(dataset.datasetKey, start: link.start ?? "", end: link.end ?? "")
             NSApp.activate(ignoringOtherApps: true)
         } catch {
             report(error)

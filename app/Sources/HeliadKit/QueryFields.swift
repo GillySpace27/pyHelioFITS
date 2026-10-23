@@ -48,11 +48,14 @@ public struct QueryFields: Equatable, Sendable {
            Self.sortable(e) <= Self.sortable(s) {
             throw Problem.endBeforeStart
         }
-        for (key, name, value) in [("wavelength", "Wavelength", wavelength), ("sample_s", "Cadence", sample)] {
-            let t = trimmed(value)
-            if t.isEmpty { continue }
-            guard let number = Double(t) else { throw Problem.badNumber(name) }
-            out[key] = .double(number)
+        if !trimmed(wavelength).isEmpty {
+            // Typed as "193", "193 Å" or "530 nm"; the core takes angstrom.
+            guard let number = Wavelength.angstrom(from: wavelength) else { throw Problem.badNumber("Wavelength") }
+            out["wavelength"] = .double(number)
+        }
+        if !trimmed(sample).isEmpty {
+            guard let number = Double(trimmed(sample)) else { throw Problem.badNumber("Cadence") }
+            out["sample_s"] = .double(number)
         }
         let texts = [("instrument", instrument), ("source", source), ("provider", provider),
                      ("detector", detector), ("level", level), ("physobs", physobs),

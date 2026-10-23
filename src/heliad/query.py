@@ -113,3 +113,30 @@ def _plain(value) -> str:
     if isinstance(value, float) and value.is_integer():
         return str(int(value))
     return str(value)
+
+
+def dataset_link(dataset_uid: str, start: str | None = None, end: str | None = None) -> str:
+    """A heliad:// link to one dataset over a time range, stable across reindexing:
+    heliad://dataset/<dataset_uid>?start=2025-09-21T16:00:00&end=2025-09-21T17:00:00"""
+    params = [(k, v) for k, v in (("start", start), ("end", end)) if v]
+    tail = f"?{urlencode(params)}" if params else ""
+    return f"{URL_SCHEME}://dataset/{dataset_uid}{tail}"
+
+
+def parse_dataset_link(url: str) -> dict:
+    """{dataset_uid, start, end} from a heliad://dataset/<uid> link (start and end may be
+    None). Unknown parameters are refused, as Query.from_url refuses them."""
+    parts = urlsplit(url)
+    if parts.scheme != URL_SCHEME or parts.netloc != "dataset":
+        raise ValueError(f"not a {URL_SCHEME}://dataset/ link: {url!r}")
+    uid = parts.path.strip("/")
+    if not uid or "/" in uid:
+        raise ValueError(f"a {URL_SCHEME}://dataset/ link needs one dataset uid: {url!r}")
+    out: dict = {"dataset_uid": uid, "start": None, "end": None}
+    for key, value in parse_qsl(parts.query, keep_blank_values=False, strict_parsing=False):
+        if key not in ("start", "end"):
+            raise ValueError(f"unknown dataset link parameter {key!r}")
+        if out[key] is not None:
+            raise ValueError(f"{key!r} given twice")
+        out[key] = value
+    return out

@@ -41,6 +41,17 @@ struct FilesView: View {
         .navigationSubtitle("\(dataset.observations) observations · \(Format.span(dataset.first, dataset.last)) UTC")
         .toolbar {
             ToolbarItemGroup {
+                Button {
+                    if let launch = StudioLaunch.forDataset(dataset, start: start, end: end) {
+                        model.openInStudio(launch)
+                    } else {
+                        model.alert = dataset.datasetUid == nil
+                            ? "This core is too old to give datasets a stable id; update Heliad."
+                            : "From and To must be UTC times like 2025-09-21T16:00:00."
+                    }
+                } label: { Label("Open in Studio", systemImage: "sun.max") }
+                    .disabled(dataset.datasetUid == nil)
+                    .help("Open this dataset in HelioFITS Studio over the range shown")
                 Button { upgrading = true } label: { Label("Upgrade", systemImage: "arrow.up.circle") }
                     .help("Check the archive's cadence, fetch missing frames, and review frames set aside")
                 Toggle(isOn: $showViewer) { Label("Frame Viewer", systemImage: "play.rectangle") }

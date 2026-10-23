@@ -20,6 +20,12 @@ What it shows:
 - **Events**: a named range of chosen datasets (`view.create`), with its folder of links
   beside the library (`views/<name>`, `view.materialize`). The index is the event of record.
 - **Downloads**: jobs, their progress, cancel and retry.
+- **Record inspector** (File > Open Processing Record, or drop an exported file on the
+  window): what made a Studio export, from its processing record (`record.read`): the summary,
+  the layers top to bottom with their steps in order, each source's place in the library
+  (`record.resolve`), Fetch Missing Sources, the citations to copy, and Open in Studio, which
+  launches Studio with `-dataset ID -start ISO -end ISO` (options being added to Studio; macOS
+  passes them only when Studio is not already running).
 
     swift build                 # debug build
     swift test                  # HeliadKit tests; set HELIAD_CORE and HELIAD_TEST_LIBRARY
