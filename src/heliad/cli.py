@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 
 from . import config, jobs, views
@@ -142,6 +143,12 @@ def main(argv: list[str] | None = None) -> int:
 def _serve(ns) -> int:
     from . import share
     from .rpc import Server
+    if os.name == "nt":
+        # JSON-RPC lines are UTF-8 on every platform; Windows pipes default to the
+        # locale's code page, which would misread a client's non-ASCII text.
+        for stream in (sys.stdin, sys.stdout):
+            if hasattr(stream, "reconfigure"):
+                stream.reconfigure(encoding="utf-8")
     try:
         lib = Library.open(ns.library)
     except LibraryLocked:

@@ -3,6 +3,7 @@
 
 import inspect
 import io
+import os
 import re
 import subprocess
 import sys
@@ -13,7 +14,7 @@ import pytest
 from heliad import coverage, rpc, views
 from heliad.rpc import API, NOTIFICATIONS, Server
 
-DOCS = (Path(__file__).resolve().parents[1] / "docs" / "api.md").read_text()
+DOCS = (Path(__file__).resolve().parents[1] / "docs" / "api.md").read_text(encoding="utf-8")
 SRC = Path(__file__).resolve().parents[1] / "src"
 # Methods that pass **kw through, and the function whose params they really take (after lib).
 PASSED_THROUGH = {"library.coverage": coverage.library, "view.create": views.create}
@@ -60,14 +61,19 @@ def test_every_method_and_notification_has_a_docs_section_naming_its_params():
 def test_every_notification_the_core_sends_is_listed():
     sent = set()
     for path in SRC.joinpath("heliad").rglob("*.py"):
-        sent |= set(re.findall(r'notify\("([a-z_.]+)"', path.read_text()))
+        sent |= set(re.findall(r'notify\("([a-z_.]+)"', path.read_text(encoding="utf-8")))
     assert sent == set(NOTIFICATIONS)
+
+
+# No PATH, so nothing outside Python is found. Windows Python cannot start without SYSTEMROOT.
+_BARE_ENV = {"PYTHONPATH": str(SRC), "PATH": "",
+             **{k: os.environ[k] for k in ("SYSTEMROOT",) if k in os.environ}}
 
 
 def test_heliad_api_prints_every_method():
     run = lambda *a: subprocess.run([sys.executable, "-m", "heliad", "api", *a],  # noqa: E731
                                     capture_output=True, text=True,
-                                    env={"PYTHONPATH": str(SRC), "PATH": ""})
+                                    env=_BARE_ENV)
     listing = run()
     assert listing.returncode == 0
     for name in [*API, *NOTIFICATIONS]:
@@ -81,7 +87,7 @@ def test_heliad_api_prints_every_method():
 
 def test_help_points_at_the_api():
     out = subprocess.run([sys.executable, "-m", "heliad", "--help"], capture_output=True, text=True,
-                         env={"PYTHONPATH": str(SRC), "PATH": ""}).stdout
+                         env=_BARE_ENV).stdout
     assert "heliad api" in out and "docs/api.md" in out
 
 
