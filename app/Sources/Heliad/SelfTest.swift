@@ -41,6 +41,12 @@ enum SelfTest {
         }
         if let first = model.datasets.first {
             note("dataset", "\(first.label) (\(first.observations) observations)")
+            if let q = try? await model.datasetQuery(first.datasetKey) {
+                note("upgrade", "\(q.inferred ? "inferred" : "stored") query through \(q.source)")
+            } else {
+                note("upgrade", "no query")
+            }
+            note("rejected", "\((try? await model.rejected(first.datasetKey))?.count ?? -1) set aside")
             model.selection = .dataset(first.datasetKey)
             do {
                 let files = try await model.files(dataset: first.datasetKey, start: nil, end: nil, offset: 0, limit: 5)
@@ -49,6 +55,7 @@ enum SelfTest {
                     let started = Date()
                     let image = await model.thumbnail(for: file)
                     note("thumbnail", image.map { "\(Int($0.size.width))x\(Int($0.size.height)) in \(String(format: "%.1f", Date().timeIntervalSince(started))) s" } ?? "failed")
+                    note("renderer", model.lastThumbnailSource)
                 }
             } catch {
                 note("files", "error: \(error.localizedDescription)")

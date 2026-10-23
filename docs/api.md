@@ -7,7 +7,7 @@ one entry; this page is the full reference.
 
 If you only need to read a library, you do not need the API: open the index read-only as
 [the reader contract](reader-contract.md) describes. Anything that changes the library (ingest,
-download, delete, views, reindex) goes through a core, because the core is the library's only
+download, delete, reject, views, reindex) goes through a core, because the core is the library's only
 writer.
 
 - [Talking to a core](#talking-to-a-core)
@@ -16,6 +16,7 @@ writer.
 - [Library methods](#library-methods)
 - [Ingest methods](#ingest-methods)
 - [Download and search methods](#download-and-search-methods)
+- [Cache editor methods](#cache-editor-methods)
 - [View methods](#view-methods)
 - [Settings methods](#settings-methods)
 - [Notifications](#notifications)
@@ -37,11 +38,12 @@ request per line to its stdin:
 
 and read one line per reply from its stdout:
 
-    {"jsonrpc":"2.0","id":1,"result":{"library_root":"/Users/you/HeliadLibrary","schema_version":3,"rules_version":3,"reindex_due":false,"datasets":2,"observations":2,"files":3,"bytes":17280,"warnings":0,"collisions":0}}
+    {"jsonrpc":"2.0","id":1,"result":{"library_root":"/Users/you/HeliadLibrary","schema_version":4,"rules_version":3,"reindex_due":false,"datasets":2,"observations":2,"files":3,"bytes":17280,"warnings":0,"collisions":0}}
 
 - **Params are named**: `"params": {"file_id": 1}`. Leave `params` out for a method that takes none.
-- **Match replies by `id`.** Most methods answer in order. `search` and `library.thumbnail` run in
-  the background and answer when done, so their replies can overtake others.
+- **Match replies by `id`.** Most methods answer in order. `search`, `library.thumbnail` and
+  `dataset.cadences` run in the background and answer when done, so their replies can overtake
+  others.
 - **Notifications** are lines with a `method` and no `id` (download and ingest progress). Ignore
   the ones you do not need.
 - **Ending**: close the core's stdin. It answers what it was already asked, then exits.
@@ -115,7 +117,7 @@ The same fields, URL-encoded, make a `heliad://search?...` or `heliad://get?...`
 Params: none. Versions, the library, and every method this core answers. Call it first to check
 that the core is new enough.
 
-    {"name": "heliad", "version": "0.0.1", "schema_version": 3, "reader_compat": 1, "rules_version": 3,
+    {"name": "heliad", "version": "0.0.1", "schema_version": 4, "reader_compat": 1, "rules_version": 3,
      "reindex_due": false, "readonly": false, "library_root": ".../library",
      "db_path": ".../library/heliad.sqlite", "methods": ["download.cancel", "download.enqueue", ...]}
 
@@ -124,7 +126,7 @@ that the core is new enough.
 Params: none. Counts for the whole library. `reindex_due` is true when the rules that turn
 headers into datasets changed since the files were indexed (see `library.reindex`).
 
-    {"library_root": ".../library", "schema_version": 3, "rules_version": 3, "reindex_due": false,
+    {"library_root": ".../library", "schema_version": 4, "rules_version": 3, "reindex_due": false,
      "datasets": 2, "observations": 2, "files": 3, "bytes": 17280, "warnings": 0, "collisions": 0}
 
 ### `library.datasets`
@@ -137,9 +139,12 @@ Params: none. Every dataset (one instrument, channel, product and level), ordere
 
 ### `library.files`
 
-Params: `dataset_key=None, start=None, end=None, limit=500, offset=0`. The current file of each
-observation (its newest version), in time order, optionally one dataset and a time range. Page
-with `limit` and `offset`. `relpath` is relative to the library root.
+Params: `dataset_key=None, start=None, end=None, limit=500, offset=0, include_rejected=False`. The
+current file of each observation (its newest version), in time order, optionally one dataset and
+a time range. Page with `limit` and `offset`. `relpath` is relative to the library root. Rejected
+observations (see [`library.reject`](#libraryreject)) are left out, as they are from
+`current_files`, `library.coverage` and views; with `include_rejected` true they are listed too, and
+every row carries `rejected`: the reason, or null.
 
     [{"file_id": 1, "relpath": "store/sdo/aia/1/193/2025/09/21/a.fits", "sha256": "0610e5...", "size": 5760,
       "version": null, "observation_id": 1, "date_obs": "2025-09-21T16:00:04.840", "dataset_id": 1,
@@ -255,7 +260,9 @@ Params: `query, source='fido'`. Queues a download of everything the query finds.
 ### `download.list`
 
 Params: `status=None, limit=50`. Jobs, newest first, optionally only one status (`queued`,
-`active`, `done`, `partial`, `failed`, `cancelled`). A finished job's `result` says what happened:
+`active`, `done`, `partial`, `failed`, `cancelled`). `options` is null for a plain download, and
+holds what `dataset.upgrade` or `library.refetch` queued the job with. A finished job's `result`
+says what happened (`skipped` counts the records an upgrade left out because the library has them):
 
     [{"job_id": 1, "status": "done", "files_total": 1, "files_done": 1, ...,
       "result": {"found": 1, "fetched": 1, "stored": 1, "errors": [], "ingest": {"added": 1}}}]
@@ -296,6 +303,105 @@ Params: `url`. The action and query in a `heliad://` link. Unknown parameters ar
     query.from_url(url="heliad://search?start=2025-09-21T16:00:00&end=2025-09-21T17:00:00&instrument=AIA&wavelength=193")
     {"action": "search", "query": {"end": "2025-09-21T17:00:00", "instrument": "AIA",
                                    "start": "2025-09-21T16:00:00", "wavelength": 193.0}}
+
+## Cache editor methods
+
+The Heliad app's cache editor works on a library HelioFITS Studio filled: it sets bad frames
+aside, asks the archive again for one frame, and densifies a dataset by fetching only the frames
+it lacks.
+
+Two times are **one frame** when they lie within the tolerance: half the spacing, clamped to
+1 s to 60 s. The spacing is the dataset's median spacing between observations, or the target
+cadence when that is denser (`sample_s` for `dataset.upgrade`, the archive's median spacing for
+`dataset.cadences`), so densifying 24 s to 12 s does not mistake the new frames for the old. A
+dataset with fewer than two observations gets 60 s. A rejected observation counts as a frame the
+library has, so an upgrade never fetches it again.
+
+### `library.reject`
+
+Params: `observation_ids, reason`. Sets observations aside: `current_files` (what Studio reads),
+`library.files`, `library.coverage` and views stop showing them, and views holding them are
+rebuilt. Nothing is deleted; `library.unreject` brings them back. `reason` is required.
+Rejecting one already rejected replaces its reason.
+
+    {"rejected": 1, "observation_ids": [2], "views_rebuilt": []}
+
+### `library.unreject`
+
+Params: `observation_ids`. Serves rejected observations to readers again.
+
+    {"unrejected": 1, "observation_ids": [2], "views_rebuilt": []}
+
+### `library.rejected`
+
+Params: `dataset_key=None`. Rejected observations, in time order, with the reason, when, and the
+current file.
+
+    [{"observation_id": 2, "dataset_key": "sdo/aia/-/-/1/193", "label": "SDO AIA 193 Å L1",
+      "date_obs": "2025-09-21T16:00:24.840", "reason": "smeared by a flare",
+      "rejected_at": "2026-10-21T00:14:26+00:00", "file_id": 2,
+      "relpath": "store/sdo/aia/1/193/2025/09/21/aia1.fits"}]
+
+### `library.refetch`
+
+Params: `observation_id`. Queues a job for the dataset's query (see `dataset.query`) narrowed to
+the observation's time plus or minus the tolerance, at full cadence. A newer version (a higher
+FILEVRSN) that arrives becomes current; an identical file is a `duplicate`. Returns the job, as
+`download.get` does.
+
+    {"job_id": 2, "source": "fido", "status": "queued", ...,
+     "query": {"end": "2025-09-21T16:00:54.840", "instrument": "AIA", "level": "1", "source": "SDO",
+               "start": "2025-09-21T16:00:42.840", "wavelength": 193.0},
+     "result": null, "options": {"missing_only": false, "observation_id": 3}}
+
+### `dataset.query`
+
+Params: `dataset_key`. The query that asks the archive again for a dataset, with every field (one
+that could not be read is null). The newest archive query stored with the dataset's files is
+preferred, widened to the dataset's first and last observation. A dataset that was imported
+rather than downloaded has one inferred from its row (instrument, wavelength, detector, level,
+the observatory as `source` when sunpy has a Source of that name) and `sample_s` from the median
+spacing of its observations; `inferred` is then true. `basis` says where it came from.
+
+    {"query": {"start": "2025-09-21T16:00:00.840", "end": "2025-09-21T16:01:12.840", "instrument": "AIA",
+               "wavelength": 193.0, "wavelength_max": null, "source": "SDO", "provider": null,
+               "detector": null, "level": "1", "physobs": null, "sample_s": 24.0, "jsoc_series": null,
+               "extra": {}},
+     "source": "fido", "inferred": true,
+     "basis": "inferred from the dataset (instrument, wavelength, detector and level as its headers give them), its span, and the median spacing of its observations"}
+
+### `dataset.cadences`
+
+Params: `dataset_key, start=None, end=None`. Searches the archive over the dataset's query at full
+cadence (without `sample_s`), by default over the dataset's span, and compares: `library` counts
+the dataset's observations in the range (`rejected` of them set aside), `archive` the distinct
+record times the search found, each with its median spacing in seconds. `missing` lists the
+archive's times with no observation within `tolerance_s`. Downloads nothing; answers in the
+background.
+
+    {"dataset_key": "sdo/aia/-/-/1/193", "query": {..., "sample_s": null, ...}, "source": "fido",
+     "tolerance_s": 6.0,
+     "library": {"count": 4, "median_spacing_s": 24.0, "rejected": 1},
+     "archive": {"count": 6, "median_spacing_s": 12.0},
+     "missing": ["2025-09-21T16:00:12.000", "2025-09-21T16:00:36.000", "2025-09-21T16:01:00.000"]}
+
+### `dataset.upgrade`
+
+Params: `dataset_key, sample_s=None, start=None, end=None, dry_run=True`. Queues a job for the
+dataset's query that fetches only the frames the dataset lacks; `sample_s`, `start` and `end`
+replace the query's own (`sample_s` 12 on a 24 s dataset doubles its cadence). **A dry run unless
+`dry_run` is false**: it returns the query and the job's options and queues nothing.
+
+    {"dry_run": true, "query": {..., "sample_s": 12, ...}, "source": "fido",
+     "options": {"dataset_key": "sdo/aia/-/-/1/193", "missing_only": true, "tolerance_s": 6.0},
+     "inferred": true, "basis": "..."}
+
+Otherwise the queued job, as `download.get` returns it. When it ends, its `result` counts what it
+`skipped`:
+
+    {"job_id": 1, "status": "done", ..., "result": {"found": 3, "fetched": 3, "stored": 3, "errors": [],
+     "ingest": {"added": 3}, "skipped": 3},
+     "options": {"dataset_key": "sdo/aia/-/-/1/193", "missing_only": true, "tolerance_s": 6.0}}
 
 ## View methods
 

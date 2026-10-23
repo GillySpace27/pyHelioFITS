@@ -18,7 +18,9 @@ from astropy.time import Time
 # Bump whenever a change here can move a file to a different dataset or
 # observation. The index records the version its keys were built with, and
 # `heliad reindex` rebuilds them when the two differ.
-RULES_VERSION = 4
+# 4: a LEVEL keyword with more in it keeps only its trailing level (SUVI)
+# 5: WAVEUNIT spelled out ('nanometer', PUNCH) is converted, so PUNCH keys move /530 -> /5300
+RULES_VERSION = 5
 
 # Keywords copied into the index for every file, so readers can filter and
 # display without opening the FITS file.
@@ -37,6 +39,7 @@ _WAVE_TO_ANGSTROM = {
     "um": 1e4, "micron": 1e4, "micrometer": 1e4, "m": 1e10,
 }
 _VERSION_IN_NAME = re.compile(r"[_-]v(\d+[a-z]?|[a-z]{1,2}\d*|\d+(?:\.\d+)+)\.(?:fits|fts|fit)(?:\.gz)?$", re.I)
+_LEVEL_AT_END = re.compile(r"(?:^|\s)L(?:EVEL|EV|VL)?\s*([0-9][0-9A-Z.]*)$", re.I)
 _LEVEL_IN_NAME = re.compile(r"(?:^|[_.-])l(?:ev)?([0-9](?:\.[0-9])?)(?:[_.-]|$)", re.I)
 _PUNCH_NAME = re.compile(r"^PUNCH_L(\w)_([A-Z0-9]{3})", re.I)
 _AIA_CAMERA = re.compile(r"^AIA_\d$", re.I)
@@ -193,7 +196,10 @@ def _level(header: fits.Header, name: str) -> str | None:
                 number = float(text)
                 return f"{number:g}"
             except ValueError:
-                return text.upper().lstrip("L")
+                # A keyword that says more than the level ends with it: SUVI writes
+                # 'National Aeronautics and Space Administration (NASA) L1b'.
+                token = _LEVEL_AT_END.search(text)
+                return token.group(1).upper() if token else text.upper().lstrip("L")
     match = _LEVEL_IN_NAME.search(name)
     return match.group(1) if match else None
 

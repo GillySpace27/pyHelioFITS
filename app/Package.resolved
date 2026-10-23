@@ -1,0 +1,15 @@
+{
+  "originHash" : "fc244d3c9823c70ac826f63eee019375af3c37f6fc22bd03a961b88c9ed919a7",
+  "pins" : [
+    {
+      "identity" : "heliofits-peek",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/GillySpace27/HelioFITS-Peek.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "2b0c5e340e8000b87a0f283bff9fc19aecf9b135"
+      }
+    }
+  ],
+  "version" : 3
+}

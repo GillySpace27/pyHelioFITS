@@ -12,6 +12,11 @@ A job ends done (every file found was stored), partial (some were), failed
 phase boundary: a fetch already running finishes its files first, then
 nothing from it is ingested. Retrying a partial or failed job runs it again;
 files it already stored are put back in staging first, so Fido skips them.
+
+A job can carry options (stored as JSON beside it). With missing_only, the
+source is handed skip(time), true when the dataset in options already has an
+observation within options' tolerance_s of that time (rejected ones count), so
+an upgrade fetches only the frames the library lacks (see upgrade.py).
 """
 
 from __future__ import annotations
@@ -23,7 +28,7 @@ import threading
 from pathlib import Path
 from typing import Callable
 
-from . import config, fitsmeta, sources
+from . import config, fitsmeta, sources, upgrade
 from .library import Library, is_fits, now
 from .query import Query
 
@@ -55,7 +60,7 @@ class JobRunner:
 
     # ---- queue -------------------------------------------------------------
 
-    def enqueue(self, query: Query, source: str = "fido") -> dict:
+    def enqueue(self, query: Query, source: str = "fido", options: dict | None = None) -> dict:
         if source not in sources.SOURCES and source not in self._modules:
             raise KeyError(f"unknown source {source!r}")
         lib = self.lib
@@ -64,8 +69,10 @@ class JobRunner:
             try:
                 qid = lib._query_id(query, source)
                 job_id = lib.conn.execute(
-                    "INSERT INTO jobs(source, query_id, status, created_at, updated_at) "
-                    "VALUES (?, ?, 'queued', ?, ?)", (source, qid, now(), now())).lastrowid
+                    "INSERT INTO jobs(source, query_id, status, created_at, updated_at, options_json) "
+                    "VALUES (?, ?, 'queued', ?, ?, ?)",
+                    (source, qid, now(), now(), json.dumps(options, sort_keys=True) if options else None),
+                ).lastrowid
                 lib.conn.execute("COMMIT")
             except BaseException:
                 lib.conn.execute("ROLLBACK")
@@ -168,6 +175,7 @@ class JobRunner:
         if not claimed:  # cancelled between being picked and starting
             return
         query = Query.from_json(job["query_json"])
+        options = json.loads(job["options_json"]) if job["options_json"] else {}
         staging = lib.cfg.staging_dir / f"job-{job_id}"
         staging.mkdir(parents=True, exist_ok=True)
         _drop_incomplete(staging)
@@ -187,8 +195,13 @@ class JobRunner:
                                               "done": done, "total": total})
 
         try:
+            extra = {}
+            if options.get("missing_only") and options.get("dataset_key"):
+                with lib._write_lock:
+                    extra["skip"] = upgrade.skip_function(lib.conn, options["dataset_key"],
+                                                          float(options.get("tolerance_s") or 0))
             fetched = self._source(job["source"]).fetch(
-                query, staging, settings=config.load_settings(), phase=phase)
+                query, staging, settings=config.load_settings(), phase=phase, **extra)
             paths = [Path(p) for p in fetched["paths"]]
             found = fetched.get("found")
             if found is not None:
@@ -205,8 +218,9 @@ class JobRunner:
             status, error = outcome(found, stored, errors, counts)
             result = {"found": found, "fetched": len(paths), "stored": stored,
                       "errors": errors, "ingest": counts}
-            if "attempts" in fetched:
-                result["attempts"] = fetched["attempts"]
+            for key in ("attempts", "skipped"):
+                if key in fetched:
+                    result[key] = fetched[key]
             self._update(job_id, status=status, phase=None, files_done=stored, error=error,
                          result_json=json.dumps(result))
             if status == "done" or not any(staging.iterdir()):
@@ -302,8 +316,10 @@ def list_jobs(lib: Library, *, status: str | None = None, job_id: int | None = N
     conn = conn or lib.reader
     if not conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'jobs'").fetchone():
         return []
+    options = "j.options_json" if any(
+        r[1] == "options_json" for r in conn.execute("PRAGMA table_info(jobs)")) else "NULL"
     sql = ("SELECT j.id AS job_id, j.source, j.status, j.phase, j.files_total, j.files_done, "
-           "j.result_json, j.error, j.created_at, j.updated_at, q.query_json "
+           f"j.result_json, j.error, j.created_at, j.updated_at, q.query_json, {options} AS options_json "
            "FROM jobs j JOIN queries q ON q.id = j.query_id WHERE 1 = 1")
     args: list = []
     if status:
@@ -319,5 +335,7 @@ def list_jobs(lib: Library, *, status: str | None = None, job_id: int | None = N
         d["query"] = json.loads(d.pop("query_json"))
         result = d.pop("result_json")
         d["result"] = json.loads(result) if result else None
+        opts = d.pop("options_json")
+        d["options"] = json.loads(opts) if opts else None
         out.append(d)
     return out

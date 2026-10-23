@@ -19,8 +19,8 @@ class ErrorSource(FakeSource):
         super().__init__(src, files)
         self.found, self.errors = found, list(errors)
 
-    def fetch(self, query, staging, *, settings, phase):
-        out = super().fetch(query, staging, settings=settings, phase=phase)
+    def fetch(self, query, staging, *, settings, phase, skip=None):
+        out = super().fetch(query, staging, settings=settings, phase=phase, skip=skip)
         self.seen = sorted(p.name for p in staging.iterdir())
         return {**out, "found": self.found, "errors": list(self.errors)}
 
@@ -99,7 +99,7 @@ def test_schema_2_library_with_jobs_migrates_to_3(tmp_path):
                  "VALUES (1, '{}', 'failed', 't', 1)")
     conn.close()
     conn = db.connect_writer(path)
-    assert db.schema_version(conn) == 3
+    assert db.schema_version(conn) == db.SCHEMA_VERSION
     assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     assert conn.execute("SELECT status FROM jobs").fetchone()[0] == "done"
     conn.execute("UPDATE jobs SET status = 'partial'")

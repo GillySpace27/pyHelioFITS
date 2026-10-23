@@ -16,6 +16,8 @@ struct FilesView: View {
     @State var end = ""
     @State var selection: Set<Int> = []
     @State var deleting: [LibraryFile]?
+    @State var rejecting: [LibraryFile]?
+    @State var upgrading = false
     @State var sortOrder = [KeyPathComparator(\LibraryFile.dateObs)]
     @AppStorage("filesLayout") var layout = "grid"
     @AppStorage("showFrameViewer") var showViewer = false
@@ -39,6 +41,8 @@ struct FilesView: View {
         .navigationSubtitle("\(dataset.observations) observations · \(Format.span(dataset.first, dataset.last)) UTC")
         .toolbar {
             ToolbarItemGroup {
+                Button { upgrading = true } label: { Label("Upgrade", systemImage: "arrow.up.circle") }
+                    .help("Check the archive's cadence, fetch missing frames, and review frames set aside")
                 Toggle(isOn: $showViewer) { Label("Frame Viewer", systemImage: "play.rectangle") }
                     .help("Show or hide the frame viewer (View > Show Frame Viewer)")
                 Button { model.reveal(selectedFiles) } label: { Label("Show in Finder", systemImage: "folder") }
@@ -57,6 +61,17 @@ struct FilesView: View {
                 DeleteSheet(target: AppModel.DeleteTarget(fileIds: doomed.map(\.fileId)),
                             what: doomed.count == 1 ? doomed[0].name : "\(doomed.count) files") {
                     selection.subtract(doomed.map(\.fileId))
+                }
+            }
+        }
+        .sheet(isPresented: $upgrading, onDismiss: { Task { await load(reset: true) } }) {
+            UpgradePanel(dataset: dataset)
+        }
+        .sheet(isPresented: Binding(get: { rejecting != nil }, set: { if !$0 { rejecting = nil } })) {
+            if let frames = rejecting {
+                RejectSheet(files: frames) {
+                    selection.subtract(frames.map(\.fileId))
+                    Task { await load(reset: true) }
                 }
             }
         }
@@ -89,6 +104,7 @@ struct FilesView: View {
                         .padding(.bottom, 16)
                 }
             }
+            .background(StudioTheme.component)
             .overlay { emptyNote }
             .onChange(of: selection) {  // keep the viewer's frame in sight as it plays
                 if showViewer, selection.count == 1, let id = selection.first { proxy.scrollTo(id) }
@@ -116,6 +132,7 @@ struct FilesView: View {
             } primaryAction: { _ in
                 showViewer = true  // a double-click opens the frame viewer on that file
             }
+            .studioPanel()
             .overlay { emptyNote }
             if more {
                 Button("Show More") { Task { await load(reset: false) } }
@@ -230,6 +247,11 @@ struct FilesView: View {
             }
         }
         Divider()
+        Button("Set Aside as Bad…") { rejecting = targets }
+        if targets.count == 1 {
+            Button("Ask the Archive Again") { Task { await model.refetch(targets[0]) } }
+        }
+        Divider()
         Button("Delete…", role: .destructive) { deleting = targets }
     }
 
@@ -283,7 +305,7 @@ private struct FileCell: View {
         VStack(spacing: 6) {
             ZStack {
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(Color.black)
+                    .fill(StudioTheme.canvas)
                 if let image {
                     Image(nsImage: image)
                         .resizable()
@@ -307,9 +329,9 @@ private struct FileCell: View {
         }
         .padding(6)
         .background(RoundedRectangle(cornerRadius: 8)
-            .fill(selected ? Color.accentColor.opacity(0.25) : Color.clear))
+            .fill(selected ? StudioTheme.accent.opacity(0.25) : Color.clear))
         .overlay(RoundedRectangle(cornerRadius: 8)
-            .stroke(selected ? Color.accentColor : Color.clear, lineWidth: 2))
+            .stroke(selected ? StudioTheme.accent : Color.clear, lineWidth: 2))
         .contentShape(Rectangle())
         .help(file.name)
         .task(id: file.fileId) {
