@@ -187,13 +187,18 @@ final class DatasetLinkTests: XCTestCase {
         XCTAssertNil(missing.dataset)
     }
 
-    func testStudioLaunchArguments() {
-        XCTAssertEqual(StudioLaunch.openArguments(app: "HelioFITS Studio", datasetUid: "u1",
-                                                  start: "2025-09-21T20:00:00", end: "2025-09-21T21:00:00"),
-                       ["-a", "HelioFITS Studio", "--args", "-dataset", "u1",
-                        "-start", "2025-09-21T20:00:00", "-end", "2025-09-21T21:00:00"])
-        XCTAssertEqual(StudioLaunch.openArguments(app: "X", datasetUid: "u1", start: nil, end: ""),
-                       ["-a", "X", "--args", "-dataset", "u1"])
+    func testStudioLaunchForADataset() throws {
+        let d = try HeliadJSON.decoder().decode(Dataset.self, from: Data("""
+        {"id":3,"dataset_key":"k","label":"L","observatory":null,"instrument":null,"detector":null,
+         "product":null,"level":null,"wavelength":null,"observations":2,
+         "first":"2025-09-21T20:00:00.000","last":"2025-09-21T20:01:00.000","bytes":1,"dataset_uid":"u1"}
+        """.utf8))
+        let whole = try XCTUnwrap(StudioLaunch.forDataset(d, start: nil, end: ""))
+        XCTAssertEqual(whole.args, ["-dataset", "u1", "-start", "2025-09-21T20:00:00.000",
+                                    "-end", "2025-09-21T20:01:00.000"])
+        let typed = try XCTUnwrap(StudioLaunch.forDataset(d, start: "2025-09-21 20:00:30Z", end: nil))
+        XCTAssertEqual(typed.start, "2025-09-21T20:00:30.000")
+        XCTAssertNil(StudioLaunch.forDataset(d, start: "yesterday", end: nil))
         XCTAssertEqual(StudioLaunch.link(datasetUid: "u1", start: "2025-09-21T20:00:00", end: nil)?.absoluteString,
                        "heliad://dataset/u1?start=2025-09-21T20:00:00")
     }

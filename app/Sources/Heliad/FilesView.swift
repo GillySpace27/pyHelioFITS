@@ -42,8 +42,13 @@ struct FilesView: View {
         .toolbar {
             ToolbarItemGroup {
                 Button {
-                    model.openInStudio(dataset, start: start.isEmpty ? dataset.first : start,
-                                       end: end.isEmpty ? dataset.last : end)
+                    if let launch = StudioLaunch.forDataset(dataset, start: start, end: end) {
+                        model.openInStudio(launch)
+                    } else {
+                        model.alert = dataset.datasetUid == nil
+                            ? "This core is too old to give datasets a stable id; update Heliad."
+                            : "From and To must be UTC times like 2025-09-21T16:00:00."
+                    }
                 } label: { Label("Open in Studio", systemImage: "sun.max") }
                     .disabled(dataset.datasetUid == nil)
                     .help("Open this dataset in HelioFITS Studio over the range shown")

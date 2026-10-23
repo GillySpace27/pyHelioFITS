@@ -507,33 +507,26 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Open HelioFITS Studio on a dataset: `open -a "HelioFITS Studio" --args -dataset <uid>
-    /// -start <iso> -end <iso>`. Studio is found by name; the developer launcher's name is
-    /// tried when the release app is not installed.
-    func openInStudio(_ dataset: Dataset, start: String?, end: String?) {
-        guard let uid = dataset.datasetUid else {
-            alert = "This core is too old to give datasets a stable id; update Heliad's core."
+    /// HelioFITS Studio's bundle id (release/deploy_release.sh in the Studio repository).
+    /// Mirrors PR #18 (claude/processing-record-reader); keep one copy when both are merged.
+    static let studioBundleID = "space.gilly.hfstudio"
+
+    /// Launch HelioFITS Studio on a layer's dataset and time span. The -dataset, -start and -end
+    /// options are being added to Studio separately; a Studio without them ignores or refuses
+    /// them. macOS passes arguments only when Studio is not already running.
+    /// (Same as PR #18's; keep one copy when both are merged.)
+    func openInStudio(_ launch: StudioLaunch) {
+        guard let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: Self.studioBundleID) else {
+            alert = "HelioFITS Studio is not installed (no application with bundle id \(Self.studioBundleID))."
             return
         }
-        Task.detached {
-            var failure = ""
-            for app in StudioLaunch.appNames {
-                let p = Process()
-                p.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-                p.arguments = StudioLaunch.openArguments(app: app, datasetUid: uid, start: start, end: end)
-                let err = Pipe()
-                p.standardError = err
-                do {
-                    try p.run()
-                    p.waitUntilExit()
-                    if p.terminationStatus == 0 { return }
-                    failure = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-                } catch {
-                    failure = error.localizedDescription
-                }
-            }
-            let message = "Could not open HelioFITS Studio. \(failure.trimmingCharacters(in: .whitespacesAndNewlines))"
-            await MainActor.run { self.alert = message }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.arguments = launch.args
+        configuration.activates = true
+        NSWorkspace.shared.openApplication(at: app, configuration: configuration) { [weak self] _, error in
+            guard let error else { return }
+            let text = "HelioFITS Studio did not open: \(error.localizedDescription)"
+            Task { @MainActor in self?.alert = text }
         }
     }
 

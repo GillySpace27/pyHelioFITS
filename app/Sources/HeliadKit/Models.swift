@@ -259,34 +259,6 @@ public struct DatasetLink: Decodable, Sendable {
     public let dataset: Dataset?
 }
 
-/// How the app asks macOS to open HelioFITS Studio on one dataset. Studio is found by its
-/// app name through Launch Services (`open -a`), the release name first and then the
-/// developer launcher's (extra/make-dev-launcher.sh in the Studio repo).
-public enum StudioLaunch {
-    public static let appNames = ["HelioFITS Studio", "HelioFITS Studio (dev)"]
-
-    /// Arguments for /usr/bin/open: `-a <app> --args -dataset <uid> [-start <iso>] [-end <iso>]`.
-    public static func openArguments(app: String, datasetUid: String, start: String?, end: String?) -> [String] {
-        var args = ["-a", app, "--args", "-dataset", datasetUid]
-        if let start, !start.isEmpty { args += ["-start", start] }
-        if let end, !end.isEmpty { args += ["-end", end] }
-        return args
-    }
-
-    /// A link to the same dataset and range, for Studio or a note: heliad://dataset/<uid>?start=&end=
-    public static func link(datasetUid: String, start: String?, end: String?) -> URL? {
-        var parts = URLComponents()
-        parts.scheme = "heliad"
-        parts.host = "dataset"
-        parts.path = "/" + datasetUid
-        let items = [("start", start), ("end", end)].compactMap { name, value in
-            value.flatMap { $0.isEmpty ? nil : URLQueryItem(name: name, value: $0) }
-        }
-        if !items.isEmpty { parts.queryItems = items }
-        return parts.url
-    }
-}
-
 // MARK: - the cache editor (dataset.query, dataset.cadences, dataset.upgrade, library.rejected)
 
 /// The query that asks the archive again for a dataset (dataset.query): the newest one stored
