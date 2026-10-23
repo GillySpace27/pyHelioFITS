@@ -318,7 +318,7 @@ def migrate(conn: sqlite3.Connection, backup_to: Path | None = None) -> None:
         return
     if current > 0 and backup_to is not None:
         # The index as it was before this Heliad changed it, so a migration that goes
-        # wrong costs nothing: index.sqlite.schema4.bak, say. An older backup is kept.
+        # wrong costs nothing: heliad.sqlite.schema4.bak, say. An older backup is kept.
         target = backup_to.with_name(f"{backup_to.name}.schema{current}.bak")
         if not target.exists():
             copy = sqlite3.connect(target)
