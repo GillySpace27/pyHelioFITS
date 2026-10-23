@@ -167,6 +167,67 @@ final class IndexTimeTests: XCTestCase {
     }
 }
 
+final class WavelengthTests: XCTestCase {
+    /// Same rule as `_wavelength_text` in src/heliad/fitsmeta.py.
+    func testVisibleBandsReadInNanometres() {
+        XCTAssertEqual(Wavelength.text(193), "193 Å")
+        XCTAssertEqual(Wavelength.text(171.5), "171.5 Å")
+        XCTAssertEqual(Wavelength.text(5300), "530 nm")
+        XCTAssertEqual(Wavelength.text(5303), "530.3 nm")
+        XCTAssertEqual(Wavelength.text(1000), "100 nm")
+        XCTAssertEqual(Wavelength.angstrom(from: "530nm"), 5300)
+        XCTAssertEqual(Wavelength.angstrom(from: " 304 A "), 304)
+        XCTAssertNil(Wavelength.angstrom(from: "blue"))
+    }
+
+    func testJobTitleShowsNanometres() throws {
+        let job = try HeliadJSON.decoder().decode(Job.self, from: Data("""
+        {"job_id":3,"source":"fido","status":"done","phase":null,"files_total":1,"files_done":1,"error":null,
+         "created_at":"2026-10-18T21:34:24+00:00","updated_at":"2026-10-18T21:37:30+00:00",
+         "query":{"start":"2025-09-21T20:00:00","end":"2025-09-21T21:00:00","instrument":"WFI","wavelength":5300.0},
+         "result":{"found":1,"stored":1}}
+        """.utf8))
+        XCTAssertEqual(job.title, "WFI · 530 nm · 2025-09-21T20:00:00 to 2025-09-21T21:00:00 UTC")
+    }
+}
+
+final class DatasetLinkTests: XCTestCase {
+    func testDatasetLinkDecodesWithItsDataset() throws {
+        let link = try HeliadJSON.decoder().decode(DatasetLink.self, from: Data("""
+        {"dataset_uid":"9f1c","start":"2025-09-21T20:00:00","end":null,
+         "dataset":{"id":3,"dataset_key":"punch/wfi+nfi/-/cam/3/5300","label":"PUNCH WFI+NFI 530 nm CAM L3",
+                    "observatory":"PUNCH","instrument":"WFI+NFI","detector":null,"product":"CAM","level":"3",
+                    "wavelength":5300.0,"observations":2,"first":"2025-09-21T20:00:00.000",
+                    "last":"2025-09-21T20:01:00.000","bytes":5760,"dataset_uid":"9f1c","resolved_by":"uid"}}
+        """.utf8))
+        XCTAssertEqual(link.datasetUid, "9f1c")
+        XCTAssertEqual(link.start, "2025-09-21T20:00:00")
+        XCTAssertNil(link.end)
+        XCTAssertEqual(link.dataset?.datasetUid, "9f1c")
+        XCTAssertEqual(link.dataset?.datasetKey, "punch/wfi+nfi/-/cam/3/5300")
+        let missing = try HeliadJSON.decoder().decode(DatasetLink.self, from: Data("""
+        {"dataset_uid":"nope","start":null,"end":null,"dataset":null}
+        """.utf8))
+        XCTAssertNil(missing.dataset)
+    }
+
+    func testStudioLaunchForADataset() throws {
+        let d = try HeliadJSON.decoder().decode(Dataset.self, from: Data("""
+        {"id":3,"dataset_key":"k","label":"L","observatory":null,"instrument":null,"detector":null,
+         "product":null,"level":null,"wavelength":null,"observations":2,
+         "first":"2025-09-21T20:00:00.000","last":"2025-09-21T20:01:00.000","bytes":1,"dataset_uid":"u1"}
+        """.utf8))
+        let whole = try XCTUnwrap(StudioLaunch.forDataset(d, start: nil, end: ""))
+        XCTAssertEqual(whole.args, ["-dataset", "u1", "-start", "2025-09-21T20:00:00.000",
+                                    "-end", "2025-09-21T20:01:00.000"])
+        let typed = try XCTUnwrap(StudioLaunch.forDataset(d, start: "2025-09-21 20:00:30Z", end: nil))
+        XCTAssertEqual(typed.start, "2025-09-21T20:00:30.000")
+        XCTAssertNil(StudioLaunch.forDataset(d, start: "yesterday", end: nil))
+        XCTAssertEqual(StudioLaunch.link(datasetUid: "u1", start: "2025-09-21T20:00:00", end: nil)?.absoluteString,
+                       "heliad://dataset/u1?start=2025-09-21T20:00:00")
+    }
+}
+
 final class QueryFieldsTests: XCTestCase {
     func testValidQuery() throws {
         var f = QueryFields()
@@ -182,6 +243,16 @@ final class QueryFieldsTests: XCTestCase {
         XCTAssertEqual(q["sample_s"], .double(60))
         XCTAssertNil(q["jsoc_series"])
         XCTAssertEqual(QueryFields(query: q).wavelength, "193")
+    }
+
+    func testWavelengthTypedInNanometres() throws {
+        var f = QueryFields()
+        f.start = "2025-09-21T16:00"
+        f.end = "2025-09-21T17:00"
+        f.wavelength = "530 nm"
+        XCTAssertEqual(try f.json()["wavelength"], .double(5300))
+        f.wavelength = "193 Å"
+        XCTAssertEqual(try f.json()["wavelength"], .double(193))
     }
 
     func testProblems() {

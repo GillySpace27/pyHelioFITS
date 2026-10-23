@@ -548,11 +548,32 @@ final class AppModel: ObservableObject {
     }
 
     private func openLink(_ url: URL) async {
+        if url.host == "dataset" {
+            await openDatasetLink(url)
+            return
+        }
         do {
             let link = try await core.call("query.from_url", ["url": .string(url.absoluteString)], as: LinkRequest.self)
             searchFields = QueryFields(query: link.query)
             linkAskedToDownload = link.action == "get"
             selection = .search
+            NSApp.activate(ignoringOtherApps: true)
+        } catch {
+            report(error)
+        }
+    }
+
+    /// heliad://dataset/<uid>?start=&end=: select that dataset, at that range when given.
+    /// The uid survives a reindex that renamed the dataset's key.
+    private func openDatasetLink(_ url: URL) async {
+        do {
+            let link = try await core.call("dataset.from_url", ["url": .string(url.absoluteString)], as: DatasetLink.self)
+            guard let dataset = link.dataset else {
+                alert = "This library has no dataset \(link.datasetUid)."
+                return
+            }
+            await refreshLibrary()  // the sidebar lists it under its current key
+            showFiles(dataset.datasetKey, start: link.start ?? "", end: link.end ?? "")
             NSApp.activate(ignoringOtherApps: true)
         } catch {
             report(error)

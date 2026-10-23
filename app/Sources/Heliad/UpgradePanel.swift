@@ -187,7 +187,7 @@ struct UpgradePanel: View {
     private func summary(_ q: [String: JSONValue]) -> String {
         var parts: [String] = []
         if let i = q["instrument"]?.stringValue { parts.append(i) }
-        if let w = q["wavelength"]?.doubleValue { parts.append("\(JSONValue.double(w).display) Å") }
+        if let w = q["wavelength"]?.doubleValue { parts.append(Wavelength.text(w)) }
         if let l = q["level"]?.stringValue { parts.append("level \(l)") }
         parts.append("\(Format.time(q["start"]?.stringValue)) to \(Format.time(q["end"]?.stringValue)) UTC")
         if let s = q["sample_s"]?.doubleValue { parts.append("every \(Format.duration(s))") }

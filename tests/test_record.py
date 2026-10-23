@@ -353,15 +353,16 @@ def test_resolve_against_a_library(lib, stocked):
 
 
 def test_resolve_prefers_dataset_uid_when_the_index_has_one(lib, stocked, tmp_path):
-    """Against an index with a datasets.dataset_uid column (made here on a copy; this branch
-    does not change the schema), a record's dataset_uid finds the dataset whatever its key."""
+    """Against an index with a datasets.dataset_uid column (schema 5 has it; added here on a
+    copy when an older schema lacks it), a record's dataset_uid finds the dataset whatever its key."""
     import sqlite3
 
     conn = sqlite3.connect(tmp_path / "copy.sqlite")
     with sqlite3.connect(lib.cfg.db_path) as live:
         live.backup(conn)  # the index is in WAL mode, so copy it through SQLite, not the file
     conn.row_factory = sqlite3.Row
-    conn.execute("ALTER TABLE datasets ADD COLUMN dataset_uid TEXT")
+    if "dataset_uid" not in {r[1] for r in conn.execute("PRAGMA table_info(datasets)")}:
+        conn.execute("ALTER TABLE datasets ADD COLUMN dataset_uid TEXT")
     conn.execute("UPDATE datasets SET dataset_uid = 'uid-aia' WHERE instrument LIKE 'AIA%'")
     conn.commit()
     rec = _record_for(lib, stocked)

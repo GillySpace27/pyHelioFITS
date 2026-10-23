@@ -196,6 +196,30 @@ transaction. File ids, paths and checksums never change.
     {"files": 3, "datasets_before": 2, "datasets_after": 2, "observations_before": 2,
      "observations_after": 2, "files_moved": 0, "current_changed": 0, "dry_run": true}
 
+### `library.fix_extensions`
+
+Params: `dry_run=True`. **A dry run unless `dry_run` is false.** Gives every stored file whose
+name has no FITS suffix one: `.fits`, or `.fits.gz` when the file starts with gzip's magic bytes
+(`1f 8b`); a file that starts with neither, or a name already ending in `.gz`, is left alone
+(`not_fits`). Ingest does the same for new files (Studio's oldest cache files are named by a bare
+SHA-256). The CLI is `heliad fix-extensions [--dry-run]`; both run in the writer, under its lock.
+
+For each file, in this order: rename it in its folder; in one transaction, point `files.relpath`
+at the new name and record the old one in `file_aliases`; then leave a relative symlink at the old
+name, so a saved Studio session holding the old path still opens. A run that stops between steps is
+finished by the next one (a renamed file whose row still has the old name is found by its new name
+and checksum; a missing link is made from `file_aliases`), and a second run changes nothing. Where
+symlinks cannot be made the alias is still recorded (`links_skipped`). A file another process has
+open is skipped (`open`) when that is cheap to see: `open_check` says how (`proc` on Linux, `lsof`
+on macOS, `unavailable` elsewhere, where nothing is skipped). Views are rebuilt afterwards;
+thumbnails are keyed by checksum and survive. Deleting a file removes its aliases and old-name links.
+
+    {"candidates": 2, "renamed": 2, "fits": 1, "fits_gz": 1, "not_fits": 0, "missing": 0, "open": 0,
+     "failed": [], "links_made": 2, "links_skipped": 0, "open_check": "proc", "dry_run": false,
+     "examples": [{"from": "store/sdo/aia/1/171/2025/09/21/0123abcd",
+                   "to": "store/sdo/aia/1/171/2025/09/21/0123abcd.fits.gz"}, ...],
+     "views_rebuilt": ["event"]}
+
 ### `library.thumbnail`
 
 Params: `file_id, size=256`. A greyscale PNG preview, north up, made on first request and kept
@@ -403,6 +427,46 @@ Otherwise the queued job, as `download.get` returns it. When it ends, its `resul
     {"job_id": 1, "status": "done", ..., "result": {"found": 3, "fetched": 3, "stored": 3, "errors": [],
      "ingest": {"added": 3}, "skipped": 3},
      "options": {"dataset_key": "sdo/aia/-/-/1/193", "missing_only": true, "tolerance_s": 6.0}}
+
+## Stable dataset ids
+
+A `dataset_key` is built from header rules, so a rules change can rename a dataset (PUNCH's
+`.../530` became `.../5300` once `WAVEUNIT = 'nanometer'` was read). Since schema 5 every dataset
+also has a `dataset_uid`, a random UUID that never changes, and `library.datasets` lists it.
+`library.reindex` gives a renamed dataset's uid (and its row and `dataset_id`) to the new key that
+holds most of its files by sha256, records the old key in `dataset_aliases`, and lists each rename
+in its result as `datasets_renamed: [{old_key, new_key, dataset_uid}]`. Save the uid, not the key,
+in anything that has to find a dataset again.
+
+In the examples below the uid is an illustration, not a real one.
+
+The link form is `heliad://dataset/<dataset_uid>?start=<iso>&end=<iso>` (start and end optional).
+The Mac app opens it by selecting the dataset; `dataset.from_url` reads one.
+
+### `dataset.get`
+
+Params: `dataset_uid=None, dataset_key=None` (exactly one). The dataset as `library.datasets`
+lists it, plus `resolved_by`: `"uid"`, `"key"`, or `"alias"` when `dataset_key` is an old key a
+reindex renamed. Null when nothing matches.
+
+    {"id": 3, "dataset_key": "punch/wfi+nfi/-/cam/3/5300", "dataset_uid": "0b6f8d2e-8a1f-4c1e-9d55-2f3c7e1a4b90",
+     "label": "PUNCH WFI+NFI 530 nm CAM L3", ..., "observations": 12, "resolved_by": "alias"}
+
+### `dataset.resolve`
+
+Params: `key`. A uid, a current key, or an old key, to `{dataset_uid, dataset_key, resolved_by}`;
+null when none matches. A current key wins over an alias of the same text.
+
+    {"dataset_uid": "0b6f8d2e-8a1f-4c1e-9d55-2f3c7e1a4b90", "dataset_key": "punch/wfi+nfi/-/cam/3/5300",
+     "resolved_by": "alias"}
+
+### `dataset.from_url`
+
+Params: `url`. The parts of a `heliad://dataset/<uid>` link and the dataset it names (null if this
+library has no such uid). Unknown parameters are refused.
+
+    {"dataset_uid": "0b6f8d2e-8a1f-4c1e-9d55-2f3c7e1a4b90", "start": "2025-09-21T16:00:00",
+     "end": "2025-09-21T17:00:00", "dataset": {"dataset_key": "punch/wfi+nfi/-/cam/3/5300", ...}}
 
 ## View methods
 

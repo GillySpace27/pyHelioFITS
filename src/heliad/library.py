@@ -32,6 +32,31 @@ def is_fits(path: Path) -> bool:
     return path.name.lower().endswith(FITS_SUFFIXES)
 
 
+GZIP_MAGIC = b"\x1f\x8b"
+FITS_MAGIC = b"SIMPLE  ="
+
+
+def fits_name(name: str, path: Path) -> str:
+    """The name to store a file under: its own, with .fits or .fits.gz added when it has no
+    FITS suffix, chosen by what the file starts with (gzip's magic bytes 1f 8b, or a FITS
+    primary header's "SIMPLE  ="). A name that already ends in .gz, or a file that is
+    neither, is left alone. Studio's oldest cache files are named by a bare SHA-256 and
+    reach Heliad that way; without a suffix, Finder and HelioFITS Peek do not see FITS.
+    """
+    if is_fits(Path(name)) or name.lower().endswith(".gz"):
+        return name
+    try:
+        with open(path, "rb") as fh:
+            head = fh.read(len(FITS_MAGIC))
+    except OSError:
+        return name
+    if head.startswith(GZIP_MAGIC):
+        return name + ".fits.gz"
+    if head == FITS_MAGIC:
+        return name + ".fits"
+    return name
+
+
 def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -58,8 +83,33 @@ def clone_or_copy(src: Path, dst: Path) -> str:
                 return "clone"
         except (OSError, AttributeError):
             pass
+    elif sys.platform.startswith("linux") and _reflink(src, dst):
+        return "clone"
     shutil.copyfile(src, dst)
     return "copy"
+
+
+_FICLONE = 0x40049409  # _IOW(0x94, 9, int), linux/fs.h
+
+
+def _reflink(src: Path, dst: Path) -> bool:
+    """A Linux reflink (ioctl FICLONE): Btrfs, XFS and bcachefs share the blocks. False,
+    with nothing left at dst, when the filesystem or the kernel cannot (ext4, tmpfs, two
+    filesystems), so the caller copies instead."""
+    try:
+        import fcntl
+    except ImportError:
+        return False
+    try:
+        with open(src, "rb") as s, open(dst, "xb") as d:
+            fcntl.ioctl(d.fileno(), _FICLONE, s.fileno())
+        return True
+    except OSError:
+        try:
+            Path(dst).unlink()
+        except OSError:
+            pass
+        return False
 
 
 class LibraryLocked(RuntimeError):
@@ -256,9 +306,9 @@ class Library:
             return row["id"]
         return self.conn.execute(
             "INSERT INTO datasets(dataset_key, observatory, instrument, detector, product, "
-            "level, wavelength, label) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "level, wavelength, label, dataset_uid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (meta.dataset_key, meta.observatory, meta.instrument, meta.detector,
-             meta.product, meta.level, meta.wavelength, meta.label),
+             meta.product, meta.level, meta.wavelength, meta.label, db.new_uid()),
         ).lastrowid
 
     def ingest(
@@ -296,7 +346,7 @@ class Library:
                     raise
                 raise fitsmeta.Unstorable(f"{path.name}: {exc}") from exc  # astropy cannot read it as FITS
             findings = checks.run(meta) + self._snap_wavelength(meta)
-            relpath = self._store_relpath(meta, path.name, sha)
+            relpath = self._store_relpath(meta, fits_name(path.name, path), sha)
             dest = self.root / relpath
             dest.parent.mkdir(parents=True, exist_ok=True)
             tmp = dest.with_name(dest.name + ".part")
@@ -446,6 +496,7 @@ class Library:
             sql = ("SELECT * FROM (SELECT f.id AS file_id, f.relpath, f.sha256, f.size, f.version, "
                    "o.id AS observation_id, o.date_obs, d.id AS dataset_id, d.dataset_key, d.label, "
                    "d.observatory, d.instrument, d.detector, d.product, d.level, d.wavelength, "
+                   + ("d.dataset_uid, " if db.has_column(self.reader, "datasets", "dataset_uid") else "") +
                    "r.reason AS rejected FROM observations o JOIN files f ON f.id = o.current_file_id "
                    "JOIN datasets d ON d.id = o.dataset_id "
                    "LEFT JOIN rejections r ON r.observation_id = o.id) WHERE 1 = 1")
@@ -614,6 +665,12 @@ class Library:
                 conn.execute(f"UPDATE downloads SET file_id = NULL WHERE file_id IN ({q})", list(ids))
                 conn.execute(f"UPDATE observations SET current_file_id = NULL "
                              f"WHERE current_file_id IN ({q})", list(ids))
+                if db.has_table(conn, "file_aliases"):
+                    aliases = [r[0] for r in conn.execute(
+                        f"SELECT old_relpath FROM file_aliases WHERE file_id IN ({q})", list(ids))]
+                    conn.execute(f"DELETE FROM file_aliases WHERE file_id IN ({q})", list(ids))
+                else:
+                    aliases = []
                 conn.execute(f"DELETE FROM files WHERE id IN ({q})", list(ids))
                 for oid in obs_ids:
                     obs = conn.execute("SELECT dataset_id, current_file_id FROM observations WHERE id = ?",
@@ -654,6 +711,10 @@ class Library:
                     pass
                 except OSError as exc:
                     failed.append({"relpath": f["relpath"], "error": str(exc)})
+            for old in aliases:  # the links fix-extensions left at old names
+                link = self.abspath(old)
+                if link.is_symlink():
+                    link.unlink()
             from . import views  # views imports this module
             for name in touched_views:
                 views.materialize(self, name)
@@ -673,6 +734,125 @@ class Library:
                 return
             d = d.parent
 
+    # ---- store names -----------------------------------------------------------
+
+    def fix_extensions(self, *, dry_run: bool = False, progress=None) -> dict:
+        """Give every stored FITS file without a FITS suffix one (.fits, or .fits.gz by the
+        gzip magic), as ingest now does for new files.
+
+        For each file: rename it, then point files.relpath at the new name and record the
+        old one in file_aliases (one transaction), then leave a relative symlink at the old
+        name so a saved Studio session holding the old path still opens. In that order a
+        failure at any step leaves something the next run finishes: a renamed file whose
+        row still has the old name is found by its new name and checksum; a missing link
+        is made again from file_aliases. Running it twice changes nothing the second time.
+        Where symlinks cannot be made (Windows without the privilege) the alias is kept
+        and "links_skipped" counts it.
+
+        A file another process has open is skipped and counted as "open" when that is
+        cheap to see (Linux /proc, macOS lsof); otherwise it is renamed anyway, which an
+        open file on macOS and Linux survives. Views are rebuilt afterwards. dry_run
+        reports the same counts and touches nothing.
+        """
+        self._require_writer()
+        conn = self.conn
+        with self._write_lock:
+            rows = [dict(r) for r in conn.execute(
+                "SELECT id, relpath, sha256 FROM files ORDER BY id") if not is_fits(Path(r["relpath"]))]
+            in_use, open_check = _open_paths(self.cfg.store_dir) if rows else (set(), "not needed")
+            out = {"candidates": len(rows), "renamed": 0, "fits": 0, "fits_gz": 0, "not_fits": 0,
+                   "missing": 0, "open": 0, "failed": [], "links_made": 0, "links_skipped": 0,
+                   "open_check": open_check, "dry_run": dry_run, "examples": []}
+            for i, row in enumerate(rows, 1):
+                if progress and (i % 200 == 0 or i == len(rows)):
+                    progress(i, len(rows))
+                old_rel = row["relpath"]
+                old = self.abspath(old_rel)
+                if not old.exists() or old.is_symlink():
+                    new_rel = self._renamed_earlier(row)  # a run stopped between rename and index
+                    if new_rel is None:
+                        out["missing"] += 1
+                        continue
+                    target = new_rel
+                else:
+                    name = fits_name(old.name, old)
+                    if name == old.name:
+                        out["not_fits"] += 1
+                        continue
+                    target = (Path(old_rel).parent / name).as_posix()
+                    if (self.root / target).exists() or (self.root / target).is_symlink():
+                        stem, dot, ext = name.partition(".")
+                        target = (Path(old_rel).parent / f"{stem}.{row['sha256'][:12]}{dot}{ext}").as_posix()
+                    if str(old.resolve()) in in_use:
+                        out["open"] += 1
+                        continue
+                kind = "fits_gz" if target.lower().endswith(".gz") else "fits"
+                out[kind] += 1
+                if len(out["examples"]) < 5:
+                    out["examples"].append({"from": old_rel, "to": target})
+                if dry_run:
+                    continue
+                try:
+                    if old.exists() and not old.is_symlink():
+                        os.rename(old, self.root / target)  # same folder: atomic, mode 444 kept
+                    conn.execute("BEGIN IMMEDIATE")
+                    try:
+                        conn.execute("UPDATE files SET relpath = ? WHERE id = ? AND relpath = ?",
+                                     (target, row["id"], old_rel))
+                        conn.execute(
+                            "INSERT INTO file_aliases(old_relpath, file_id, sha256, recorded_at) "
+                            "VALUES (?, ?, ?, ?) ON CONFLICT(old_relpath) DO UPDATE SET "
+                            "file_id = excluded.file_id, sha256 = excluded.sha256, "
+                            "recorded_at = excluded.recorded_at", (old_rel, row["id"], row["sha256"], now()))
+                        conn.execute("COMMIT")
+                    except BaseException:
+                        conn.execute("ROLLBACK")
+                        raise
+                except OSError as exc:
+                    out[kind] -= 1
+                    out["failed"].append({"relpath": old_rel, "error": str(exc)})
+                    continue
+                out["renamed"] += 1
+            if not dry_run:
+                made, skipped = self._alias_links()
+                out["links_made"], out["links_skipped"] = made, skipped
+        if not dry_run and out["renamed"]:
+            from . import views  # views imports this module
+            out["views_rebuilt"] = [r["name"] for r in views.rebuild_all(self)]
+        return out
+
+    def _renamed_earlier(self, row: dict) -> str | None:
+        """The relpath a file already has on disk when an earlier fix-extensions renamed it
+        but stopped before the index changed: its name plus .fits or .fits.gz, with the
+        same checksum."""
+        old = Path(row["relpath"])
+        for suffix in (".fits", ".fits.gz"):
+            names = [old.name + suffix]
+            stem, dot, ext = (old.name + suffix).partition(".")
+            names.append(f"{stem}.{row['sha256'][:12]}{dot}{ext}")
+            for name in names:
+                p = self.root / old.parent / name
+                if p.is_file() and not p.is_symlink() and sha256_of(p) == row["sha256"]:
+                    return (old.parent / name).as_posix()
+        return None
+
+    def _alias_links(self) -> tuple[int, int]:
+        """Make the relative symlink at every old name in file_aliases that lacks one.
+        Returns (made, skipped where the platform refuses symlinks)."""
+        made = skipped = 0
+        rows = self.conn.execute(
+            "SELECT a.old_relpath, f.relpath FROM file_aliases a JOIN files f ON f.id = a.file_id").fetchall()
+        for row in rows:
+            link, target = self.abspath(row["old_relpath"]), self.abspath(row["relpath"])
+            if link.is_symlink() or link.exists() or not target.exists():
+                continue
+            try:
+                os.symlink(os.path.relpath(target, link.parent), link)
+                made += 1
+            except (OSError, NotImplementedError):
+                skipped += 1
+        return made, skipped
+
     # ---- reindex -------------------------------------------------------------
 
     def reindex(self, *, dry_run: bool = False, from_files: bool = True, progress=None) -> dict:
@@ -685,6 +865,12 @@ class Library:
         for a file that is missing, taken from the indexed keywords. File ids, paths
         and checksums never change; datasets and observations keep their ids when
         their key is unchanged; views keep every file they held.
+
+        A dataset whose key changes (PUNCH /530 became /5300 when WAVEUNIT 'nanometer'
+        was read) keeps its row, id and dataset_uid: a new key takes over the old
+        dataset that held most of its files (by sha256), and the old key is recorded in
+        dataset_aliases so resolve_dataset() still finds it. A summary's
+        "datasets_renamed" lists each {old_key, new_key, dataset_uid}.
         """
         self._require_writer()
         conn = self.conn
@@ -707,6 +893,9 @@ class Library:
                 if progress and (i % 200 == 0 or i == len(files)):
                     progress(i, len(files))
             old_ds = {r["dataset_key"]: r["id"] for r in conn.execute("SELECT id, dataset_key FROM datasets")}
+            old_ds_uid = {r["id"]: r["dataset_uid"] for r in conn.execute("SELECT id, dataset_uid FROM datasets")}
+            obs_ds = {r["id"]: r["dataset_id"] for r in conn.execute("SELECT id, dataset_id FROM observations")}
+            sha_old_ds = {f["sha256"]: obs_ds.get(f["observation_id"]) for f in files}
             old_obs = {r["obs_key"]: r["id"] for r in conn.execute("SELECT id, obs_key FROM observations")}
             old_current = {r["id"]: r["current_file_id"] for r in conn.execute(
                 "SELECT id, current_file_id FROM observations")}
@@ -737,12 +926,16 @@ class Library:
                 # Newest version wins; among equals the earliest ingested stays, as in ingest.
                 current[key] = max(fids, key=lambda i: (fitsmeta.version_sort_key(version[i]), -i))
 
+            renamed = self._carry_datasets(new_ds, old_ds, sha_old_ds,
+                                           {f["sha256"]: metas[f["id"]].dataset_key for f in files})
             file_obs_old = {f["id"]: f["observation_id"] for f in files}
             summary = {
                 "files": len(files),
                 "datasets_before": len(old_ds), "datasets_after": len(new_ds),
                 "observations_before": len(old_obs), "observations_after": len(groups),
                 "files_moved": 0, "current_changed": 0, "dry_run": dry_run,
+                "datasets_renamed": [{"old_key": old, "new_key": new, "dataset_uid": old_ds_uid[did]}
+                                     for new, (old, did) in sorted(renamed.items())],
             }
             conn.execute("BEGIN IMMEDIATE")
             try:
@@ -768,10 +961,19 @@ class Library:
                         conn.execute("UPDATE datasets SET observatory=?, instrument=?, detector=?, product=?, "
                                      "level=?, wavelength=?, label=? WHERE id = ?", (*cols, old_ds[key]))
                         ds_ids[key] = old_ds[key]
+                    elif key in renamed:
+                        old_key, did = renamed[key]
+                        conn.execute("UPDATE datasets SET dataset_key=?, observatory=?, instrument=?, detector=?, "
+                                     "product=?, level=?, wavelength=?, label=? WHERE id = ?", (key, *cols, did))
+                        conn.execute("INSERT INTO dataset_aliases(old_key, dataset_uid, recorded_at) VALUES (?, ?, ?) "
+                                     "ON CONFLICT(old_key) DO UPDATE SET dataset_uid = excluded.dataset_uid, "
+                                     "recorded_at = excluded.recorded_at", (old_key, old_ds_uid[did], now()))
+                        ds_ids[key] = did
                     else:
                         ds_ids[key] = conn.execute(
                             "INSERT INTO datasets(dataset_key, observatory, instrument, detector, product, "
-                            "level, wavelength, label) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (key, *cols)).lastrowid
+                            "level, wavelength, label, dataset_uid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            (key, *cols, db.new_uid())).lastrowid
                 obs_ids: dict[str, int] = {}
                 for key, fids in groups.items():
                     meta = metas[current[key]]  # dated by its current file, as in ingest
@@ -819,6 +1021,77 @@ class Library:
             summary["views_rebuilt"] = [r["name"] for r in views.rebuild_all(self)]
         return summary
 
+    @staticmethod
+    def _carry_datasets(new_ds: dict, old_ds: dict[str, int], sha_old_ds: dict[str, int | None],
+                        sha_new_key: dict[str, str]) -> dict[str, tuple[str, int]]:
+        """Which renamed dataset takes over which old one: {new_key: (old_key, old_id)}.
+
+        A new key that was not a key before inherits the old dataset holding more than
+        half of its files, matched by sha256 (a file's checksum never changes), as long as
+        that old key is not itself still a key. When several new keys could take the same
+        old dataset (a dataset split in two), the one with the most of its files wins; the
+        others start with a uid of their own.
+        """
+        still = set(new_ds)
+        key_of = {did: key for key, did in old_ds.items()}
+        votes: dict[str, dict[int, int]] = {}
+        sizes: dict[str, int] = {}
+        for sha, new_key in sha_new_key.items():
+            sizes[new_key] = sizes.get(new_key, 0) + 1
+            did = sha_old_ds.get(sha)
+            if new_key not in old_ds and did is not None and key_of.get(did) not in still:
+                tally = votes.setdefault(new_key, {})
+                tally[did] = tally.get(did, 0) + 1
+        offers = []
+        for new_key, tally in votes.items():
+            did, n = max(tally.items(), key=lambda kv: (kv[1], -kv[0]))
+            if 2 * n > sizes[new_key]:
+                offers.append((n, new_key, did))
+        out: dict[str, tuple[str, int]] = {}
+        taken: set[int] = set()
+        for n, new_key, did in sorted(offers, key=lambda o: (-o[0], o[1])):
+            if did not in taken:
+                taken.add(did)
+                out[new_key] = (key_of[did], did)
+        return out
+
+    # ---- stable ids ------------------------------------------------------------
+
+    def dataset(self, *, dataset_uid: str | None = None, dataset_key: str | None = None) -> dict | None:
+        """One dataset as library.datasets lists it, by uid or by key, or None.
+
+        A key that is no longer a dataset's key is looked up in dataset_aliases, so a
+        key saved before a reindex renamed the dataset still finds it. The result says
+        how it was found: "resolved_by" is "uid", "key" or "alias".
+        """
+        if (dataset_uid is None) == (dataset_key is None):
+            raise ValueError("give exactly one of dataset_uid and dataset_key")
+        if dataset_key is not None:
+            found = self.resolve_dataset(dataset_key)
+            if found is None:
+                return None
+            dataset_uid, how = found["dataset_uid"], found["resolved_by"]
+        else:
+            how = "uid"
+        row = next((d for d in self.datasets() if d.get("dataset_uid") == dataset_uid), None)
+        return None if row is None else {**row, "resolved_by": how}
+
+    def resolve_dataset(self, key_or_uid: str) -> dict | None:
+        """{dataset_uid, dataset_key, resolved_by} for a uid, a current key or an old
+        key recorded in dataset_aliases; None when nothing matches. A current key wins
+        over an alias of the same text."""
+        conn = self.reader
+        if not db.has_column(conn, "datasets", "dataset_uid"):
+            return None
+        for how, sql in (("uid", "SELECT dataset_uid, dataset_key FROM datasets WHERE dataset_uid = ?"),
+                         ("key", "SELECT dataset_uid, dataset_key FROM datasets WHERE dataset_key = ?"),
+                         ("alias", "SELECT d.dataset_uid, d.dataset_key FROM dataset_aliases a "
+                                   "JOIN datasets d ON d.dataset_uid = a.dataset_uid WHERE a.old_key = ?")):
+            row = conn.execute(sql, (key_or_uid,)).fetchone()
+            if row:
+                return {"dataset_uid": row["dataset_uid"], "dataset_key": row["dataset_key"], "resolved_by": how}
+        return None
+
     # ---- thumbnails ----------------------------------------------------------
 
     def thumbnail(self, file_id: int, size: int = thumbs.DEFAULT_SIZE) -> Path:
@@ -830,3 +1103,36 @@ class Library:
         if row is None:
             raise KeyError(f"no file {file_id}")
         return thumbs.ensure(self.root, self.abspath(row["relpath"]), row["sha256"], size)
+
+
+def _open_paths(store: Path) -> tuple[set[str], str]:
+    """Files under store that some process has open, and how that was found out:
+    "proc" (Linux), "lsof" (macOS), or "unavailable" (then the set is empty)."""
+    prefix = str(Path(store).resolve()) + os.sep
+    found: set[str] = set()
+    if sys.platform.startswith("linux") and Path("/proc").is_dir():
+        for fd_dir in Path("/proc").glob("[0-9]*/fd"):
+            try:
+                for fd in fd_dir.iterdir():
+                    try:
+                        target = os.readlink(fd)
+                    except OSError:
+                        continue
+                    if target.startswith(prefix):
+                        found.add(target)
+            except OSError:
+                continue  # another user's process, or gone
+        return found, "proc"
+    if sys.platform == "darwin":
+        import subprocess
+        try:
+            out = subprocess.run(["/usr/sbin/lsof", "-n", "-Fn"], capture_output=True, text=True,
+                                 timeout=60).stdout
+        except (OSError, subprocess.SubprocessError):
+            return found, "unavailable"
+        for line in out.splitlines():
+            if line.startswith("n") and line[1:].startswith(prefix):
+                found.add(line[1:])
+        return found, "lsof"
+    return found, "unavailable"
+

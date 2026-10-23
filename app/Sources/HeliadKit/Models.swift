@@ -41,6 +41,8 @@ public struct Dataset: Decodable, Sendable, Identifiable, Hashable {
     public let first: String?
     public let last: String?
     public let bytes: Int64
+    /// Stable across reindexing (schema 5); nil from a core older than that.
+    public let datasetUid: String?
 }
 
 /// One row of library.files (the current_files view): the newest version of an observation.
@@ -95,7 +97,7 @@ public struct Job: Decodable, Sendable, Identifiable, Equatable {
     public var title: String {
         var parts: [String] = []
         if let instrument = query["instrument"]?.stringValue { parts.append(instrument) }
-        if let wave = query["wavelength"]?.doubleValue { parts.append("\(JSONValue.double(wave).display) Å") }
+        if let wave = query["wavelength"]?.doubleValue { parts.append(Wavelength.text(wave)) }
         if let series = query["jsoc_series"]?.stringValue { parts.append(series) }
         let start = query["start"]?.stringValue ?? "?"
         let end = query["end"]?.stringValue ?? "?"
@@ -246,6 +248,15 @@ public struct FileCheck: Decodable, Sendable, Hashable {
 public struct LinkRequest: Decodable, Sendable {
     public let action: String   // search | get
     public let query: [String: JSONValue]
+}
+
+/// dataset.from_url: a heliad://dataset/<uid>?start=&end= link, and the dataset it names
+/// (nil when this library has no dataset with that uid).
+public struct DatasetLink: Decodable, Sendable {
+    public let datasetUid: String
+    public let start: String?
+    public let end: String?
+    public let dataset: Dataset?
 }
 
 // MARK: - the cache editor (dataset.query, dataset.cadences, dataset.upgrade, library.rejected)
