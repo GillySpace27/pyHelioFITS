@@ -484,7 +484,7 @@ looks, in this order, for:
    steps are read from the saved scene; its sources are archive addresses with no SHA-256.
 
 A record whose `hfrecord` major version is not 1, or whose `reader_compat` is above 1, is refused
-with error -32002. A higher minor version (1.7, say) is read; keys this core does not know are kept
+with error -32010. A higher minor version (1.7, say) is read; keys this core does not know are kept
 and ignored.
 
     {"jsonrpc":"2.0","id":1,"method":"record.read","params":{"path":"/Users/you/Exports/connect.png"}}
@@ -577,8 +577,8 @@ An error reply has `error` instead of `result`:
 | -32601 | no such method |
 | -32602 | wrong or missing params (`params` must be an object), or a bad `heliad://` link |
 | -32603 | the method failed; `message` names the exception, `data` holds a short traceback |
-| -32002 | `record.read`, `record.resolve`: a processing record of a format this core does not read (another major version, or a higher `reader_compat`) |
-| -32003 | `record.read`: the file named is a sidecar (`.hfrec.json`) that is not a readable record |
+| -32010 | `record.read`, `record.resolve`: a processing record of a format this core does not read (another major version, or a higher `reader_compat`) |
+| -32011 | `record.read`: the file named is a sidecar (`.hfrec.json`) that is not a readable record |
 | -32001 | `ingest.path`: the file can never enter the library (cut off, or not readable as FITS), so offering it again will not help. A -32603 from `ingest.path` (a full disk, say) may pass |
 
 ## The command line and the API

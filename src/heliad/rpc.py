@@ -37,8 +37,8 @@ PARSE_ERROR, INVALID_REQUEST, METHOD_NOT_FOUND, INVALID_PARAMS, INTERNAL_ERROR =
     -32700, -32600, -32601, -32602, -32603,
 )
 UNSTORABLE = -32001  # ingest.path: this file can never enter the library; do not offer it again
-RECORD_UNSUPPORTED = -32002  # record.*: a processing record of a format this core does not read
-RECORD_UNREADABLE = -32003   # record.read: the file named is a sidecar that is not a record
+RECORD_UNSUPPORTED = -32010  # record.*: a processing record of a format this core does not read
+RECORD_UNREADABLE = -32011   # record.read: the file named is a sidecar that is not a record
 
 # Methods slow enough that answering them in order would stall the app; none of
 # them writes to the index.
