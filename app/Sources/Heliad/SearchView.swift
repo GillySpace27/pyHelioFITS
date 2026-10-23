@@ -27,8 +27,8 @@ struct SearchView: View {
                     LabeledContent("Instrument") {
                         TextField("", text: $model.searchFields.instrument, prompt: Text("AIA, EUI, LASCO…"))
                     }
-                    LabeledContent("Wavelength (Å)") {
-                        TextField("", text: $model.searchFields.wavelength, prompt: Text("193"))
+                    LabeledContent("Wavelength") {
+                        TextField("", text: $model.searchFields.wavelength, prompt: Text("193 Å or 530 nm"))
                     }
                     LabeledContent("Cadence (s)") {
                         TextField("", text: $model.searchFields.sample, prompt: Text("one file per this many seconds"))
@@ -146,7 +146,7 @@ struct SearchView: View {
                 local = try? await model.coverage(
                     start: bins.start, end: bins.end, bins: bins.bins,
                     instrument: fields.instrument.trimmingCharacters(in: .whitespaces),
-                    wavelength: Double(fields.wavelength.trimmingCharacters(in: .whitespaces)))
+                    wavelength: Wavelength.angstrom(from: fields.wavelength))
             }
         } catch {
             problem = error.localizedDescription

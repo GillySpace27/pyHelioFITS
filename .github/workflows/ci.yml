@@ -1,4 +1,4 @@
-# The core's tests on Linux and macOS, the Mac app's build and tests on macOS, and a guard
+# The core's tests on Linux, macOS and Windows, the Mac app's build and tests on macOS, and a guard
 # against em dashes. Archive searches are faked in the tests, so nothing here reaches an archive.
 name: CI
 
@@ -26,6 +26,7 @@ jobs:
           - { os: ubuntu-latest, python: "3.10" }
           - { os: ubuntu-latest, python: "3.13" }
           - { os: macos-latest, python: "3.12" }
+          - { os: windows-latest, python: "3.12" }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0

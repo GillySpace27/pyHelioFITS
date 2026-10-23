@@ -167,6 +167,67 @@ final class IndexTimeTests: XCTestCase {
     }
 }
 
+final class WavelengthTests: XCTestCase {
+    /// Same rule as `_wavelength_text` in src/heliad/fitsmeta.py.
+    func testVisibleBandsReadInNanometres() {
+        XCTAssertEqual(Wavelength.text(193), "193 Å")
+        XCTAssertEqual(Wavelength.text(171.5), "171.5 Å")
+        XCTAssertEqual(Wavelength.text(5300), "530 nm")
+        XCTAssertEqual(Wavelength.text(5303), "530.3 nm")
+        XCTAssertEqual(Wavelength.text(1000), "100 nm")
+        XCTAssertEqual(Wavelength.angstrom(from: "530nm"), 5300)
+        XCTAssertEqual(Wavelength.angstrom(from: " 304 A "), 304)
+        XCTAssertNil(Wavelength.angstrom(from: "blue"))
+    }
+
+    func testJobTitleShowsNanometres() throws {
+        let job = try HeliadJSON.decoder().decode(Job.self, from: Data("""
+        {"job_id":3,"source":"fido","status":"done","phase":null,"files_total":1,"files_done":1,"error":null,
+         "created_at":"2026-10-18T21:34:24+00:00","updated_at":"2026-10-18T21:37:30+00:00",
+         "query":{"start":"2025-09-21T20:00:00","end":"2025-09-21T21:00:00","instrument":"WFI","wavelength":5300.0},
+         "result":{"found":1,"stored":1}}
+        """.utf8))
+        XCTAssertEqual(job.title, "WFI · 530 nm · 2025-09-21T20:00:00 to 2025-09-21T21:00:00 UTC")
+    }
+}
+
+final class DatasetLinkTests: XCTestCase {
+    func testDatasetLinkDecodesWithItsDataset() throws {
+        let link = try HeliadJSON.decoder().decode(DatasetLink.self, from: Data("""
+        {"dataset_uid":"9f1c","start":"2025-09-21T20:00:00","end":null,
+         "dataset":{"id":3,"dataset_key":"punch/wfi+nfi/-/cam/3/5300","label":"PUNCH WFI+NFI 530 nm CAM L3",
+                    "observatory":"PUNCH","instrument":"WFI+NFI","detector":null,"product":"CAM","level":"3",
+                    "wavelength":5300.0,"observations":2,"first":"2025-09-21T20:00:00.000",
+                    "last":"2025-09-21T20:01:00.000","bytes":5760,"dataset_uid":"9f1c","resolved_by":"uid"}}
+        """.utf8))
+        XCTAssertEqual(link.datasetUid, "9f1c")
+        XCTAssertEqual(link.start, "2025-09-21T20:00:00")
+        XCTAssertNil(link.end)
+        XCTAssertEqual(link.dataset?.datasetUid, "9f1c")
+        XCTAssertEqual(link.dataset?.datasetKey, "punch/wfi+nfi/-/cam/3/5300")
+        let missing = try HeliadJSON.decoder().decode(DatasetLink.self, from: Data("""
+        {"dataset_uid":"nope","start":null,"end":null,"dataset":null}
+        """.utf8))
+        XCTAssertNil(missing.dataset)
+    }
+
+    func testStudioLaunchForADataset() throws {
+        let d = try HeliadJSON.decoder().decode(Dataset.self, from: Data("""
+        {"id":3,"dataset_key":"k","label":"L","observatory":null,"instrument":null,"detector":null,
+         "product":null,"level":null,"wavelength":null,"observations":2,
+         "first":"2025-09-21T20:00:00.000","last":"2025-09-21T20:01:00.000","bytes":1,"dataset_uid":"u1"}
+        """.utf8))
+        let whole = try XCTUnwrap(StudioLaunch.forDataset(d, start: nil, end: ""))
+        XCTAssertEqual(whole.args, ["-dataset", "u1", "-start", "2025-09-21T20:00:00.000",
+                                    "-end", "2025-09-21T20:01:00.000"])
+        let typed = try XCTUnwrap(StudioLaunch.forDataset(d, start: "2025-09-21 20:00:30Z", end: nil))
+        XCTAssertEqual(typed.start, "2025-09-21T20:00:30.000")
+        XCTAssertNil(StudioLaunch.forDataset(d, start: "yesterday", end: nil))
+        XCTAssertEqual(StudioLaunch.link(datasetUid: "u1", start: "2025-09-21T20:00:00", end: nil)?.absoluteString,
+                       "heliad://dataset/u1?start=2025-09-21T20:00:00")
+    }
+}
+
 final class QueryFieldsTests: XCTestCase {
     func testValidQuery() throws {
         var f = QueryFields()
@@ -182,6 +243,16 @@ final class QueryFieldsTests: XCTestCase {
         XCTAssertEqual(q["sample_s"], .double(60))
         XCTAssertNil(q["jsoc_series"])
         XCTAssertEqual(QueryFields(query: q).wavelength, "193")
+    }
+
+    func testWavelengthTypedInNanometres() throws {
+        var f = QueryFields()
+        f.start = "2025-09-21T16:00"
+        f.end = "2025-09-21T17:00"
+        f.wavelength = "530 nm"
+        XCTAssertEqual(try f.json()["wavelength"], .double(5300))
+        f.wavelength = "193 Å"
+        XCTAssertEqual(try f.json()["wavelength"], .double(193))
     }
 
     func testProblems() {
@@ -303,5 +374,68 @@ final class CoreClientTests: XCTestCase {
         _ = try await client.call("library.datasets", as: [Dataset].self)
         _ = try await client.call("download.list", as: [Job].self)
         await client.stop()
+    }
+}
+
+final class RecordModelTests: XCTestCase {
+    func decode<T: Decodable>(_ type: T.Type, _ json: String) throws -> T {
+        try HeliadJSON.decoder().decode(T.self, from: Data(json.utf8))
+    }
+
+    /// Shaped like the core's record.read for the example CONNECT still, cut to one layer and two steps.
+    func testRecordRead() throws {
+        let read = try decode(RecordRead.self, """
+        {"found":true,"path":"/x/still.png","legacy":false,"valid":true,"errors":[],"skipped":[],
+         "found_in":{"kind":"sidecar","container":"sidecar","path":"/x/still.png.hfrec.json"},"output_check":null,
+         "record":{"hfrecord":"1.0","reader_compat":1,"layers":[{"id":"a","name":"SDO AIA 193 Å L1","sources":[],"steps":[]}]},
+         "view":{"summary":"S","producer":"HelioFITS Studio 1","producer_stamp":null,"dirty":false,
+          "created":"2026-10-22T00:00:00Z","record_id":"00000000-0000-4000-8000-000000000000","format":"1.0",
+          "output":[{"name":"kind","value":"still"}],"scene":[{"name":"time","value":"2025-09-21T20:32:00Z"}],
+          "layers":[{"drawn":0,"id":"a","name":"SDO AIA 193 Å L1","enabled":true,"dataset_key":"sdo/aia/-/-/1/193",
+            "dataset_uid":null,"dataset_label":"SDO AIA 193 Å L1","frames":1,"shortened":false,"source_spec":"heliad_library",
+            "filter":"no filter","lut":"SDO-AIA 193 Å","automatic_steps":0,"varies":false,
+            "steps":[{"index":1,"op":"clip","known_op":true,"stage":"decode","algorithm":null,"implementation":null,
+              "automatic":false,"params":[{"name":"clippingMode","value":"Percentile05"}],"resolved":[{"name":"low","value":"null"}],
+              "units":[],"varies":false,"varies_params":[],"automation":[],"changed_by_user":null,"reference":null,
+              "caveat":"Percentile05 ignores clippingMin/Max","citation":null,"stamp":null}],
+            "caveats":[],"acknowledgement":null,
+            "studio":{"dataset":"sdo/aia/-/-/1/193","start":"2025-09-21T20:32:04.840","end":"2025-09-21T20:32:04.840",
+              "args":["-dataset","sdo/aia/-/-/1/193","-start","2025-09-21T20:32:04.840","-end","2025-09-21T20:32:04.840"]}}],
+          "caveats":[],"citations":["Müller et al. (2017)"],"acknowledgements":[],"provenance":[],"heliad_view":null,
+          "snapshot":[],"not_guaranteed_to_rebuild":[],"studio":null}}
+        """)
+        XCTAssertTrue(read.found)
+        XCTAssertEqual(read.foundIn?.path, "/x/still.png.hfrec.json")
+        let layer = try XCTUnwrap(read.view?.layers.first)
+        XCTAssertEqual(layer.title, "SDO AIA 193 Å L1")
+        XCTAssertEqual(layer.steps[0].params[0].value, "Percentile05")
+        XCTAssertEqual(layer.studio?.args.first, "-dataset")
+        // The record is kept as written, keys unchanged, to send back to record.resolve.
+        XCTAssertEqual(read.record?["reader_compat"], .int(1))
+        let none = try decode(RecordRead.self, #"{"found":false,"path":"/x/plain.png","record":null,"view":null}"#)
+        XCTAssertFalse(none.found)
+        XCTAssertNil(none.view)
+    }
+
+    func testRecordResolution() throws {
+        let r = try decode(RecordResolution.self, """
+        {"counts":{"in_library":1,"superseded":0,"missing":1,"no_hash":0},"complete":false,
+         "layers":[{"layer":0,"name":"AIA","dataset_key":"sdo/aia/-/-/1/193","dataset_uid":null,"dataset_in_library":"sdo/aia/-/-/1/193",
+           "sources":[{"layer":0,"source":0,"sha256":"ab","date_obs":"2025-09-21T20:32:04.840","original_name":"a.fits",
+             "status":"in_library","in_library":true,"dataset_key":"sdo/aia/-/-/1/193","relpath":"store/a.fits","file_id":1,
+             "observation_id":1,"rejected":null,"current":null},
+            {"layer":0,"source":1,"sha256":"cd","date_obs":"2025-09-21T20:33:04.840","original_name":null,
+             "status":"missing","in_library":false,"dataset_key":"sdo/aia/-/-/1/193","relpath":null,"file_id":null,
+             "observation_id":null,"rejected":null,"current":null}]}],
+         "missing_by_dataset":[{"dataset":"sdo/aia/-/-/1/193","dataset_key":"sdo/aia/-/-/1/193","dataset_uid":null,
+           "label":"SDO AIA 193 Å L1","in_library":true,"sha256":["cd"],"count":1,"start":"2025-09-21T20:32:58.840",
+           "end":"2025-09-21T20:33:10.840","reason":null,
+           "fetch":{"method":"dataset.upgrade","params":{"dataset_key":"sdo/aia/-/-/1/193","start":"2025-09-21T20:32:58.840",
+             "end":"2025-09-21T20:33:10.840","dry_run":false},"inferred":false,"note":"fetches the frames the dataset lacks"}}]}
+        """)
+        XCTAssertEqual(r.counts["missing"], 1)
+        XCTAssertEqual(r.layer(drawn: 0)?.missing, 1)
+        XCTAssertEqual(r.missingByDataset[0].fetch?.method, "dataset.upgrade")
+        XCTAssertEqual(r.missingByDataset[0].fetch?.params["dry_run"], .bool(false))
     }
 }

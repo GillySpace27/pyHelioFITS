@@ -19,6 +19,7 @@ writer.
 - [Cache editor methods](#cache-editor-methods)
 - [View methods](#view-methods)
 - [Settings methods](#settings-methods)
+- [Processing record methods](#processing-record-methods)
 - [Notifications](#notifications)
 - [Errors](#errors)
 - [The command line and the API](#the-command-line-and-the-api)
@@ -194,6 +195,30 @@ transaction. File ids, paths and checksums never change.
 
     {"files": 3, "datasets_before": 2, "datasets_after": 2, "observations_before": 2,
      "observations_after": 2, "files_moved": 0, "current_changed": 0, "dry_run": true}
+
+### `library.fix_extensions`
+
+Params: `dry_run=True`. **A dry run unless `dry_run` is false.** Gives every stored file whose
+name has no FITS suffix one: `.fits`, or `.fits.gz` when the file starts with gzip's magic bytes
+(`1f 8b`); a file that starts with neither, or a name already ending in `.gz`, is left alone
+(`not_fits`). Ingest does the same for new files (Studio's oldest cache files are named by a bare
+SHA-256). The CLI is `heliad fix-extensions [--dry-run]`; both run in the writer, under its lock.
+
+For each file, in this order: rename it in its folder; in one transaction, point `files.relpath`
+at the new name and record the old one in `file_aliases`; then leave a relative symlink at the old
+name, so a saved Studio session holding the old path still opens. A run that stops between steps is
+finished by the next one (a renamed file whose row still has the old name is found by its new name
+and checksum; a missing link is made from `file_aliases`), and a second run changes nothing. Where
+symlinks cannot be made the alias is still recorded (`links_skipped`). A file another process has
+open is skipped (`open`) when that is cheap to see: `open_check` says how (`proc` on Linux, `lsof`
+on macOS, `unavailable` elsewhere, where nothing is skipped). Views are rebuilt afterwards;
+thumbnails are keyed by checksum and survive. Deleting a file removes its aliases and old-name links.
+
+    {"candidates": 2, "renamed": 2, "fits": 1, "fits_gz": 1, "not_fits": 0, "missing": 0, "open": 0,
+     "failed": [], "links_made": 2, "links_skipped": 0, "open_check": "proc", "dry_run": false,
+     "examples": [{"from": "store/sdo/aia/1/171/2025/09/21/0123abcd",
+                   "to": "store/sdo/aia/1/171/2025/09/21/0123abcd.fits.gz"}, ...],
+     "views_rebuilt": ["event"]}
 
 ### `library.thumbnail`
 
@@ -403,6 +428,46 @@ Otherwise the queued job, as `download.get` returns it. When it ends, its `resul
      "ingest": {"added": 3}, "skipped": 3},
      "options": {"dataset_key": "sdo/aia/-/-/1/193", "missing_only": true, "tolerance_s": 6.0}}
 
+## Stable dataset ids
+
+A `dataset_key` is built from header rules, so a rules change can rename a dataset (PUNCH's
+`.../530` became `.../5300` once `WAVEUNIT = 'nanometer'` was read). Since schema 5 every dataset
+also has a `dataset_uid`, a random UUID that never changes, and `library.datasets` lists it.
+`library.reindex` gives a renamed dataset's uid (and its row and `dataset_id`) to the new key that
+holds most of its files by sha256, records the old key in `dataset_aliases`, and lists each rename
+in its result as `datasets_renamed: [{old_key, new_key, dataset_uid}]`. Save the uid, not the key,
+in anything that has to find a dataset again.
+
+In the examples below the uid is an illustration, not a real one.
+
+The link form is `heliad://dataset/<dataset_uid>?start=<iso>&end=<iso>` (start and end optional).
+The Mac app opens it by selecting the dataset; `dataset.from_url` reads one.
+
+### `dataset.get`
+
+Params: `dataset_uid=None, dataset_key=None` (exactly one). The dataset as `library.datasets`
+lists it, plus `resolved_by`: `"uid"`, `"key"`, or `"alias"` when `dataset_key` is an old key a
+reindex renamed. Null when nothing matches.
+
+    {"id": 3, "dataset_key": "punch/wfi+nfi/-/cam/3/5300", "dataset_uid": "0b6f8d2e-8a1f-4c1e-9d55-2f3c7e1a4b90",
+     "label": "PUNCH WFI+NFI 530 nm CAM L3", ..., "observations": 12, "resolved_by": "alias"}
+
+### `dataset.resolve`
+
+Params: `key`. A uid, a current key, or an old key, to `{dataset_uid, dataset_key, resolved_by}`;
+null when none matches. A current key wins over an alias of the same text.
+
+    {"dataset_uid": "0b6f8d2e-8a1f-4c1e-9d55-2f3c7e1a4b90", "dataset_key": "punch/wfi+nfi/-/cam/3/5300",
+     "resolved_by": "alias"}
+
+### `dataset.from_url`
+
+Params: `url`. The parts of a `heliad://dataset/<uid>` link and the dataset it names (null if this
+library has no such uid). Unknown parameters are refused.
+
+    {"dataset_uid": "0b6f8d2e-8a1f-4c1e-9d55-2f3c7e1a4b90", "start": "2025-09-21T16:00:00",
+     "end": "2025-09-21T17:00:00", "dataset": {"dataset_key": "punch/wfi+nfi/-/cam/3/5300", ...}}
+
 ## View methods
 
 A view is a named selection of observations, such as an event. It always resolves to the newest
@@ -456,6 +521,92 @@ Params: `key, value=None`. Sets one setting; a null `value` removes it. Returns 
 Known keys: `jsoc_email` (the address registered with JSOC exports) and `vso_mirrors` (VSO
 mirrors to retry, comma-separated, or `none`).
 
+## Processing record methods
+
+A processing record (format `hfrecord` 1.x, schema in `src/heliad/schemas/hfrecord-1.schema.json`)
+says what made an exported image or movie: each layer's dataset, its source files by SHA-256, and
+the steps applied to them in order. HelioFITS Studio writes it beside the export
+(`<export file name>.hfrec.json`, the complete copy) and inside it where the container takes one. These
+methods read records; neither writes anything.
+
+### `record.read`
+
+Params: `path`, an exported file or a sidecar. Answers in the background, like `search`. The core
+looks, in this order, for:
+
+1. a sidecar named for the whole export file, `<file>.hfrec.json` (`frame.png.hfrec.json`, the
+   canonical name), then `<basename>.hfrec.json` (`frame.hfrec.json`) as a fallback, or `path`
+   itself when it ends in `.hfrec.json`;
+2. a PNG `tEXt`, `zTXt` or `iTXt` chunk with keyword `hfrecord`;
+3. an OpenEXR string header attribute `hfrecord` (the header is parsed directly; OpenEXR is not needed);
+4. an MP4 or MOV metadata tag `hfrecord`, through `ffprobe -show_format` when `ffprobe` is on
+   `PATH` (without it movies are skipped, and `skipped` says so);
+5. a FITS extension named `HFRECORD` (bytes as an 8-bit image, or text in a table's first column),
+   then an `hfrecord.json` in the FITS file's folder (Send to Python);
+6. only when none of those holds a record: Studio's older `hfstudio` block (PNG chunk, EXR
+   attribute or movie comment), converted into a minimal record with `legacy: true`. Its layers and
+   steps are read from the saved scene; its sources are archive addresses with no SHA-256.
+
+A record whose `hfrecord` major version is not 1, or whose `reader_compat` is above 1, is refused
+with error -32010. A higher minor version (1.7, say) is read; keys this core does not know are kept
+and ignored.
+
+    {"jsonrpc":"2.0","id":1,"method":"record.read","params":{"path":"/Users/you/Exports/connect.png"}}
+
+Result: `found` (false, with `record` and `view` null, when the file carries no record), `path`,
+`record` (as written), `found_in` (`kind`: sidecar, png, exr, mp4, fits or folder; `container`, such
+as `png:tEXt:hfrecord`; `path`), `legacy`, `valid` and `errors` (checked against the schema; an
+invalid record is still returned), `skipped` (places that held something unreadable),
+`output_check` (sidecars only: the export's `sha256` against `output.sha256`, `matches` true, false
+or null when the export is not beside it) and `view`, the rows to show as they are:
+
+    {"found":true,"legacy":false,"valid":true,"errors":[],"found_in":{"kind":"sidecar","container":"sidecar","path":".../connect.hfrec.json"},
+     "view":{"summary":"HelioFITS Studio <version>, still at 2025-09-21T20:32:00Z.\n1. PUNCH ...",
+       "producer":"HelioFITS Studio <VERSION> (build ..., commit ...)","created":"2026-10-22T00:00:00Z",
+       "output":[{"name":"kind","value":"still"},...],"scene":[{"name":"time","value":"2025-09-21T20:32:00Z"},...],
+       "layers":[{"drawn":2,"name":"SDO AIA 193 Å L1","dataset_key":"sdo/aia/-/-/1/193","dataset_uid":null,
+         "dataset_label":"SDO AIA 193 Å L1","frames":1,"filter":"no filter","lut":"SDO-AIA 193 Å","varies":false,
+         "steps":[{"index":1,"op":"select_plane","stage":"decode","automatic":false,"params":[{"name":"plane","value":"0"}],
+           "resolved":[],"varies":false,"automation":[],"reference":null,"caveat":null,"citation":null,"stamp":null,...},...],
+         "acknowledgement":null,"studio":{"dataset":"sdo/aia/-/-/1/193","start":"2025-09-21T20:32:04.840",
+           "end":"2025-09-21T20:32:04.840","args":["-dataset","sdo/aia/-/-/1/193","-start","...","-end","..."]}},...],
+       "caveats":[...],"citations":[...],"acknowledgements":[],"provenance":[],"not_guaranteed_to_rebuild":[],
+       "studio":{...}}}
+
+`view.layers` lists the top layer first; `drawn` is each layer's index in the record, whose order
+is drawing order (0 at the bottom). Parameter values are text (JSON for anything but a string).
+`known_op` is false for an op this core does not know; show it verbatim. `studio` is the command
+line that opens a layer's dataset in Studio over its sources' time span: `-dataset` takes the
+record's `dataset_uid` when it has one, else its `dataset_key`. The view's own `studio` is the
+layer Studio marked master, else the top layer.
+
+### `record.resolve`
+
+Params: `record`, as `record.read` returned it. Looks every source up in the index by `sha256`
+(`files.sha256` is unique). A record's dataset is matched by `dataset_uid` when both the record and
+the index have one, else by `dataset_key`.
+
+    {"jsonrpc":"2.0","id":2,"method":"record.resolve","params":{"record":{...}}}
+
+Per source, `status` is `in_library` (the observation's current file), `superseded` (kept, but a
+newer version is current; `current` names it), `missing`, or `no_hash` (a Helioviewer frame or a
+legacy record, with nothing to look up). Kept sources carry `relpath`, `file_id`,
+`observation_id` and `rejected` (the reason, when set aside). `missing_by_dataset` groups the
+missing sources with their time span, widened by the dataset's tolerance, and `fetch`, the call
+that would get them:
+
+    {"counts":{"in_library":1,"superseded":1,"missing":2,"no_hash":1},"complete":false,
+     "layers":[{"layer":0,"name":"...","dataset_key":"...","dataset_in_library":"...","sources":[{"source":0,"sha256":"...","status":"superseded",...}]},...],
+     "missing_by_dataset":[{"dataset":"sdo/aia/-/-/1/193","dataset_key":"sdo/aia/-/-/1/193","in_library":true,"count":1,
+       "sha256":["..."],"start":"2025-09-21T20:32:58.840","end":"2025-09-21T20:33:10.840",
+       "fetch":{"method":"dataset.upgrade","params":{"dataset_key":"sdo/aia/-/-/1/193","start":"...","end":"...","dry_run":false},
+         "inferred":false,"note":"..."},"reason":null}]}
+
+For a dataset the library keeps, `fetch` is `dataset.upgrade` over the span (missing frames only,
+through the dataset's own query). For one it does not, `fetch` is `download.enqueue` with a query
+inferred from the record's dataset fields (`inferred: true`), or null with a `reason` when the
+record names no instrument or no times. Send `fetch.method` with `fetch.params` to fetch.
+
 ## Notifications
 
 Sent without an `id`, to every client of the core.
@@ -490,6 +641,8 @@ An error reply has `error` instead of `result`:
 | -32601 | no such method |
 | -32602 | wrong or missing params (`params` must be an object), or a bad `heliad://` link |
 | -32603 | the method failed; `message` names the exception, `data` holds a short traceback |
+| -32010 | `record.read`, `record.resolve`: a processing record of a format this core does not read (another major version, or a higher `reader_compat`) |
+| -32011 | `record.read`: the file named is a sidecar (`.hfrec.json`) that is not a readable record |
 | -32001 | `ingest.path`: the file can never enter the library (cut off, or not readable as FITS), so offering it again will not help. A -32603 from `ingest.path` (a full disk, say) may pass |
 
 ## The command line and the API

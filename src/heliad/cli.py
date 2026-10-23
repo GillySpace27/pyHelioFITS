@@ -15,6 +15,7 @@
     heliad get    [--via fido|jsoc] --start T --end T [...]   download and ingest
     heliad jobs [--status S]         download jobs, newest first
     heliad reindex [--dry-run]       apply the current header rules to every file
+    heliad fix-extensions [--dry-run]  add .fits / .fits.gz to stored files without one
     heliad delete [--file ID] [--observation ID] [--dataset KEY] [--yes]
     heliad settings [KEY [VALUE] | --unset KEY]
     heliad serve                     JSON-RPC on stdin/stdout; relays to the
@@ -38,6 +39,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -105,6 +107,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--limit", type=int, default=50)
     p = sub.add_parser("reindex")
     p.add_argument("--dry-run", action="store_true")
+    p = sub.add_parser("fix-extensions", help="add .fits or .fits.gz to stored files that have no FITS suffix")
+    p.add_argument("--dry-run", action="store_true", help="count what would be renamed; change nothing")
     p = sub.add_parser("delete")
     p.add_argument("--file", type=int, action="append", dest="file_ids", default=[])
     p.add_argument("--observation", type=int, action="append", dest="observation_ids", default=[])
@@ -157,6 +161,12 @@ def _fail(code: int, message: str) -> int:
 def _serve(ns) -> int:
     from . import share
     from .rpc import Server
+    if os.name == "nt":
+        # JSON-RPC lines are UTF-8 on every platform; Windows pipes default to the
+        # locale's code page, which would misread a client's non-ASCII text.
+        for stream in (sys.stdin, sys.stdout):
+            if hasattr(stream, "reconfigure"):
+                stream.reconfigure(encoding="utf-8")
     try:
         lib = Library.open(ns.library)
     except LibraryLocked:
@@ -234,6 +244,10 @@ def _run(lib: Library, ns, out: "Output") -> int:
         def progress(i, n):
             print(f"  read {i}/{n}", file=sys.stderr)
         out.show(lib.reindex(dry_run=ns.dry_run, progress=progress), _reindex_text)
+    elif ns.cmd == "fix-extensions":
+        def progress(i, n):
+            print(f"  checked {i}/{n}", file=sys.stderr)
+        out.show(lib.fix_extensions(dry_run=ns.dry_run, progress=progress), _fix_extensions_text)
     elif ns.cmd == "delete":
         result = lib.delete(file_ids=ns.file_ids, observation_ids=ns.observation_ids,
                             dataset_keys=ns.dataset_keys, dry_run=not ns.yes)
@@ -402,6 +416,14 @@ def _import_text(results: list[dict]) -> str:
             lines.append(f"{r['path']}: {r['status']} as file {r['file_id']} ({r['relpath']})")
             lines += [f"  {f['severity']}: {f['message']}" for f in r.get("findings", [])]
     return "\n".join(lines)
+
+
+def _fix_extensions_text(r: dict) -> str:
+    done = r["fits"] + r["fits_gz"] if r.get("dry_run") else r["renamed"]
+    verb = "would rename" if r.get("dry_run") else "renamed"
+    return (f"{r['candidates']} stored files without a FITS suffix: {verb} {done} "
+            f"({r['fits']} .fits, {r['fits_gz']} .fits.gz); not FITS {r['not_fits']}, "
+            f"missing {r['missing']}, open elsewhere {r['open']}, failed {len(r['failed'])}")
 
 
 def _reindex_text(r: dict) -> str:

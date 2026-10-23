@@ -250,7 +250,7 @@ class JobRunner:
                 "WHERE d.job_id = ? AND d.status = 'done'", (job_id,)).fetchall()
         for row in rows:
             name = json.loads(row["record_json"]).get("name")
-            if not name or "/" in name or name.startswith("."):
+            if not name or "/" in name or "\\" in name or name.startswith("."):
                 continue
             target = staging / name
             if not target.exists():

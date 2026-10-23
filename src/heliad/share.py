@@ -100,7 +100,7 @@ class Hub:
             self._thread.join()
         self._sock.close()
         try:  # leave a newer writer's endpoint alone
-            if json.loads(self.path.read_text()).get("token") == self.token:
+            if json.loads(self.path.read_text(encoding="utf-8")).get("token") == self.token:
                 self.path.unlink()
         except (OSError, ValueError):
             pass
@@ -155,7 +155,7 @@ def connect(root: Path, wait_s: float = WAIT_FOR_WRITER) -> socket.socket:
     deadline = time.monotonic() + wait_s
     while True:
         try:
-            endpoint = json.loads(path.read_text())
+            endpoint = json.loads(path.read_text(encoding="utf-8"))
             conn = socket.create_connection(("127.0.0.1", int(endpoint["port"])), timeout=5)
             try:
                 conn.sendall((endpoint["token"] + "\n").encode())
@@ -219,7 +219,7 @@ def _handshake_reply(conn: socket.socket) -> bytes:
 def _write_private(path: Path, text: str) -> None:
     tmp = path.with_name(path.name + ".tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as fh:
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
         fh.write(text)
     os.chmod(tmp, 0o600)  # in case the file was already there with wider permissions
     os.replace(tmp, path)
