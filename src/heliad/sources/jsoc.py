@@ -20,9 +20,10 @@ from pathlib import Path
 from .. import times
 from ..library import is_fits
 from ..query import Query
+from . import ArchiveError
 
 
-class NoEmail(RuntimeError):
+class NoEmail(ArchiveError):
     pass
 
 
@@ -67,7 +68,10 @@ def search(query: Query, *, settings: dict | None = None) -> dict:
     import drms
 
     rs = recordset(query)
-    keys = drms.Client().query(rs, key="T_REC,WAVELNTH,QUALITY")
+    try:
+        keys = drms.Client().query(rs, key="T_REC,WAVELNTH,QUALITY")
+    except Exception as exc:
+        raise ArchiveError(f"JSOC query failed: {type(exc).__name__}: {exc}") from exc
     return {"query": query.to_json(), "recordset": rs, "total": len(keys),
             "rows": keys.astype(str).to_dict("records")[:2000],
             "times": [str(t) for t in keys["T_REC"]]}  # every record; the core bins them

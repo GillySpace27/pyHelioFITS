@@ -27,22 +27,37 @@ import threading
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, TextIO
+from urllib.parse import urlsplit
 
 from . import __version__, config, coverage, db, fitsmeta, jobs, upgrade, views
 from . import record as hfrecord
-from .library import Library
-from .query import Query, parse_dataset_link
+from .library import Library, LibraryLocked, ReadOnlyLibrary
+from .query import Query, URL_SCHEME, parse_dataset_link
+from .sources import ArchiveError
 
 PARSE_ERROR, INVALID_REQUEST, METHOD_NOT_FOUND, INVALID_PARAMS, INTERNAL_ERROR = (
     -32700, -32600, -32601, -32602, -32603,
 )
+# Heliad's own codes. The vocabulary only grows: a code, once given, keeps its meaning.
 UNSTORABLE = -32001  # ingest.path: this file can never enter the library; do not offer it again
+NOT_FOUND = -32002   # no dataset, observation, file, job, view or source of that name or id
+READ_ONLY = -32003   # a write asked of a core that opened the library read-only
+ARCHIVE = -32004     # the archive could not be asked, or refused; the message says why
+LOCKED = -32005      # another process holds the library and this core cannot act on it
 RECORD_UNSUPPORTED = -32010  # record.*: a processing record of a format this core does not read
 RECORD_UNREADABLE = -32011   # record.read: the file named is a sidecar that is not a record
 
 # Methods slow enough that answering them in order would stall the app; none of
 # them writes to the index.
-BACKGROUND = frozenset({"search", "library.thumbnail", "dataset.cadences", "record.read"})
+BACKGROUND = frozenset({"archive.search", "library.thumbnail", "dataset.cadences", "record.read"})
+
+# Old names, kept so a client written against them keeps working; each answers
+# exactly as the method it names. A new client uses the new name.
+ALIASES: dict[str, str] = {
+    "search": "archive.search",
+    "query.from_url": "link.parse",
+    "dataset.from_url": "link.parse",
+}
 
 
 # method: (params, what it does). Params are as the method takes them, by name.
@@ -68,7 +83,6 @@ API: dict[str, tuple[str, str]] = {
     "dataset.get": ("dataset_uid=None, dataset_key=None",
                     "One dataset by its stable uid or by key (an old key a reindex renamed resolves too), or null."),
     "dataset.resolve": ("key", "{dataset_uid, dataset_key, resolved_by} for a uid, a key or an old key; or null."),
-    "dataset.from_url": ("url", "The dataset uid, start and end in a heliad://dataset/<uid> link, and the dataset."),
     "dataset.query": ("dataset_key", "The query that asks the archive again for a dataset, stored or inferred."),
     "dataset.cadences": ("dataset_key, start=None, end=None",
                          "Compare a dataset's cadence with the archive's; lists the frames it lacks."),
@@ -85,8 +99,8 @@ API: dict[str, tuple[str, str]] = {
     "download.get": ("job_id", "One download job, or null."),
     "download.cancel": ("job_id", "Cancel a queued or running job."),
     "download.retry": ("job_id", "Queue a partial or failed job again; it fetches only what is missing."),
-    "search": ("query, source='fido', bins=240", "Ask an archive what it holds for a query; downloads nothing."),
-    "query.from_url": ("url", "The action and query in a heliad:// link."),
+    "archive.search": ("query, source='fido', bins=240", "Ask an archive what it holds for a query; downloads nothing."),
+    "link.parse": ("url", "What a heliad:// link asks for: an action and a query, or a dataset and a range."),
     "view.create": ("name, description=None, dataset_keys=None, start=None, end=None, observation_ids=None",
                     "Create a named view (an event, say) or add observations to one."),
     "view.materialize": ("name", "Build a view's folder of links and its manifest.csv."),
@@ -97,6 +111,9 @@ API: dict[str, tuple[str, str]] = {
     "record.resolve": ("record", "Look a record's sources up in the library by SHA-256; groups the missing by dataset."),
     "settings.get": ("", "Heliad's settings (jsoc_email, vso_mirrors, ...)."),
     "settings.set": ("key, value=None", "Set a setting; a null value removes it."),
+    "search": ("query, source='fido', bins=240", "Old name of archive.search; answers the same."),
+    "query.from_url": ("url", "Old name of link.parse; answers the same."),
+    "dataset.from_url": ("url", "Old name of link.parse; answers the same."),
 }
 
 # Sent without an id, to every client of the core.
@@ -170,7 +187,6 @@ class Server:
             "library.refetch": lambda observation_id: upgrade.refetch(lib, self._jobs(), observation_id),
             "dataset.get": self.dataset_get,
             "dataset.resolve": lambda key: lib.resolve_dataset(key),
-            "dataset.from_url": self.dataset_from_url,
             "dataset.query": lambda dataset_key: upgrade.dataset_query(lib, dataset_key),
             "dataset.cadences": self.cadences,
             "dataset.upgrade": lambda dataset_key, sample_s=None, start=None, end=None, dry_run=True:
@@ -189,7 +205,7 @@ class Server:
             "download.cancel": lambda job_id: self._jobs().cancel(job_id),
             "download.retry": lambda job_id: self._jobs().retry(job_id),
             "library.thumbnail": lambda file_id, size=256: {"path": str(lib.thumbnail(file_id, size))},
-            "query.from_url": self.query_from_url,
+            "link.parse": self.link_parse,
             "settings.get": lambda: config.load_settings(),
             "settings.set": lambda key, value=None: config.save_setting(key, value),
             "ingest.path": self.ingest_path,
@@ -202,8 +218,10 @@ class Server:
             "library.coverage": lambda **kw: coverage.library(lib, **kw),
             "record.read": self.record_read,
             "record.resolve": self.record_resolve,
-            "search": self.search,
+            "archive.search": self.search,
         }
+        for old, new in ALIASES.items():
+            self.methods[old] = self.methods[new]
 
     # ---- io ----------------------------------------------------------------
 
@@ -242,7 +260,7 @@ class Server:
         params = request.get("params") or {}
         if not isinstance(params, dict):
             return _error(rid, INVALID_PARAMS, "params must be an object of named parameters")
-        if request["method"] in BACKGROUND:
+        if ALIASES.get(request["method"], request["method"]) in BACKGROUND:
             future = self._pool.submit(self._answer_later, rid, method, params, reply or self.send)
             if pending is not None:
                 pending.append(future)
@@ -261,6 +279,16 @@ class Server:
             return _error(rid, INVALID_PARAMS, str(exc))
         except RpcError as exc:
             return _error(rid, exc.code, exc.message, exc.data)
+        except KeyError as exc:  # the core's "no such dataset / observation / file / job"
+            return _error(rid, NOT_FOUND, str(exc.args[0]) if exc.args else "not found")
+        except ValueError as exc:  # a param the core could not use: a bad time, a range, a missing reason
+            return _error(rid, INVALID_PARAMS, str(exc))
+        except ReadOnlyLibrary as exc:
+            return _error(rid, READ_ONLY, str(exc))
+        except LibraryLocked as exc:
+            return _error(rid, LOCKED, str(exc))
+        except ArchiveError as exc:
+            return _error(rid, ARCHIVE, str(exc))
         except Exception as exc:
             return _error(rid, INTERNAL_ERROR, f"{type(exc).__name__}: {exc}",
                           traceback.format_exc(limit=5))
@@ -307,6 +335,7 @@ class Server:
             "library_root": str(self.lib.root),
             "db_path": str(self.lib.cfg.db_path),
             "methods": sorted(self.methods),
+            "aliases": dict(ALIASES),
         }
 
     def ingest_path(self, path: str, source_url: str | None = None, query: dict | None = None) -> dict:
@@ -340,8 +369,16 @@ class Server:
         resolve = self.jobs._source if self.jobs is not None else sources.get
         return upgrade.cadences(self.lib, resolve, dataset_key, start, end, settings=config.load_settings())
 
-    def query_from_url(self, url: str) -> dict:
+    def link_parse(self, url: str) -> dict:
+        """link.parse: a heliad://search or heliad://get link gives {"action", "query"};
+        a heliad://dataset/<uid> link gives {"action": "dataset", "dataset_uid", "start",
+        "end", "dataset"} (dataset null when this library has no such uid)."""
         try:
+            parts = urlsplit(url)
+            if parts.scheme == URL_SCHEME and parts.netloc == "dataset":
+                link = parse_dataset_link(url)
+                return {"action": "dataset", **link,
+                        "dataset": self.lib.dataset(dataset_uid=link["dataset_uid"])}
             action, q = Query.from_url(url)
         except ValueError as exc:
             raise RpcError(INVALID_PARAMS, str(exc))
@@ -372,16 +409,9 @@ class Server:
         except ValueError as exc:
             raise RpcError(INVALID_PARAMS, str(exc))
 
-    def dataset_from_url(self, url: str) -> dict:
-        try:
-            link = parse_dataset_link(url)
-        except ValueError as exc:
-            raise RpcError(INVALID_PARAMS, str(exc))
-        return {**link, "dataset": self.lib.dataset(dataset_uid=link["dataset_uid"])}
-
     def _jobs(self) -> jobs.JobRunner:
         if self.jobs is None:
-            raise RpcError(INVALID_REQUEST, "this core opened the library read-only")
+            raise RpcError(READ_ONLY, "this core opened the library read-only")
         return self.jobs
 
     def enqueue(self, query: dict, source: str = "fido") -> dict:

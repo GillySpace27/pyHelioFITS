@@ -19,6 +19,7 @@ writer.
 - [Cache editor methods](#cache-editor-methods)
 - [View methods](#view-methods)
 - [Settings methods](#settings-methods)
+- [Old names](#old-names)
 - [Processing record methods](#processing-record-methods)
 - [Notifications](#notifications)
 - [Errors](#errors)
@@ -42,7 +43,7 @@ and read one line per reply from its stdout:
     {"jsonrpc":"2.0","id":1,"result":{"library_root":"/Users/you/HeliadLibrary","schema_version":4,"rules_version":3,"reindex_due":false,"datasets":2,"observations":2,"files":3,"bytes":17280,"warnings":0,"collisions":0}}
 
 - **Params are named**: `"params": {"file_id": 1}`. Leave `params` out for a method that takes none.
-- **Match replies by `id`.** Most methods answer in order. `search`, `library.thumbnail` and
+- **Match replies by `id`.** Most methods answer in order. `archive.search`, `library.thumbnail` and
   `dataset.cadences` run in the background and answer when done, so their replies can overtake
   others.
 - **Notifications** are lines with a `method` and no `id` (download and ingest progress). Ignore
@@ -94,7 +95,7 @@ If the lock is held by something that is not serving (`heliad import`, say), `he
 
 ## Queries
 
-`download.enqueue`, `search` and `ingest.path` take a query: an object with these fields, all
+`download.enqueue`, `archive.search` and `ingest.path` take a query: an object with these fields, all
 optional except `start` and `end`. Times are UTC, ISO 8601.
 
 | Field | Meaning |
@@ -109,7 +110,7 @@ optional except `start` and `end`. Times are UTC, ISO 8601.
     {"start": "2025-09-21T16:00:00", "end": "2025-09-21T17:00:00", "instrument": "AIA", "wavelength": 193.0}
 
 The same fields, URL-encoded, make a `heliad://search?...` or `heliad://get?...` link; see
-[`query.from_url`](#queryfrom_url).
+[`link.parse`](#linkparse).
 
 ## Library methods
 
@@ -118,9 +119,12 @@ The same fields, URL-encoded, make a `heliad://search?...` or `heliad://get?...`
 Params: none. Versions, the library, and every method this core answers. Call it first to check
 that the core is new enough.
 
-    {"name": "heliad", "version": "0.1.0", "schema_version": 4, "reader_compat": 1, "rules_version": 3,
+    {"name": "heliad", "version": "0.1.0", "schema_version": 5, "reader_compat": 1, "rules_version": 4,
      "reindex_due": false, "readonly": false, "library_root": ".../library",
-     "db_path": ".../library/heliad.sqlite", "methods": ["download.cancel", "download.enqueue", ...]}
+     "db_path": ".../library/heliad.sqlite", "methods": ["archive.search", "dataset.cadences", ...],
+     "aliases": {"search": "archive.search", "query.from_url": "link.parse", "dataset.from_url": "link.parse"}}
+
+`aliases` maps each old method name this core still answers to the method it stands for.
 
 ### `library.stats`
 
@@ -307,7 +311,7 @@ from it is ingested. A job that already ended answers with its status.
 Params: `job_id`. Queues a `partial` or `failed` job again; it fetches only what is still missing.
 Any other job is an error.
 
-### `search`
+### `archive.search`
 
 Params: `query, source='fido', bins=240`. Asks the archive what it holds; downloads nothing.
 Answers in the background. With `fido`, one entry per provider (at most 2000 rows each); every
@@ -319,15 +323,26 @@ bins the index, so the two can be drawn one above the other. The shape (not a re
                     "rows": [{...}], "coverage": {"start": ..., "end": ..., "bins": 240, "bin_seconds": ...,
                                                   "counts": [...], ...}}]}
 
-With `jsoc`: `{"query", "recordset", "total", "rows", "coverage"}`.
+With `jsoc`: `{"query", "recordset", "total", "rows", "coverage"}`. An archive that cannot be
+asked (the network, a server error, a missing `jsoc_email`) is error -32004; a query the source
+cannot use is -32602.
 
-### `query.from_url`
+### `link.parse`
 
-Params: `url`. The action and query in a `heliad://` link. Unknown parameters are refused.
+Params: `url`. What a `heliad://` link asks for. Unknown parameters are refused (-32602). A
+`heliad://search?...` or `heliad://get?...` link carries a query:
 
-    query.from_url(url="heliad://search?start=2025-09-21T16:00:00&end=2025-09-21T17:00:00&instrument=AIA&wavelength=193")
+    link.parse(url="heliad://search?start=2025-09-21T16:00:00&end=2025-09-21T17:00:00&instrument=AIA&wavelength=193")
     {"action": "search", "query": {"end": "2025-09-21T17:00:00", "instrument": "AIA",
                                    "start": "2025-09-21T16:00:00", "wavelength": 193.0}}
+
+A `heliad://dataset/<dataset_uid>?start=<iso>&end=<iso>` link names one dataset over a range
+(see [Stable dataset ids](#stable-dataset-ids)); `dataset` is null when this library has no such
+uid, and `start` or `end` is null when the link leaves it out:
+
+    link.parse(url="heliad://dataset/0b6f8d2e-8a1f-4c1e-9d55-2f3c7e1a4b90?start=2025-09-21T16:00:00&end=2025-09-21T17:00:00")
+    {"action": "dataset", "dataset_uid": "0b6f8d2e-8a1f-4c1e-9d55-2f3c7e1a4b90", "start": "2025-09-21T16:00:00",
+     "end": "2025-09-21T17:00:00", "dataset": {"dataset_key": "punch/wfi+nfi/-/cam/3/5300", ...}}
 
 ## Cache editor methods
 
@@ -441,7 +456,7 @@ in anything that has to find a dataset again.
 In the examples below the uid is an illustration, not a real one.
 
 The link form is `heliad://dataset/<dataset_uid>?start=<iso>&end=<iso>` (start and end optional).
-The Mac app opens it by selecting the dataset; `dataset.from_url` reads one.
+The Mac app opens it by selecting the dataset; [`link.parse`](#linkparse) reads one.
 
 ### `dataset.get`
 
@@ -459,14 +474,6 @@ null when none matches. A current key wins over an alias of the same text.
 
     {"dataset_uid": "0b6f8d2e-8a1f-4c1e-9d55-2f3c7e1a4b90", "dataset_key": "punch/wfi+nfi/-/cam/3/5300",
      "resolved_by": "alias"}
-
-### `dataset.from_url`
-
-Params: `url`. The parts of a `heliad://dataset/<uid>` link and the dataset it names (null if this
-library has no such uid). Unknown parameters are refused.
-
-    {"dataset_uid": "0b6f8d2e-8a1f-4c1e-9d55-2f3c7e1a4b90", "start": "2025-09-21T16:00:00",
-     "end": "2025-09-21T17:00:00", "dataset": {"dataset_key": "punch/wfi+nfi/-/cam/3/5300", ...}}
 
 ## View methods
 
@@ -521,6 +528,24 @@ Params: `key, value=None`. Sets one setting; a null `value` removes it. Returns 
 Known keys: `jsoc_email` (the address registered with JSOC exports) and `vso_mirrors` (VSO
 mirrors to retry, comma-separated, or `none`).
 
+## Old names
+
+A method keeps answering under a name it once had, so a client written against it keeps
+working; `heliad.hello` lists them as `aliases`. A new client uses the new name.
+
+### `search`
+
+Params: `query, source='fido', bins=240`. The old name of [`archive.search`](#archivesearch); answers the same.
+
+### `query.from_url`
+
+Params: `url`. The old name of [`link.parse`](#linkparse); answers the same.
+
+### `dataset.from_url`
+
+Params: `url`. The old name of [`link.parse`](#linkparse); answers the same (a dataset link's
+result has gained `"action": "dataset"`).
+
 ## Processing record methods
 
 A processing record (format `hfrecord` 1.x, schema in `src/heliad/schemas/hfrecord-1.schema.json`)
@@ -531,7 +556,7 @@ methods read records; neither writes anything.
 
 ### `record.read`
 
-Params: `path`, an exported file or a sidecar. Answers in the background, like `search`. The core
+Params: `path`, an exported file or a sidecar. Answers in the background, like `archive.search`. The core
 looks, in this order, for:
 
 1. a sidecar named for the whole export file, `<file>.hfrec.json` (`frame.png.hfrec.json`, the
@@ -637,10 +662,14 @@ An error reply has `error` instead of `result`:
 | Code | When |
 |---|---|
 | -32700 | the line is not JSON |
-| -32600 | not a JSON-RPC 2.0 request; or a download asked of a read-only core |
+| -32600 | not a JSON-RPC 2.0 request |
 | -32601 | no such method |
-| -32602 | wrong or missing params (`params` must be an object), or a bad `heliad://` link |
+| -32602 | wrong or missing params (`params` must be an object), or a param the core cannot use: a bad `heliad://` link, a time it cannot read, a range that ends before it starts, a rejection without a reason, `bins` out of range |
 | -32603 | the method failed; `message` names the exception, `data` holds a short traceback |
+| -32002 | not found: no dataset, observation, file, job, view or source of that id or name; `message` names it |
+| -32003 | a write (a download, a rejection, a delete) asked of a core that opened the library read-only |
+| -32004 | the archive could not be asked, or refused: the network, a server error, a setting it needs (`jsoc_email`); `message` says which |
+| -32005 | another process holds the library and this core cannot act on it |
 | -32010 | `record.read`, `record.resolve`: a processing record of a format this core does not read (another major version, or a higher `reader_compat`) |
 | -32011 | `record.read`: the file named is a sidecar (`.hfrec.json`) that is not a readable record |
 | -32001 | `ingest.path`: the file can never enter the library (cut off, or not readable as FITS), so offering it again will not help. A -32603 from `ingest.path` (a full disk, say) may pass |
@@ -651,8 +680,8 @@ Every `heliad` command is a thin layer over the same library code. Commands that
 the library read-only, so they work while a core holds it. A command prints a table or a few lines
 for a person; with `--json` it prints exactly the method's result. Exit codes: 0 done; 1 the
 operation ran and reported a problem (`verify` found missing or altered files, `get` ended partial
-or failed, `import` had errors); 2 bad arguments or no library; 3 the library is locked by another
-core that is not serving it.
+or failed, `import` had errors, the archive could not be asked); 2 bad arguments, an id or key the
+library does not have, or no library; 3 the library is locked by another core that is not serving it.
 
 | Command | Method |
 |---|---|
@@ -660,16 +689,26 @@ core that is not serving it.
 | `heliad datasets` | `library.datasets` |
 | `heliad files [--dataset KEY] [--start T] [--end T]` | `library.files` |
 | `heliad versions OBSERVATION_ID` | `library.versions` |
+| `heliad checks FILE_ID` | `library.checks` |
+| `heliad coverage [--start T] [--end T] [--bins N] [--dataset KEY ...]` | `library.coverage` |
 | `heliad collisions` | `library.collisions` |
 | `heliad verify` | `library.verify` |
 | `heliad thumb FILE_ID [--size N]` | `library.thumbnail` |
 | `heliad import PATH...` | `ingest.path`, `ingest.tree` |
-| `heliad search --start T --end T ...` | `search` |
+| `heliad search --start T --end T ...` | `archive.search` |
 | `heliad get --start T --end T ...` | `download.enqueue`, run to the end |
 | `heliad jobs [--status S]` | `download.list` |
 | `heliad delete ... [--yes]` | `library.delete` |
 | `heliad reindex [--dry-run]` | `library.reindex` |
+| `heliad fix-extensions [--dry-run]` | `library.fix_extensions` |
+| `heliad reject OBSERVATION_ID... --reason TEXT` | `library.reject` |
+| `heliad unreject OBSERVATION_ID...` | `library.unreject` |
+| `heliad rejected [--dataset KEY]` | `library.rejected` |
+| `heliad refetch OBSERVATION_ID` | `library.refetch`, run to the end |
+| `heliad cadences DATASET_KEY [--start T] [--end T]` | `dataset.cadences` |
+| `heliad upgrade DATASET_KEY [--sample S] [--start T] [--end T] [--yes]` | `dataset.upgrade` (a dry run without `--yes`), run to the end |
 | `heliad view create NAME ...`, `view build NAME`, `view rebuild` | `view.create` and `view.materialize`, `view.materialize`, `view.rebuild_all` |
 | `heliad settings [KEY [VALUE] \| --unset KEY]` | `settings.get`, `settings.set` |
+| `heliad init` | makes a library and its config; no method |
 | `heliad serve` | all of them, over stdin and stdout |
 | `heliad api [METHOD]` | prints this list |

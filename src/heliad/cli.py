@@ -7,6 +7,8 @@
     heliad stats | datasets | collisions
     heliad files [--dataset KEY] [--start T] [--end T]
     heliad versions OBSERVATION_ID
+    heliad checks FILE_ID            the header checks recorded for one file
+    heliad coverage [--start T] [--end T] [--bins N] [--dataset KEY ...]
     heliad thumb FILE_ID [--size N]  path of a PNG preview, made on first request
     heliad verify
     heliad view create NAME [--dataset KEY ...] [--start T] [--end T]
@@ -14,6 +16,13 @@
     heliad search [--via fido|jsoc] --start T --end T [--instrument I] [--wavelength A] ...
     heliad get    [--via fido|jsoc] --start T --end T [...]   download and ingest
     heliad jobs [--status S]         download jobs, newest first
+    heliad reject OBSERVATION_ID... --reason TEXT   set bad frames aside (readers stop seeing them)
+    heliad unreject OBSERVATION_ID...               serve them again
+    heliad rejected [--dataset KEY]                 what is set aside, and why
+    heliad refetch OBSERVATION_ID                   ask the archive again for one frame
+    heliad cadences DATASET_KEY [--start T] [--end T]   the archive's cadence against the library's
+    heliad upgrade DATASET_KEY [--sample S] [--start T] [--end T] [--yes]
+                                     fetch only the frames a dataset lacks (a dry run without --yes)
     heliad reindex [--dry-run]       apply the current header rules to every file
     heliad fix-extensions [--dry-run]  add .fits / .fits.gz to stored files without one
     heliad delete [--file ID] [--observation ID] [--dataset KEY] [--yes]
@@ -27,8 +36,9 @@ result the same operation returns (docs/api.md), one document per command.
 
 Exit codes: 0 done; 1 the operation ran and reported a problem (verify found
 missing or altered files, a download ended partial or failed, an import had
-errors); 2 bad arguments, or no library where one was expected; 3 the library
-is locked by another core that is not serving it.
+errors, the archive could not be asked); 2 bad arguments, an id or key the
+library does not have, or no library where one was expected; 3 the library is
+locked by another core that is not serving it.
 
 Commands that only read open the library read-only, so they work while the
 Mac app (or another core) holds it. --library never changes the default
@@ -43,11 +53,13 @@ import os
 import sys
 from pathlib import Path
 
-from . import __version__, config, jobs, views
+from . import __version__, config, coverage, jobs, upgrade, views
 from .library import Library, LibraryLocked
 from .query import Query
+from .sources import ArchiveError
 
-READ_ONLY = {"stats", "datasets", "files", "verify", "collisions", "versions", "jobs", "thumb"}
+READ_ONLY = {"stats", "datasets", "files", "verify", "collisions", "versions", "jobs", "thumb",
+             "checks", "coverage", "rejected", "cadences"}
 NO_LIBRARY = {"search", "settings", "api"}
 
 OK, PROBLEM, USAGE, LOCKED = 0, 1, 2, 3
@@ -99,6 +111,35 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("collisions")
     p = sub.add_parser("versions")
     p.add_argument("observation_id", type=int)
+    p = sub.add_parser("checks", help="the header checks recorded for one file")
+    p.add_argument("file_id", type=int)
+    p = sub.add_parser("coverage", help="per dataset, how many observations fall in each bin of a time range")
+    p.add_argument("--start")
+    p.add_argument("--end")
+    p.add_argument("--bins", type=int, default=24)
+    p.add_argument("--dataset", action="append", dest="dataset_keys")
+    p.add_argument("--instrument")
+    p.add_argument("--wavelength", type=float, help="Angstrom")
+    p.add_argument("--wavelength-max", type=float)
+    p = sub.add_parser("reject", help="set observations aside: readers stop seeing them")
+    p.add_argument("observation_ids", type=int, nargs="+", metavar="OBSERVATION_ID")
+    p.add_argument("--reason", required=True)
+    p = sub.add_parser("unreject", help="serve rejected observations again")
+    p.add_argument("observation_ids", type=int, nargs="+", metavar="OBSERVATION_ID")
+    p = sub.add_parser("rejected", help="rejected observations with their reason")
+    p.add_argument("--dataset")
+    p = sub.add_parser("refetch", help="ask the archive again for one observation's frame")
+    p.add_argument("observation_id", type=int)
+    p = sub.add_parser("cadences", help="compare a dataset's cadence with the archive's")
+    p.add_argument("dataset_key")
+    p.add_argument("--start")
+    p.add_argument("--end")
+    p = sub.add_parser("upgrade", help="fetch only the frames a dataset lacks; a dry run without --yes")
+    p.add_argument("dataset_key")
+    p.add_argument("--sample", type=float, dest="sample_s", help="target cadence in seconds")
+    p.add_argument("--start")
+    p.add_argument("--end")
+    p.add_argument("--yes", action="store_true", help="queue and run the download; without it, only show the plan")
     p = sub.add_parser("thumb")
     p.add_argument("file_id", type=int)
     p.add_argument("--size", type=int, default=256)
@@ -150,7 +191,14 @@ def main(argv: list[str] | None = None) -> int:
     except LibraryLocked as exc:
         return _fail(LOCKED, str(exc))
     with lib:
-        return _run(lib, ns, out)
+        try:
+            return _run(lib, ns, out)
+        except KeyError as exc:  # the core's "no such dataset / observation / file / job"
+            return _fail(USAGE, str(exc.args[0]) if exc.args else "not found")
+        except ValueError as exc:
+            return _fail(USAGE, str(exc))
+        except ArchiveError as exc:
+            return _fail(PROBLEM, str(exc))
 
 
 def _fail(code: int, message: str) -> int:
@@ -236,6 +284,35 @@ def _run(lib: Library, ns, out: "Output") -> int:
         out.show(lib.collisions(), _collisions_text)
     elif ns.cmd == "versions":
         out.show(lib.versions(ns.observation_id), _versions_text)
+    elif ns.cmd == "checks":
+        out.show(lib.checks_for(ns.file_id), _checks_text)
+    elif ns.cmd == "coverage":
+        out.show(coverage.library(lib, start=ns.start, end=ns.end, bins=ns.bins, dataset_keys=ns.dataset_keys,
+                                  instrument=ns.instrument, wavelength=ns.wavelength,
+                                  wavelength_max=ns.wavelength_max), _coverage_text)
+    elif ns.cmd == "reject":
+        out.show(lib.reject(ns.observation_ids, ns.reason), _reject_text)
+    elif ns.cmd == "unreject":
+        out.show(lib.unreject(ns.observation_ids), _reject_text)
+    elif ns.cmd == "rejected":
+        out.show(lib.rejected(ns.dataset), _rejected_text)
+    elif ns.cmd == "refetch":
+        runner = _runner(lib)
+        job = upgrade.refetch(lib, runner, ns.observation_id)
+        return _run_job(runner, job, out)
+    elif ns.cmd == "cadences":
+        from . import sources
+        out.show(upgrade.cadences(lib, sources.get, ns.dataset_key, ns.start, ns.end,
+                                  settings=config.load_settings()), _cadences_text)
+    elif ns.cmd == "upgrade":
+        runner = _runner(lib) if ns.yes else None
+        result = upgrade.upgrade(lib, runner, ns.dataset_key, sample_s=ns.sample_s, start=ns.start,
+                                 end=ns.end, dry_run=not ns.yes)
+        if not ns.yes:
+            out.show(result, _upgrade_plan_text)
+            print("Nothing queued. Run again with --yes to fetch these.", file=sys.stderr)
+            return OK
+        return _run_job(runner, result, out)
     elif ns.cmd == "thumb":
         print(lib.thumbnail(ns.file_id, ns.size))
     elif ns.cmd == "jobs":
@@ -266,15 +343,24 @@ def _run(lib: Library, ns, out: "Output") -> int:
         else:
             out.show(views.rebuild_all(lib), lambda rows: "\n".join(_view_text(r) for r in rows) or "No views.")
     elif ns.cmd == "get":
-        def notify(method, params):
-            print(f"  {method} {json.dumps(params, default=str)}", file=sys.stderr)
-        runner = jobs.JobRunner(lib, notify=notify)
-        job = runner.enqueue(_query(ns), ns.client)
-        print(f"job {job['job_id']} queued", file=sys.stderr)
-        finished = runner.run_pending()
-        out.show(finished, _jobs_text)
-        return OK if all(j["status"] == "done" for j in finished) else PROBLEM
+        runner = _runner(lib)
+        return _run_job(runner, runner.enqueue(_query(ns), ns.client), out)
     return OK
+
+
+def _runner(lib: Library) -> jobs.JobRunner:
+    """A job runner that prints each notification, for commands that download in the foreground."""
+    def notify(method, params):
+        print(f"  {method} {json.dumps(params, default=str)}", file=sys.stderr)
+    return jobs.JobRunner(lib, notify=notify)
+
+
+def _run_job(runner: jobs.JobRunner, job: dict, out: "Output") -> int:
+    """Run every queued job to the end and print them; exit 1 unless all ended done."""
+    print(f"job {job['job_id']} queued", file=sys.stderr)
+    finished = runner.run_pending()
+    out.show(finished, _jobs_text)
+    return OK if all(j["status"] == "done" for j in finished) else PROBLEM
 
 
 # ---- output ------------------------------------------------------------------
@@ -365,6 +451,80 @@ def _versions_text(rows: list[dict]) -> str:
     shaped = [{**r, "size": _bytes(r["size"]), "current": "current" if r["current"] else ""} for r in rows]
     return _table(shaped, [("file_id", "File"), ("version", "Version"), ("current", ""), ("size", "Size"),
                            ("ingested_at", "Ingested"), ("relpath", "Path")], right={"file_id", "size"})
+
+
+def _checks_text(rows: list[dict]) -> str:
+    if not rows:
+        return "No checks recorded for this file."
+    return _table(rows, [("severity", "Severity"), ("code", "Code"), ("message", "Message")])
+
+
+_BARS = " ▁▂▃▄▅▆▇█"
+
+
+def _sparkline(counts: list[int]) -> str:
+    top = max(counts) if counts else 0
+    if not top:
+        return " " * len(counts)
+    return "".join(_BARS[-1] if c == top else _BARS[1 + c * (len(_BARS) - 2) // top] if c else _BARS[0]
+                   for c in counts)
+
+
+def _coverage_text(r: dict) -> str:
+    head = f"{r['start']} to {r['end']} UTC in {r['bins']} bins of {r['bin_seconds']:g} s"
+    if not r["datasets"]:
+        return head + "\nNo observations in this range."
+    shaped = [{**d, "bins": _sparkline(d["counts"]), "first": d["first"] or "", "last": d["last"] or ""}
+              for d in r["datasets"]]
+    return head + "\n" + _table(shaped, [("frames", "Frames"), ("bins", "Per bin"), ("first", "First (UTC)"),
+                                         ("last", "Last (UTC)"), ("label", "Dataset"), ("dataset_key", "Key")],
+                                 right={"frames"})
+
+
+def _reject_text(r: dict) -> str:
+    verb, n = ("Rejected", r["rejected"]) if "rejected" in r else ("Unrejected", r["unrejected"])
+    line = f"{verb} {n} observations: {', '.join(str(i) for i in r['observation_ids'])}"
+    if r.get("views_rebuilt"):
+        line += "\nViews rebuilt: " + ", ".join(r["views_rebuilt"])
+    return line
+
+
+def _rejected_text(rows: list[dict]) -> str:
+    if not rows:
+        return "Nothing rejected."
+    return _table(rows, [("observation_id", "Observation"), ("date_obs", "Observed (UTC)"), ("label", "Dataset"),
+                         ("reason", "Reason"), ("rejected_at", "Rejected"), ("file_id", "File")],
+                  right={"observation_id", "file_id"})
+
+
+def _query_line(q: dict) -> str:
+    fields = [(k, v) for k, v in q.items() if v not in (None, {}, "") and k not in ("start", "end")]
+    what = " ".join(f"{k}={v:g}" if isinstance(v, float) else f"{k}={v}" for k, v in fields)
+    return f"{q.get('start', '?')} to {q.get('end', '?')} UTC" + (f"  {what}" if what else "")
+
+
+def _cadences_text(r: dict) -> str:
+    lib_, arc = r["library"], r["archive"]
+    def spacing(s):
+        return f"every {s:g} s" if s else "one frame"
+    lines = [f"Dataset {r['dataset_key']} via {r['source']}: {_query_line(r['query'])}",
+             f"Library: {lib_['count']} observations, {spacing(lib_['median_spacing_s'])}"
+             + (f" ({lib_['rejected']} rejected)" if lib_["rejected"] else ""),
+             f"Archive: {arc['count']} records, {spacing(arc['median_spacing_s'])}",
+             f"Missing from the library (within {r['tolerance_s']:g} s): {len(r['missing'])}"]
+    shown = r["missing"][:20]
+    lines += [f"  {t}" for t in shown]
+    if len(r["missing"]) > len(shown):
+        lines.append(f"  ... {len(r['missing']) - len(shown)} more (--json for every one)")
+    return "\n".join(lines)
+
+
+def _upgrade_plan_text(r: dict) -> str:
+    o = r["options"]
+    lines = [f"Would ask {r['source']} for {o['dataset_key']}: {_query_line(r['query'])}",
+             f"Only frames the library lacks (none within {o['tolerance_s']:g} s of one it has).",
+             f"Query: {r['basis']}"]
+    return "\n".join(lines)
 
 
 def _collisions_text(rows: list[dict]) -> str:

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from ..library import is_fits
 from ..query import Query
+from . import ArchiveError
 
 
 def _jsonable(value):
@@ -25,7 +26,11 @@ def _jsonable(value):
 def search(query: Query, *, settings: dict | None = None, limit: int = 2000) -> dict:
     from sunpy.net import Fido
 
-    result = Fido.search(*query.to_fido((settings or {}).get("jsoc_email")))
+    attrs = query.to_fido((settings or {}).get("jsoc_email"))
+    try:
+        result = Fido.search(*attrs)
+    except Exception as exc:  # sunpy's clients raise many kinds; none is this query's fault
+        raise ArchiveError(f"archive search failed: {type(exc).__name__}: {exc}") from exc
     providers = []
     for block in result:
         rows = []
