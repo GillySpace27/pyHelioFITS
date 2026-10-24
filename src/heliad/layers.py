@@ -165,7 +165,8 @@ def plan(lib: Library, headers: list, sample_s: float | None = None) -> dict:
                 missing.append(t)
         counts = {s: sum(1 for _, f in g["frames"] if f["status"] == s)
                   for s in ("in_library", "rejected", "missing")}
-        entry = {"group": g["group"], "label": meta.label, "observatory": meta.observatory,
+        entry = {"group": g["group"], "label": replace(meta, level=None, product=None).label,
+                 "observatory": meta.observatory,
                  "instrument": meta.instrument, "detector": meta.detector,
                  "wavelength": meta.wavelength, "physobs": g["physobs"], "count": len(times),
                  "counts": counts, "spacing_s": spacing, "tolerance_s": tol,
