@@ -29,6 +29,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, TextIO
 
 from . import __version__, config, coverage, db, fitsmeta, jobs, upgrade, views
+from . import latest as hflatest
 from . import record as hfrecord
 from .library import Library
 from .query import Query, parse_dataset_link
@@ -41,8 +42,10 @@ RECORD_UNSUPPORTED = -32010  # record.*: a processing record of a format this co
 RECORD_UNREADABLE = -32011   # record.read: the file named is a sidecar that is not a record
 
 # Methods slow enough that answering them in order would stall the app; none of
-# them writes to the index.
-BACKGROUND = frozenset({"search", "library.thumbnail", "dataset.cadences", "record.read"})
+# them writes to the index, except that template.latest queues jobs, through the
+# writer's lock as download.enqueue does.
+BACKGROUND = frozenset({"search", "library.thumbnail", "dataset.cadences", "record.read",
+                        "template.latest"})
 
 
 # method: (params, what it does). Params are as the method takes them, by name.
@@ -74,6 +77,8 @@ API: dict[str, tuple[str, str]] = {
                          "Compare a dataset's cadence with the archive's; lists the frames it lacks."),
     "dataset.upgrade": ("dataset_key, sample_s=None, start=None, end=None, dry_run=True",
                         "Queue a job fetching only the frames a dataset lacks; a dry run unless dry_run is false."),
+    "template.latest": ("datasets, span_s=7200, lookback_s=259200, dry_run=False",
+                        "Per dataset, the archive's newest frame against the library's; queues one job for the span before it."),
     "library.thumbnail": ("file_id, size=256", "Path of a greyscale PNG preview, made on first request."),
     "library.coverage": ("start=None, end=None, bins=240, dataset_keys=None, instrument=None, "
                          "wavelength=None, wavelength_max=None",
@@ -176,6 +181,7 @@ class Server:
             "dataset.upgrade": lambda dataset_key, sample_s=None, start=None, end=None, dry_run=True:
                 upgrade.upgrade(lib, self.jobs if dry_run else self._jobs(), dataset_key,
                                 sample_s=sample_s, start=start, end=end, dry_run=dry_run),
+            "template.latest": self.template_latest,
             "library.checks": lambda file_id: lib.checks_for(file_id),
             "library.verify": lambda: lib.verify(),
             "library.versions": lambda observation_id: lib.versions(observation_id),
@@ -339,6 +345,19 @@ class Server:
         from . import sources  # sunpy and drms are optional; imported only when searching
         resolve = self.jobs._source if self.jobs is not None else sources.get
         return upgrade.cadences(self.lib, resolve, dataset_key, start, end, settings=config.load_settings())
+
+    def template_latest(self, datasets, span_s=hflatest.DEFAULT_SPAN_S,
+                        lookback_s=hflatest.DEFAULT_LOOKBACK_S, dry_run: bool = False) -> list[dict]:
+        """template.latest: an archive search per dataset (so it answers in the background),
+        and one job queued for each dataset the library is behind on, unless dry_run."""
+        from . import sources
+        runner = None if dry_run else self._jobs()
+        resolve = self.jobs._source if self.jobs is not None else sources.get
+        try:
+            return hflatest.latest(self.lib, resolve, runner, datasets, span_s=span_s,
+                                   lookback_s=lookback_s, dry_run=dry_run, settings=config.load_settings())
+        except (TypeError, ValueError) as exc:
+            raise RpcError(INVALID_PARAMS, str(exc))
 
     def query_from_url(self, url: str) -> dict:
         try:

@@ -17,6 +17,7 @@ writer.
 - [Ingest methods](#ingest-methods)
 - [Download and search methods](#download-and-search-methods)
 - [Cache editor methods](#cache-editor-methods)
+- [Template methods](#template-methods)
 - [View methods](#view-methods)
 - [Settings methods](#settings-methods)
 - [Processing record methods](#processing-record-methods)
@@ -428,6 +429,55 @@ Otherwise the queued job, as `download.get` returns it. When it ends, its `resul
      "ingest": {"added": 3}, "skipped": 3},
      "options": {"dataset_key": "sdo/aia/-/-/1/193", "missing_only": true, "tolerance_s": 6.0}}
 
+## Template methods
+
+A HelioFITS Studio template is a saved session that shows "the latest" of some datasets.
+Refreshing one asks the archive, for each dataset, for its newest frame, and fetches the span
+before it when the library is behind.
+
+### `template.latest`
+
+Params: `datasets, span_s=7200, lookback_s=259200, dry_run=False`. `datasets` is a list of dataset
+uids or keys, each resolved as `dataset.resolve` does (uid, then key, then an old key). For each:
+`newest_local` is the library's newest current (not rejected) frame; `newest_remote` is the newest
+record time the archive reports when the dataset's query (see `dataset.query`) is searched, as
+`search` does, over the last `lookback_s` seconds (3 days) up to now. The query keeps its
+`sample_s`, so `newest_remote` can be up to one sample older than the archive's very newest.
+When `newest_remote` is later than `newest_local` by more than the dataset's tolerance (see
+[Cache editor methods](#cache-editor-methods)), one job is queued for
+`[newest_remote - span_s, newest_remote]` (2 hours by default) with the options `dataset.upgrade`
+gives one, so it fetches only the frames the library lacks and reports `download.progress` and
+`download.finished` like any job. Answers in the background; queues nothing when `dry_run` is true.
+Times are UTC in the index form.
+
+One entry per dataset asked for, in order. `status` is one of:
+
+| Status | Meaning |
+|---|---|
+| `queued` | the library was behind; `job_id`, `start` and `end` name the job |
+| `would_queue` | the same, in a dry run: `start` and `end` say what the job would fetch, `job_id` is null |
+| `up_to_date` | the archive has nothing newer (or nothing at all in the lookback window: `newest_remote` null) |
+| `no_query` | the dataset has no stored query and none can be inferred (no instrument); not an error |
+| `archive_error` | the search failed; `error` says how. The other datasets are still asked |
+| `not_found` | no dataset has this uid or key; the call itself does not fail |
+
+    template.latest(datasets=["sdo/aia/-/-/1/193", "no/such/dataset"])
+    [{"dataset_uid": "0b6f8d2e-8a1f-4c1e-9d55-2f3c7e1a4b90", "dataset_key": "sdo/aia/-/-/1/193",
+      "requested": "sdo/aia/-/-/1/193", "newest_local": "2025-09-21T16:01:12.840",
+      "newest_remote": "2025-09-21T17:00:00.840", "job_id": 3, "start": "2025-09-21T15:00:00.840",
+      "end": "2025-09-21T17:00:00.840", "status": "queued"},
+     {"dataset_uid": null, "dataset_key": null, "requested": "no/such/dataset", "newest_local": null,
+      "newest_remote": null, "job_id": null, "start": null, "end": null, "status": "not_found"}]
+
+`heliad template refresh FILE.jhv` runs this for the datasets a Studio session file shows. The
+session is JSON with its state under `"org.helioviewer.jhv.state"`. Studio does not write a dataset
+uid or key into it: a layer loaded from the Heliad library is a list of file URIs,
+`imageLayers[i].data.uris`, each the library root joined to a stored file's relpath. A layer whose
+URIs name files this library stores is that file's dataset; any other layer (a Helioviewer
+`APIRequest`, a `fitsRequest`, files outside the library) is listed as
+`{"layer": ..., "status": "skipped", "reason": "not a Heliad dataset"}`. Each other entry is the
+dataset's `template.latest` entry with its `layer` name.
+
 ## Stable dataset ids
 
 A `dataset_key` is built from header rules, so a rules change can rename a dataset (PUNCH's
@@ -651,8 +701,9 @@ Every `heliad` command is a thin layer over the same library code. Commands that
 the library read-only, so they work while a core holds it. A command prints a table or a few lines
 for a person; with `--json` it prints exactly the method's result. Exit codes: 0 done; 1 the
 operation ran and reported a problem (`verify` found missing or altered files, `get` ended partial
-or failed, `import` had errors); 2 bad arguments or no library; 3 the library is locked by another
-core that is not serving it.
+or failed, `import` had errors, `latest` or `template refresh` met an unknown dataset, a failing
+archive or a job that did not end done); 2 bad arguments or no library; 3 the library is locked
+by another core that is not serving it.
 
 | Command | Method |
 |---|---|
@@ -669,6 +720,8 @@ core that is not serving it.
 | `heliad jobs [--status S]` | `download.list` |
 | `heliad delete ... [--yes]` | `library.delete` |
 | `heliad reindex [--dry-run]` | `library.reindex` |
+| `heliad latest UID_OR_KEY... [--span 2h] [--lookback 3d] [--dry-run]` | `template.latest`, its jobs run to the end |
+| `heliad template refresh FILE.jhv [--dry-run]` | `template.latest` for the session's Heliad datasets, its jobs run to the end |
 | `heliad view create NAME ...`, `view build NAME`, `view rebuild` | `view.create` and `view.materialize`, `view.materialize`, `view.rebuild_all` |
 | `heliad settings [KEY [VALUE] \| --unset KEY]` | `settings.get`, `settings.set` |
 | `heliad serve` | all of them, over stdin and stdout |

@@ -44,6 +44,8 @@ through VSO) run against the real archives; the JSOC export route written but no
     heliad settings jsoc_email you@example.org      # JSOC exports need a registered address
     heliad get --via jsoc --jsoc-series aia.lev1_euv_12s --start ... --end ... --wavelength 193
     heliad reindex --dry-run && heliad reindex
+    heliad latest sdo/aia/-/-/1/193 --span 2h      # fetch the 2 h before the archive's newest frame
+    heliad template refresh session.jhv --dry-run  # the same for a Studio session's Heliad layers
     heliad delete --dataset KEY                     # shows what would go; add --yes to delete
     heliad serve        # JSON-RPC 2.0, one JSON object per line on stdin/stdout
     heliad api          # the methods serve answers
