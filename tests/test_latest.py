@@ -262,3 +262,22 @@ def test_template_refresh_of_a_file_that_is_not_a_session_is_a_usage_error(relea
     assert code == 2 and "org.helioviewer.jhv.state" in err
     code, _, err = run(capsys, "--library", str(root), "template", "refresh", str(tmp_path / "gone.jhv"))
     assert code == 2
+
+
+# ---- template.refresh: the same, for a session Studio sends ------------------------
+
+def test_template_refresh_method_takes_the_session_document(server, lib, src, tmp_path):
+    assert "template.refresh" in rpc.BACKGROUND
+    _fill(lib, src)
+    server.jobs._modules["fido"] = Archive(ARCHIVE_TIMES)
+    document = json.loads(_session(tmp_path, lib.root).read_text(encoding="utf-8"))
+    heliad_layer, helioviewer_layer = server.methods["template.refresh"](session=document, dry_run=True)
+    assert heliad_layer["layer"] == "SDO AIA 193" and heliad_layer["status"] == "would_queue"
+    assert helioviewer_layer["status"] == "skipped"
+    assert "template.refresh" in rpc.describe()
+
+
+def test_template_refresh_method_rejects_a_document_that_is_not_a_session(server):
+    with pytest.raises(rpc.RpcError) as err:
+        server.methods["template.refresh"](session={"something": "else"})
+    assert err.value.code == rpc.INVALID_PARAMS

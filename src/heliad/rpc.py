@@ -42,10 +42,10 @@ RECORD_UNSUPPORTED = -32010  # record.*: a processing record of a format this co
 RECORD_UNREADABLE = -32011   # record.read: the file named is a sidecar that is not a record
 
 # Methods slow enough that answering them in order would stall the app; none of
-# them writes to the index, except that template.latest queues jobs, through the
-# writer's lock as download.enqueue does.
+# them writes to the index, except that template.latest and template.refresh queue
+# jobs, through the writer's lock as download.enqueue does.
 BACKGROUND = frozenset({"search", "library.thumbnail", "dataset.cadences", "record.read",
-                        "template.latest"})
+                        "template.latest", "template.refresh"})
 
 
 # method: (params, what it does). Params are as the method takes them, by name.
@@ -79,6 +79,8 @@ API: dict[str, tuple[str, str]] = {
                         "Queue a job fetching only the frames a dataset lacks; a dry run unless dry_run is false."),
     "template.latest": ("datasets, span_s=7200, lookback_s=259200, dry_run=False",
                         "Per dataset, the archive's newest frame against the library's; queues one job for the span before it."),
+    "template.refresh": ("session, span_s=7200, lookback_s=259200, dry_run=False",
+                         "template.latest for the Heliad datasets a Studio session document shows, per layer."),
     "library.thumbnail": ("file_id, size=256", "Path of a greyscale PNG preview, made on first request."),
     "library.coverage": ("start=None, end=None, bins=240, dataset_keys=None, instrument=None, "
                          "wavelength=None, wavelength_max=None",
@@ -182,6 +184,7 @@ class Server:
                 upgrade.upgrade(lib, self.jobs if dry_run else self._jobs(), dataset_key,
                                 sample_s=sample_s, start=start, end=end, dry_run=dry_run),
             "template.latest": self.template_latest,
+            "template.refresh": self.template_refresh,
             "library.checks": lambda file_id: lib.checks_for(file_id),
             "library.verify": lambda: lib.verify(),
             "library.versions": lambda observation_id: lib.versions(observation_id),
@@ -356,6 +359,19 @@ class Server:
         try:
             return hflatest.latest(self.lib, resolve, runner, datasets, span_s=span_s,
                                    lookback_s=lookback_s, dry_run=dry_run, settings=config.load_settings())
+        except (TypeError, ValueError) as exc:
+            raise RpcError(INVALID_PARAMS, str(exc))
+
+    def template_refresh(self, session, span_s=hflatest.DEFAULT_SPAN_S,
+                         lookback_s=hflatest.DEFAULT_LOOKBACK_S, dry_run: bool = False) -> list[dict]:
+        """template.refresh: `heliad template refresh` for a session Studio sends as JSON (a
+        built-in template lives in Studio's jar, so there is no file to name)."""
+        from . import sources
+        runner = None if dry_run else self._jobs()
+        resolve = self.jobs._source if self.jobs is not None else sources.get
+        try:
+            return hflatest.refresh(self.lib, resolve, runner, session, span_s=span_s,
+                                    lookback_s=lookback_s, dry_run=dry_run, settings=config.load_settings())
         except (TypeError, ValueError) as exc:
             raise RpcError(INVALID_PARAMS, str(exc))
 

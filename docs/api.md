@@ -478,6 +478,14 @@ URIs name files this library stores is that file's dataset; any other layer (a H
 `{"layer": ..., "status": "skipped", "reason": "not a Heliad dataset"}`. Each other entry is the
 dataset's `template.latest` entry with its `layer` name.
 
+### `template.refresh`
+
+Params: `session, span_s=7200, lookback_s=259200, dry_run=False`. `heliad template refresh` for a
+session Studio sends as JSON rather than as a file (a built-in template lives inside Studio, so
+there is no file to name): `session` is the whole session document, with its state under
+`"org.helioviewer.jhv.state"`. Answers in the background with the same per-layer list as the
+command, `skipped` entries included. A document that is not a Studio session is invalid params.
+
 ## Stable dataset ids
 
 A `dataset_key` is built from header rules, so a rules change can rename a dataset (PUNCH's
@@ -721,7 +729,7 @@ by another core that is not serving it.
 | `heliad delete ... [--yes]` | `library.delete` |
 | `heliad reindex [--dry-run]` | `library.reindex` |
 | `heliad latest UID_OR_KEY... [--span 2h] [--lookback 3d] [--dry-run]` | `template.latest`, its jobs run to the end |
-| `heliad template refresh FILE.jhv [--dry-run]` | `template.latest` for the session's Heliad datasets, its jobs run to the end |
+| `heliad template refresh FILE.jhv [--dry-run]` | `template.refresh` for the file, its jobs run to the end |
 | `heliad view create NAME ...`, `view build NAME`, `view rebuild` | `view.create` and `view.materialize`, `view.materialize`, `view.rebuild_all` |
 | `heliad settings [KEY [VALUE] \| --unset KEY]` | `settings.get`, `settings.set` |
 | `heliad serve` | all of them, over stdin and stdout |
