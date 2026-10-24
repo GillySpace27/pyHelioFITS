@@ -131,3 +131,25 @@ def test_cli_layer_upgrade_is_a_dry_run_without_yes(lib, tmp_path, capsys):
     assert "Nothing queued" in captured.err
     with Library.open(root, readonly=True) as again:
         assert jobs.list_jobs(again) == []
+
+
+def test_a_lasco_picture_is_dated_from_its_slashed_date_and_time_obs(server, lib, src):
+    # The shape of a Helioviewer LASCO C3 picture's header: date with slashes, time apart, no wavelength.
+    pic = {"TELESCOP": "SOHO", "INSTRUME": "LASCO", "DETECTOR": "C3", "FILTER": "Clear", "POLAR": "Clear",
+           "DATE_OBS": "2026/10/24", "TIME_OBS": "16:18:10.000"}
+    lib.ingest(write_fits(src / "c3.fits", {"TELESCOP": "SOHO", "INSTRUME": "LASCO", "DETECTOR": "C3",
+                                            "DATE-OBS": "2026-10-24T16:18:10.000"}))
+    out = server.methods["layer.upgrade"](headers=[pic, {**pic, "TIME_OBS": "17:18:10.000"}])
+    assert [f["date_obs"] for f in out["frames"]] == ["2026-10-24T16:18:10.000", "2026-10-24T17:18:10.000"]
+    assert [f["status"] for f in out["frames"]] == ["in_library", "missing"]
+    q = out["groups"][0]["fetch"]["query"]
+    assert (q["instrument"], q["detector"], q["wavelength"]) == ("LASCO", "C3", None)
+
+
+def test_an_hmi_picture_finds_a_file_from_the_other_camera(server, lib, src):
+    lib.ingest(write_fits(src / "hmi.fits", {"TELESCOP": "SDO/HMI", "INSTRUME": "HMI_SIDE1", "WAVELNTH": 6173.0,
+                                             "DATE-OBS": "2026-10-24T14:54:27.800"}))
+    pic = {"TELESCOP": "SDO", "INSTRUME": "HMI_FRONT2", "WAVELNTH": "6173.00", "CONTENT": "MAGNETOGRAM",
+           "DATE-OBS": "2026-10-24T14:54:27.800"}
+    out = server.methods["layer.upgrade"](headers=[pic])
+    assert out["frames"][0]["status"] == "in_library"

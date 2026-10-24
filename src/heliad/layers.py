@@ -24,6 +24,7 @@ returns the plan; otherwise each fetch is queued as a job.
 
 from __future__ import annotations
 
+import re
 from dataclasses import asdict, replace
 
 from . import fitsmeta, upgrade
@@ -51,12 +52,31 @@ def _same_wave(a, b) -> bool:
 
 def _is_hmi(meta: fitsmeta.FitsMeta) -> bool:
     # HMI writes its camera after the name (INSTRUME = 'HMI_FRONT2', 'HMI_SIDE1').
-    return fitsmeta._norm(meta.instrument).split("-")[0] == "hmi"
+    return _archive_instrument_of(meta.instrument) == "HMI"
+
+
+def _archive_instrument_of(instrument: str | None) -> str | None:
+    """The instrument as an archive names it: HMI's camera suffix left out, so a picture from
+    HMI_FRONT2 and a file from HMI_SIDE1 are both HMI."""
+    return "HMI" if fitsmeta._norm(instrument).split("-")[0] == "hmi" else instrument
 
 
 def _archive_instrument(meta: fitsmeta.FitsMeta) -> str | None:
-    """The instrument as an archive names it: HMI's camera suffix left out."""
-    return "HMI" if _is_hmi(meta) else meta.instrument
+    return _archive_instrument_of(meta.instrument)
+
+
+def _picture_header(header: dict) -> dict:
+    """The header as ingest's rules can date it. LASCO pictures write the date with slashes in
+    DATE_OBS and the time in TIME_OBS (2026/09/29 and 15:12:33.xxx); ingest reads ISO dates and
+    TIME-OBS. Only this copy changes; the rules ingest files by are untouched."""
+    out = dict(header)
+    for key in ("DATE-OBS", "DATE_OBS"):
+        value = out.get(key)
+        if isinstance(value, str) and "T" not in value and re.fullmatch(r"\s*\d{4}/\d{2}/\d{2}\s*", value):
+            out[key] = value.strip().replace("/", "-")
+    if "TIME-OBS" not in out and out.get("TIME_OBS"):
+        out["TIME-OBS"] = out["TIME_OBS"]
+    return out
 
 
 def _physobs(header: dict, meta: fitsmeta.FitsMeta) -> str | None:
@@ -80,7 +100,8 @@ def _datasets(conn, meta: fitsmeta.FitsMeta) -> list[dict]:
         "COUNT(o.id) AS n FROM datasets d LEFT JOIN observations o ON o.dataset_id = d.id "
         "GROUP BY d.id ORDER BY n DESC, d.dataset_key").fetchall()
     return [dict(r) for r in rows
-            if _same(r["observatory"], meta.observatory) and _same(r["instrument"], meta.instrument)
+            if _same(r["observatory"], meta.observatory)
+            and _same(_archive_instrument_of(r["instrument"]), _archive_instrument(meta))
             and _same(r["detector"], meta.detector) and _same_wave(r["wavelength"], meta.wavelength)]
 
 
@@ -119,6 +140,7 @@ def plan(lib: Library, headers: list, sample_s: float | None = None) -> dict:
     for i, header in enumerate(headers):
         if not isinstance(header, dict):
             raise ValueError(f"header {i} is not an object of FITS keywords")
+        header = _picture_header(header)
         meta = fitsmeta.from_header(header, "")
         t = upgrade.seconds(meta.date_obs)
         frame = {"frame": i, "date_obs": meta.date_obs, "group": None, "status": "unreadable",
