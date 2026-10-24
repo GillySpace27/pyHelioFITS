@@ -443,6 +443,44 @@ Otherwise the queued job, as `download.get` returns it. When it ends, its `resul
      "ingest": {"added": 3}, "skipped": 3},
      "options": {"dataset_key": "sdo/aia/-/-/1/193", "missing_only": true, "tolerance_s": 6.0}}
 
+### `layer.upgrade`
+
+Params: `headers, sample_s=None, dry_run=True`. For a layer that shows pictures rather than FITS
+files (Studio's Helioviewer layers, streamed as JPEG 2000), says per frame whether the library
+keeps a FITS file of it, and plans the fetch for the rest. `headers` is a list of objects of FITS
+keywords, one per frame: the header each picture carries, from the FITS file it was made from (at
+most 10000). Each is read with ingest's own rules, so `TELESCOP = 'SDO/AIA'`, `INSTRUME = 'AIA_3'`
+is SDO AIA as it would be in the library.
+
+A picture and a library file are one frame when they agree on observatory, instrument, detector
+and wavelength (within the passband tolerance) and lie within `tolerance_s` of each other. Level
+and product are not compared: a picture says what it was made from, which need not be the level
+the archive serves. HMI pictures add `physobs` from `CONTENT` (`MAGNETOGRAM` is
+`LOS_magnetic_field`, `CONTINUUM INTENSITY` is `intensity`), since both products are 6173 Å; the
+library files HMI's products as one dataset, so an HMI frame found in the library may be the other
+product.
+
+Per frame, `status` is `in_library` (with `file_id`, `relpath`, `path`, `dataset_key`,
+`observation_id` and the file's own `fits_date_obs`), `rejected` (set aside in the library; never
+fetched again), `missing`, or `unreadable` (its header gives no instrument or no time; `reason`
+says which). Frames of one kind form a `group`; a group with missing frames has `fetch`: the query
+at the frames' own spacing (or `sample_s`), over the missing frames' span widened by the tolerance.
+When the library has the dataset, that is the dataset's query with `missing_only` (as
+`dataset.upgrade`); otherwise a Fido query inferred from the headers (`inferred: true`). **A dry run
+unless `dry_run` is false**; otherwise each group's fetch is queued and the group carries its
+`job`, as `download.get` returns it. Call again once the jobs end to get the files.
+
+    {"dry_run": true, "complete": false,
+     "counts": {"in_library": 1, "rejected": 0, "missing": 2, "unreadable": 0},
+     "frames": [{"frame": 0, "date_obs": "2025-09-21T16:00:04.840", "group": 0, "status": "in_library",
+                 "file_id": 7, "relpath": "...", "path": "...", "dataset_key": "sdo/aia/-/-/1/171", ...},
+                {"frame": 1, "date_obs": "2025-09-21T16:30:04.840", "group": 0, "status": "missing", ...}],
+     "groups": [{"group": 0, "label": "SDO AIA 171 Å", "count": 3, "spacing_s": 1800.0, "tolerance_s": 60.0,
+                 "counts": {"in_library": 1, "rejected": 0, "missing": 2}, "datasets": ["sdo/aia/-/-/1/171"],
+                 "fetch": {"query": {..., "sample_s": 1800.0}, "source": "fido",
+                           "options": {"dataset_key": "sdo/aia/-/-/1/171", "missing_only": true, "tolerance_s": 60.0},
+                           "inferred": false, "basis": "..."}}]}
+
 ## Stable dataset ids
 
 A `dataset_key` is built from header rules, so a rules change can rename a dataset (PUNCH's
@@ -707,6 +745,7 @@ library does not have, or no library; 3 the library is locked by another core th
 | `heliad refetch OBSERVATION_ID` | `library.refetch`, run to the end |
 | `heliad cadences DATASET_KEY [--start T] [--end T]` | `dataset.cadences` |
 | `heliad upgrade DATASET_KEY [--sample S] [--start T] [--end T] [--yes]` | `dataset.upgrade` (a dry run without `--yes`), run to the end |
+| `heliad layer-upgrade HEADERS.json [--sample S] [--yes]` | `layer.upgrade` (a dry run without `--yes`), its jobs run to the end |
 | `heliad view create NAME ...`, `view build NAME`, `view rebuild` | `view.create` and `view.materialize`, `view.materialize`, `view.rebuild_all` |
 | `heliad settings [KEY [VALUE] \| --unset KEY]` | `settings.get`, `settings.set` |
 | `heliad init` | makes a library and its config; no method |

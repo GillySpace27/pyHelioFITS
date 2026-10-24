@@ -23,6 +23,8 @@
     heliad cadences DATASET_KEY [--start T] [--end T]   the archive's cadence against the library's
     heliad upgrade DATASET_KEY [--sample S] [--start T] [--end T] [--yes]
                                      fetch only the frames a dataset lacks (a dry run without --yes)
+    heliad layer-upgrade HEADERS.json [--sample S] [--yes]
+                                     FITS for a layer of pictures, from their headers (a dry run without --yes)
     heliad reindex [--dry-run]       apply the current header rules to every file
     heliad fix-extensions [--dry-run]  add .fits / .fits.gz to stored files without one
     heliad delete [--file ID] [--observation ID] [--dataset KEY] [--yes]
@@ -53,7 +55,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import __version__, config, coverage, jobs, upgrade, views
+from . import __version__, config, coverage, jobs, layers, upgrade, views
 from .library import Library, LibraryLocked
 from .query import Query
 from .sources import ArchiveError
@@ -140,6 +142,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--start")
     p.add_argument("--end")
     p.add_argument("--yes", action="store_true", help="queue and run the download; without it, only show the plan")
+    p = sub.add_parser("layer-upgrade",
+                       help="FITS for a layer of pictures (Helioviewer frames), from a JSON list of their headers")
+    p.add_argument("headers", type=Path, help="a JSON file: a list of FITS-keyword objects, one per frame")
+    p.add_argument("--sample", type=float, dest="sample_s", help="cadence in seconds; default the frames' own")
+    p.add_argument("--yes", action="store_true", help="queue and run the downloads; without it, only show the plan")
     p = sub.add_parser("thumb")
     p.add_argument("file_id", type=int)
     p.add_argument("--size", type=int, default=256)
@@ -313,6 +320,21 @@ def _run(lib: Library, ns, out: "Output") -> int:
             print("Nothing queued. Run again with --yes to fetch these.", file=sys.stderr)
             return OK
         return _run_job(runner, result, out)
+    elif ns.cmd == "layer-upgrade":
+        try:
+            headers = json.loads(ns.headers.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise ValueError(f"cannot read {ns.headers}: {exc}") from exc
+        runner = _runner(lib) if ns.yes else None
+        result = layers.upgrade_layer(lib, runner, headers, sample_s=ns.sample_s, dry_run=not ns.yes)
+        if not ns.yes or not any(g.get("job") for g in result["groups"]):
+            out.show(result, _layer_plan_text)
+            if not ns.yes and any(g["fetch"] for g in result["groups"]):
+                print("Nothing queued. Run again with --yes to fetch these.", file=sys.stderr)
+            return OK
+        finished = runner.run_pending()
+        out.show(finished, _jobs_text)
+        return OK if all(j["status"] == "done" for j in finished) else PROBLEM
     elif ns.cmd == "thumb":
         print(lib.thumbnail(ns.file_id, ns.size))
     elif ns.cmd == "jobs":
@@ -524,6 +546,24 @@ def _upgrade_plan_text(r: dict) -> str:
     lines = [f"Would ask {r['source']} for {o['dataset_key']}: {_query_line(r['query'])}",
              f"Only frames the library lacks (none within {o['tolerance_s']:g} s of one it has).",
              f"Query: {r['basis']}"]
+    return "\n".join(lines)
+
+
+def _layer_plan_text(r: dict) -> str:
+    c = r["counts"]
+    lines = [f"{len(r['frames'])} frames: {c['in_library']} in the library, {c['missing']} missing, "
+             f"{c['rejected']} rejected, {c['unreadable']} unreadable."]
+    for g in r["groups"]:
+        gc = g["counts"]
+        lines.append(f"  {g['label']}: {g['count']} frames, {gc['in_library']} in the library, "
+                     f"{gc['missing']} missing (within {g['tolerance_s']:g} s)")
+        f = g["fetch"]
+        if f:
+            lines.append(f"    would ask {f['source']}: {_query_line(f['query'])}")
+            lines.append(f"    query: {f['basis']}")
+    for fr in r["frames"]:
+        if fr["status"] == "unreadable":
+            lines.append(f"  frame {fr['frame']}: {fr['reason']}")
     return "\n".join(lines)
 
 

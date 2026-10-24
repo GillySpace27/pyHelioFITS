@@ -29,7 +29,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, TextIO
 from urllib.parse import urlsplit
 
-from . import __version__, config, coverage, db, fitsmeta, jobs, upgrade, views
+from . import __version__, config, coverage, db, fitsmeta, jobs, layers, upgrade, views
 from . import record as hfrecord
 from .library import Library, LibraryLocked, ReadOnlyLibrary
 from .query import Query, URL_SCHEME, parse_dataset_link
@@ -88,6 +88,9 @@ API: dict[str, tuple[str, str]] = {
                          "Compare a dataset's cadence with the archive's; lists the frames it lacks."),
     "dataset.upgrade": ("dataset_key, sample_s=None, start=None, end=None, dry_run=True",
                         "Queue a job fetching only the frames a dataset lacks; a dry run unless dry_run is false."),
+    "layer.upgrade": ("headers, sample_s=None, dry_run=True",
+                      "For a layer of pictures (Helioviewer frames), per frame the FITS file the library keeps "
+                      "or the fetch that would get it; queues the fetches unless dry_run."),
     "library.thumbnail": ("file_id, size=256", "Path of a greyscale PNG preview, made on first request."),
     "library.coverage": ("start=None, end=None, bins=240, dataset_keys=None, instrument=None, "
                          "wavelength=None, wavelength_max=None",
@@ -192,6 +195,9 @@ class Server:
             "dataset.upgrade": lambda dataset_key, sample_s=None, start=None, end=None, dry_run=True:
                 upgrade.upgrade(lib, self.jobs if dry_run else self._jobs(), dataset_key,
                                 sample_s=sample_s, start=start, end=end, dry_run=dry_run),
+            "layer.upgrade": lambda headers, sample_s=None, dry_run=True:
+                layers.upgrade_layer(lib, self.jobs if dry_run else self._jobs(), headers,
+                                     sample_s=sample_s, dry_run=dry_run),
             "library.checks": lambda file_id: lib.checks_for(file_id),
             "library.verify": lambda: lib.verify(),
             "library.versions": lambda observation_id: lib.versions(observation_id),
