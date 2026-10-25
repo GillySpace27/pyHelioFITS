@@ -1,6 +1,6 @@
-# Licences of the Python packages Heliad installs
+# Licences of the Python packages HelioFITS Core installs
 
-What `pip install heliad[archives]` brought into a clean virtual environment on 2026-10-18
+What `pip install heliad[archives]` (the package now named heliofits-core) brought into a clean virtual environment on 2026-10-18
 (Python 3, Linux), as reported by pip-licenses from each package's metadata. This is an
 inventory for deciding what the Mac app can bundle, not legal advice.
 

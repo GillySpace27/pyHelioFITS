@@ -4,10 +4,10 @@ import stat
 
 import pytest
 
-from heliad import checks, db, fitsmeta, views
-from heliad.library import Library, LibraryLocked
-from heliad.query import Query
-from heliad.rpc import Server
+from heliofits_core import checks, db, fitsmeta, views
+from heliofits_core.library import Library, LibraryLocked
+from heliofits_core.query import Query
+from heliofits_core.rpc import Server
 from conftest import aia_header, punch_header, write_fits
 
 
@@ -90,7 +90,7 @@ def test_view_projection_and_manifest(lib, src):
     assert out2["link_modes"] == {"copy": 2}
 
 
-def test_view_never_overwrites_a_folder_heliad_did_not_make(lib):
+def test_view_never_overwrites_a_folder_the_core_did_not_make(lib):
     (lib.cfg.views_dir / "mine").mkdir()
     views.create(lib, "mine")
     with pytest.raises(FileExistsError):
@@ -126,7 +126,7 @@ def test_verify_reports_altered_and_missing(lib, src):
 
 
 def test_config_file_names_the_library(lib):
-    from heliad import config
+    from heliofits_core import config
     data = json.loads(config.config_path().read_text())
     assert data["library_root"] == str(lib.root) and data["schema_version"] == db.SCHEMA_VERSION
 
@@ -146,7 +146,7 @@ def test_rpc(lib, src):
     server = Server(lib, out=out)
     path = write_fits(src / "a.fits", aia_header())
     requests = [
-        {"jsonrpc": "2.0", "id": 1, "method": "heliad.hello"},
+        {"jsonrpc": "2.0", "id": 1, "method": "core.hello"},
         {"jsonrpc": "2.0", "id": 2, "method": "ingest.path", "params": {"path": str(path)}},
         {"jsonrpc": "2.0", "id": 3, "method": "library.stats"},
         {"jsonrpc": "2.0", "id": 4, "method": "nope"},
@@ -227,7 +227,7 @@ def test_wavelength_unit_spelled_out_is_converted(src):
     meta = fitsmeta.read(f)
     assert meta.wavelength == 5300.0
     assert "530 nm" in meta.label
-    assert fitsmeta.RULES_VERSION >= 5  # keys built at 530 are stale until `heliad reindex`
+    assert fitsmeta.RULES_VERSION >= 5  # keys built at 530 are stale until `hfcore reindex`
 
 
 def test_level_is_the_level_token_when_the_keyword_carries_more():

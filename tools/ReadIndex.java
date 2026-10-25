@@ -1,7 +1,7 @@
 import java.sql.*;
 
 /**
- * Reads a Heliad index the way Studio's Add Layer tab would: read-only, while Heliad writes.
+ * Reads a HelioFITS Core index the way Studio's FITS library tab would: read-only, while HelioFITS Core writes.
  * See docs/reader-contract.md.
  */
 public class ReadIndex {

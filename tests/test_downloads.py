@@ -6,8 +6,8 @@ import sqlite3
 
 import pytest
 
-from heliad import db, jobs
-from heliad.sources import fido
+from heliofits_core import db, jobs
+from heliofits_core.sources import fido
 from conftest import aia_header, write_fits
 from test_blockers import QUERY, FakeSource
 
@@ -87,7 +87,7 @@ def test_outcome(found, stored, errors, counts, status):
 
 
 def test_schema_2_library_with_jobs_migrates_to_3(tmp_path):
-    path = tmp_path / "heliad.sqlite"
+    path = tmp_path / "hfcore.sqlite"
     conn = sqlite3.connect(path, isolation_level=None)
     for statement in db._split(db.SCHEMA_V1) + db._split(db.SCHEMA_V2):
         conn.execute(statement)

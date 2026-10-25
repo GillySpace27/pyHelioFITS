@@ -17,8 +17,8 @@ import numpy as np
 import pytest
 from astropy.io import fits
 
-from heliad import record
-from heliad.rpc import RECORD_UNSUPPORTED, Server
+from heliofits_core import record
+from heliofits_core.rpc import RECORD_UNSUPPORTED, Server
 from conftest import aia_header, punch_header, write_fits
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "example-studio-connect-still.hfrec.json"
@@ -93,7 +93,7 @@ def test_a_newer_major_version_is_refused_and_a_newer_minor_read(tmp_path):
     rec = example()
     rec["hfrecord"] = "2.0"
     (tmp_path / "a.hfrec.json").write_text(json.dumps(rec))
-    with pytest.raises(record.UnsupportedRecord, match="2.0 needs a newer Heliad"):
+    with pytest.raises(record.UnsupportedRecord, match="2.0 needs a newer HelioFITS Core"):
         record.find(tmp_path / "a.hfrec.json")
     rec["hfrecord"], rec["reader_compat"] = "1.0", 2
     (tmp_path / "b.hfrec.json").write_text(json.dumps(rec))

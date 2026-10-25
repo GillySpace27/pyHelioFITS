@@ -2,12 +2,12 @@
 
     python tools/sample_files.py [--library DIR]
 
-Reads the index read-only, so it runs while Heliad works.
+Reads the index read-only, so it runs while HelioFITS Core works.
 """
 
 import argparse
 
-from heliad.library import Library
+from heliofits_core.library import Library
 
 
 def main() -> None:

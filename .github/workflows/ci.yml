@@ -66,8 +66,8 @@ jobs:
       - if: steps.has.outputs.app == 'yes'
         working-directory: app
         run: |
-          export HELIAD_CORE="$RUNNER_TEMP/core/bin/python3"
-          export HELIAD_TEST_LIBRARY="$RUNNER_TEMP/library"
+          export HFCORE_CORE="$RUNNER_TEMP/core/bin/python3"
+          export HFCORE_TEST_LIBRARY="$RUNNER_TEMP/library"
           swift test
 
   guards:

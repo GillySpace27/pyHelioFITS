@@ -1,29 +1,32 @@
 #!/bin/bash
-# Build Heliad.app from this Swift package: a release build of the Heliad binary,
-# wrapped with an Info.plist (bundle id, the heliad:// URL scheme) and signed.
+# Build HelioFITS Cache Manager.app from this Swift package: a release build of the
+# CacheManager binary, wrapped with an Info.plist (bundle id, the hfcore:// and heliad:// URL
+# schemes) and signed.
 #
 #   app/tools/make_app.sh                      # ad hoc signature, for this Mac
 #   SIGN_IDENTITY="Developer ID Application: Name (TEAMID)" app/tools/make_app.sh
-#   PYTHON_DIR=/path/to/python app/tools/make_app.sh   # bundle a Python with heliad installed
+#   PYTHON_DIR=/path/to/python app/tools/make_app.sh   # bundle a Python with HelioFITS Core installed
 #
-# The app is written to app/build/Heliad.app.
+# The app is written to app/build/HelioFITS Cache Manager.app.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# Kept through the rename from Heliad: a bundle id is never changed (it is how macOS knows the
+# app, its settings and its link handling).
 BUNDLE_ID="io.github.gillyspace27.heliad"
 IDENTITY="${SIGN_IDENTITY:--}"
-APP="build/Heliad.app"
+APP="build/HelioFITS Cache Manager.app"
 VERSION="$(git describe --tags --always 2>/dev/null || echo dev)"
-# The one version string is pyproject.toml's; the core reports it in heliad.hello.
+# The one version string is pyproject.toml's; the core reports it in core.hello.
 SHORT_VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' ../pyproject.toml)"
 
 # Build exactly the dependencies Package.resolved names; a stale resolved file fails here.
 swift build -c release --disable-automatic-resolution
-BIN="$(swift build -c release --disable-automatic-resolution --show-bin-path)/Heliad"
+BIN="$(swift build -c release --disable-automatic-resolution --show-bin-path)/CacheManager"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN" "$APP/Contents/MacOS/Heliad"
+cp "$BIN" "$APP/Contents/MacOS/CacheManager"
 
 # The icon (app/icon, made by make_app_icon.py): a compiled asset catalog when actool is here,
 # because macOS 26 draws a .icns-only app on a grey plate at 16 and 32 px (measured for HelioFITS
@@ -35,7 +38,7 @@ if xcrun --find actool >/dev/null 2>&1; then
         --output-partial-info-plist build/actool-info.plist >/dev/null
 else
     echo "actool not found (needs Xcode): the app gets the .icns only" >&2
-    cp icon/Heliad.icns "$APP/Contents/Resources/AppIcon.icns"
+    cp icon/CacheManager.icns "$APP/Contents/Resources/AppIcon.icns"
 fi
 
 cat > "$APP/Contents/Info.plist" <<PLIST
@@ -44,9 +47,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key><string>${BUNDLE_ID}</string>
-    <key>CFBundleName</key><string>Heliad</string>
-    <key>CFBundleDisplayName</key><string>Heliad</string>
-    <key>CFBundleExecutable</key><string>Heliad</string>
+    <key>CFBundleName</key><string>HelioFITS Cache Manager</string>
+    <key>CFBundleDisplayName</key><string>HelioFITS Cache Manager</string>
+    <key>CFBundleExecutable</key><string>CacheManager</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundleIconName</key><string>AppIcon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
@@ -58,7 +61,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <array>
         <dict>
             <key>CFBundleURLName</key><string>${BUNDLE_ID}</string>
-            <key>CFBundleURLSchemes</key><array><string>heliad</string></array>
+            <key>CFBundleURLSchemes</key><array><string>hfcore</string><string>heliad</string></array>
         </dict>
     </array>
 </dict>
@@ -66,8 +69,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 PLIST
 
 if [ -n "${PYTHON_DIR:-}" ]; then
-    # A relocatable Python (python-build-standalone) with heliad and its dependencies
-    # installed; the app runs it as Contents/Resources/python/bin/python3 -m heliad.
+    # A relocatable Python (python-build-standalone) with HelioFITS Core and its dependencies
+    # installed; the app runs it as Contents/Resources/python/bin/python3 -m heliofits_core.
     cp -R "$PYTHON_DIR" "$APP/Contents/Resources/python"
     find "$APP/Contents/Resources/python" -name __pycache__ -type d -prune -exec rm -rf {} +
 fi

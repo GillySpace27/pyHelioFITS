@@ -1,5 +1,5 @@
 """Stored files get a FITS suffix (scope: cache-extensions-scope.md, option A): at ingest,
-and for files already kept through `heliad fix-extensions`."""
+and for files already kept through `hfcore fix-extensions`."""
 
 import gzip
 import io
@@ -10,9 +10,9 @@ import sys
 import pytest
 from conftest import aia_header, write_fits
 
-from heliad import cli, library, views
-from heliad.library import Library, clone_or_copy, fits_name
-from heliad.rpc import Server
+from heliofits_core import cli, library, views
+from heliofits_core.library import Library, clone_or_copy, fits_name
+from heliofits_core.rpc import Server
 
 
 def _bare(src, name, wave, gz=False):
@@ -46,7 +46,7 @@ def test_ingest_stores_a_bare_digest_with_a_suffix(lib, src):
 
 @pytest.fixture
 def legacy(lib, src, monkeypatch):
-    """A library stored the way Heliad did before: bare names kept bare."""
+    """A library stored the way HelioFITS Core (then Heliad) did before: bare names kept bare."""
     monkeypatch.setattr(library, "fits_name", lambda name, path: name)
     rows = [lib.ingest(_bare(src, "0123abcd", 171, gz=True)), lib.ingest(_bare(src, "4567ef01", 193))]
     monkeypatch.undo()
@@ -137,7 +137,7 @@ def test_rpc_fix_extensions_is_a_dry_run_unless_asked(lib, legacy):
 
 
 def test_cli_fix_extensions_prints_counts(tmp_path, src, monkeypatch, capsys):
-    monkeypatch.setenv("HELIAD_HOME", str(tmp_path / "appsupport"))
+    monkeypatch.setenv("HFCORE_HOME", str(tmp_path / "appsupport"))
     root = tmp_path / "lib2"
     monkeypatch.setattr(library, "fits_name", lambda name, path: name)
     with Library.open(root) as lib:

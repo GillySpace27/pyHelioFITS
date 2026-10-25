@@ -5,8 +5,8 @@ import json
 
 import pytest
 
-from heliad import cli, config
-from heliad.library import Library
+from heliofits_core import cli, config
+from heliofits_core.library import Library
 from tests.conftest import aia_header, write_fits
 
 
@@ -57,13 +57,13 @@ def test_verify_reports_a_problem_with_exit_1(filled, capsys):
 
 def test_no_library_is_a_usage_error(tmp_path, capsys):
     code, out, err = run(capsys, "--library", str(tmp_path / "nowhere"), "stats")
-    assert code == 2 and out == "" and "no Heliad library" in err
+    assert code == 2 and out == "" and "no HelioFITS Core library" in err
 
 
 def test_a_locked_library_is_exit_3(filled, capsys):
     # The fixture's Library holds the root lock; a writing command cannot take it.
     code, out, err = run(capsys, "--library", str(filled.root), "reindex", "--dry-run")
-    assert code == 3 and "another Heliad process" in err
+    assert code == 3 and "another HelioFITS Core process" in err
 
 
 def test_delete_dry_run_says_what_would_go(filled, capsys):
@@ -76,7 +76,7 @@ def test_delete_dry_run_says_what_would_go(filled, capsys):
 
 
 def test_settings_print_as_lines_and_as_json(tmp_path, monkeypatch, capsys):
-    monkeypatch.setenv("HELIAD_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("HFCORE_HOME", str(tmp_path / "home"))
     config.save_setting("vso_mirrors", "NSO")
     _, out, _ = run(capsys, "settings")
     assert out.strip() == "vso_mirrors = NSO"
@@ -87,8 +87,8 @@ def test_settings_print_as_lines_and_as_json(tmp_path, monkeypatch, capsys):
 
 
 def test_version_is_the_installed_one(capsys):
-    from heliad import __version__
+    from heliofits_core import __version__
     with pytest.raises(SystemExit) as exit_:
         cli.main(["--version"])
     assert exit_.value.code == 0
-    assert capsys.readouterr().out.strip() == f"heliad {__version__}"
+    assert capsys.readouterr().out.strip() == f"hfcore {__version__}"

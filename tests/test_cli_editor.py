@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from heliad import cli, sources
+from heliofits_core import cli, sources
 from tests.test_upgrade import AIA, ARCHIVE_TIMES, LIB_TIMES, Archive, _fill
 
 

@@ -7,8 +7,8 @@ import types
 
 import pytest
 
-from heliad import coverage, views
-from heliad.rpc import Server
+from heliofits_core import coverage, views
+from heliofits_core.rpc import Server
 from conftest import aia_header, punch_header, write_fits
 
 
@@ -151,8 +151,8 @@ def test_search_bins_every_record_beside_its_table(lib, monkeypatch):
                        "rows": [{"Start Time": "2025-09-21T16:00:00.000"}],  # rows shown are cut short
                        "times": ["2025-09-21T16:00:00.000", "2025-09-21T16:30:00.000", "2025-09-21T16:59:00.000"]},
                       {"client": "Other", "count": 0, "columns": [], "rows": []}]}
-    monkeypatch.setitem(sys.modules, "heliad.sources.fake", fake)
-    monkeypatch.setitem(__import__("heliad.sources", fromlist=["SOURCES"]).SOURCES, "fake", "heliad.sources.fake")
+    monkeypatch.setitem(sys.modules, "heliofits_core.sources.fake", fake)
+    monkeypatch.setitem(__import__("heliofits_core.sources", fromlist=["SOURCES"]).SOURCES, "fake", "heliofits_core.sources.fake")
     server, call = _server(lib)
     assert call("search", query={"start": "2025-09-21T16:00:00", "end": "2025-09-21T17:00:00"},
                 source="fake", bins=2) is None

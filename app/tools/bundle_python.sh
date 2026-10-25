@@ -1,12 +1,13 @@
 #!/bin/bash
-# A relocatable Python with heliad and its archive clients installed, for make_app.sh:
+# A relocatable Python with HelioFITS Core and its archive clients installed, for make_app.sh
+# and for HelioFITS Studio's macOS app (its release/deploy_release.sh):
 #
 #   app/tools/bundle_python.sh                 # writes app/build/python
 #   PYTHON_DIR=build/python SIGN_IDENTITY="Developer ID Application: " app/tools/make_app.sh
 #
 # The Python is a python-build-standalone "install_only" build for this Mac's
 # architecture (latest release on GitHub, astral-sh/python-build-standalone),
-# checked against the SHA-256 digest GitHub publishes for the asset. heliad is
+# checked against the SHA-256 digest GitHub publishes for the asset. HelioFITS Core is
 # installed from this checkout (not editable) with the archives extra.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -58,12 +59,12 @@ mkdir -p "$(dirname "$OUT")"
 mv "$WORK/python" "$OUT"
 PY="$OUT/bin/python3"
 
-echo "Installing heliad[archives] from $REPO_ROOT"
+echo "Installing heliofits-core[archives] from $REPO_ROOT"
 # -s: without it pip counts packages in the build machine's ~/.local user site as
 # already installed and leaves them out of the bundle (seen on the first real run).
 "$PY" -s -m pip install --quiet --no-cache-dir --no-compile --disable-pip-version-check "$REPO_ROOT[archives]"
 find "$OUT" -name __pycache__ -type d -prune -exec rm -rf {} +
 
-"$PY" -B -s -c "import heliad, sunpy.net, drms, astropy, numpy; print('heliad', heliad.__version__, 'sunpy', sunpy.__version__, 'numpy', numpy.__version__)"
-"$PY" -B -s -m heliad --help > /dev/null
+"$PY" -B -s -c "import heliofits_core, sunpy, sunpy.net, drms, astropy, numpy; print('heliofits_core', heliofits_core.__version__, 'sunpy', sunpy.__version__, 'numpy', numpy.__version__)"
+"$PY" -B -s -m heliofits_core --help > /dev/null
 echo "Python ready in $OUT ($(du -sh "$OUT" | cut -f1))"

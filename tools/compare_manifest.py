@@ -1,4 +1,4 @@
-"""Check an old hand-made manifest.csv (name,path,query,sha256) against a Heliad index.
+"""Check an old hand-made manifest.csv (name,path,query,sha256) against a HelioFITS Core index.
 
     python tools/compare_manifest.py EVENT_DIR/manifest.csv LIBRARY_ROOT
 
@@ -15,7 +15,10 @@ csv.field_size_limit(10_000_000)
 
 
 def main(manifest: str, library: str) -> int:
-    db = sqlite3.connect(f"file:{Path(library) / 'heliad.sqlite'}?mode=ro", uri=True)
+    index = Path(library) / "hfcore.sqlite"
+    if not index.exists():
+        index = Path(library) / "heliad.sqlite"  # a library made before the rename
+    db = sqlite3.connect(f"file:{index}?mode=ro", uri=True)
     known = {row[0] for row in db.execute("SELECT sha256 FROM files")}
     rows = list(csv.DictReader(open(manifest, newline="")))
     missing = [r for r in rows if r.get("sha256") and r["sha256"] not in known]

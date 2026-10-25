@@ -1,4 +1,4 @@
-"""What the Mac app and Studio need from the core: thumbnails and heliad:// links."""
+"""What the Mac app and Studio need from the core: thumbnails and hfcore:// links."""
 
 import io
 import json
@@ -9,9 +9,9 @@ import numpy as np
 import pytest
 from astropy.io import fits
 
-from heliad import thumbs
-from heliad.query import Query
-from heliad.rpc import Server
+from heliofits_core import thumbs
+from heliofits_core.query import Query
+from heliofits_core.rpc import Server
 from conftest import aia_header, write_fits
 
 
@@ -65,11 +65,11 @@ def test_delete_removes_the_thumbnail(lib, src):
     assert not out.exists() and not big.exists()
 
 
-def test_heliad_link_round_trip():
+def test_hfcore_link_round_trip():
     q = Query(start="2025-09-21T16:00:00", end="2025-09-21T16:05:00", instrument="AIA",
               wavelength=193.0, sample_s=60.0)
     url = q.to_url()
-    assert url == ("heliad://search?end=2025-09-21T16%3A05%3A00&instrument=AIA&sample_s=60"
+    assert url == ("hfcore://search?end=2025-09-21T16%3A05%3A00&instrument=AIA&sample_s=60"
                    "&start=2025-09-21T16%3A00%3A00&wavelength=193")
     assert Query.from_url(url) == ("search", q)
     assert Query.from_url(q.to_url("get"))[0] == "get"
@@ -77,12 +77,12 @@ def test_heliad_link_round_trip():
 
 @pytest.mark.parametrize("url", [
     "https://search?start=a&end=b",
-    "heliad://delete?start=a&end=b",
-    "heliad://search?start=a",
-    "heliad://search?start=a&end=b&colour=red",
-    "heliad://search?start=a&end=b&end=c",
+    "hfcore://delete?start=a&end=b",
+    "hfcore://search?start=a",
+    "hfcore://search?start=a&end=b&colour=red",
+    "hfcore://search?start=a&end=b&end=c",
 ])
-def test_bad_heliad_links_are_refused(url):
+def test_bad_hfcore_links_are_refused(url):
     with pytest.raises(ValueError):
         Query.from_url(url)
 
@@ -96,10 +96,10 @@ def test_rpc_thumbnail_and_link(lib, src):
     server._pool.shutdown(wait=True)
     (reply,) = [json.loads(line) for line in server.out.getvalue().splitlines()]
     assert reply["id"] == 1 and reply["result"]["path"].endswith(".png")
-    parsed = call("query.from_url", url="heliad://get?start=2025-09-21T16:00:00&end=2025-09-21T17:00:00&wavelength=171")
+    parsed = call("query.from_url", url="hfcore://get?start=2025-09-21T16:00:00&end=2025-09-21T17:00:00&wavelength=171")
     assert parsed["result"] == {"action": "get", "query": {"start": "2025-09-21T16:00:00",
                                                            "end": "2025-09-21T17:00:00", "wavelength": 171.0}}
-    assert call("query.from_url", url="heliad://nope?start=a&end=b")["error"]["code"] == -32602
+    assert call("query.from_url", url="hfcore://nope?start=a&end=b")["error"]["code"] == -32602
 
 
 def test_slow_requests_do_not_hold_up_the_rest(lib, src):
@@ -140,6 +140,6 @@ def test_python_dash_m_runs_the_cli(tmp_path, monkeypatch):
     import subprocess
     import sys
 
-    monkeypatch.setenv("HELIAD_HOME", str(tmp_path / "home"))
-    out = subprocess.run([sys.executable, "-m", "heliad", "--json", "settings"], capture_output=True, text=True)
+    monkeypatch.setenv("HFCORE_HOME", str(tmp_path / "home"))
+    out = subprocess.run([sys.executable, "-m", "heliofits_core", "--json", "settings"], capture_output=True, text=True)
     assert out.returncode == 0 and out.stdout.strip().startswith("{")

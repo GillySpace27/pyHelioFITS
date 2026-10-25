@@ -8,9 +8,9 @@ import sqlite3
 
 import pytest
 
-from heliad import coverage, db, jobs, upgrade
-from heliad.query import Query
-from heliad.rpc import Server
+from heliofits_core import coverage, db, jobs, upgrade
+from heliofits_core.query import Query
+from heliofits_core.rpc import Server
 from conftest import aia_header, punch_header, write_fits
 
 LIB_TIMES = ["2025-09-21T16:00:00.840", "2025-09-21T16:00:24.840",
@@ -235,7 +235,7 @@ def test_refetch_brings_a_newer_version_in_as_current(server, lib, src):
 # ---- schema 4 ----------------------------------------------------------------------
 
 def test_schema_3_library_migrates_to_4(tmp_path):
-    path = tmp_path / "heliad.sqlite"
+    path = tmp_path / "hfcore.sqlite"
     conn = sqlite3.connect(path, isolation_level=None)
     for v in (1, 2, 3):
         for statement in db._split(db.MIGRATIONS[v]):
@@ -275,7 +275,7 @@ def test_fido_leaves_out_the_records_skip_claims(monkeypatch, tmp_path):
     from sunpy.net.base_client import QueryResponseTable
     from sunpy.net.vso import VSOClient
 
-    from heliad.sources import fido
+    from heliofits_core.sources import fido
 
     block = QueryResponseTable({"Start Time": Time(ARCHIVE_TIMES[:3])}, client=VSOClient.__new__(VSOClient))
 
@@ -301,7 +301,7 @@ def test_fido_leaves_out_the_records_skip_claims(monkeypatch, tmp_path):
 
 
 def test_jsoc_reads_t_rec_from_a_record_name():
-    from heliad.sources import jsoc
+    from heliofits_core.sources import jsoc
 
     assert jsoc.record_time("aia.lev1_euv_12s[2025-09-21T16:00:00Z][193]") == "2025-09-21T16:00:00Z"
     assert jsoc.record_time("hmi.M_45s[2025.09.21_16:00:00_TAI][2]") == "2025.09.21_16:00:00_TAI"

@@ -1,5 +1,5 @@
 """The API's three descriptions agree: the methods Server answers, the API table that
-`heliad api` prints, and docs/api.md. A method added without its docs fails here."""
+`hfcore api` prints, and docs/api.md. A method added without its docs fails here."""
 
 import argparse
 import inspect
@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from heliad import coverage, rpc, views
-from heliad.rpc import API, NOTIFICATIONS, Server
+from heliofits_core import coverage, rpc, views
+from heliofits_core.rpc import API, NOTIFICATIONS, Server
 
 DOCS = (Path(__file__).resolve().parents[1] / "docs" / "api.md").read_text(encoding="utf-8")
 SRC = Path(__file__).resolve().parents[1] / "src"
@@ -67,14 +67,14 @@ def test_every_alias_answers_as_its_method(methods):
 
 
 def _cli_commands() -> set[str]:
-    from heliad.cli import build_parser
+    from heliofits_core.cli import build_parser
     (sub,) = [a for a in build_parser()._actions if isinstance(a, argparse._SubParsersAction)]
     return set(sub.choices)
 
 
 def test_every_command_is_in_the_cli_table_and_names_real_methods():
     table = DOCS[DOCS.index("## The command line and the API"):]
-    rows = re.findall(r"^\| `heliad ([a-z-]+)[^|]*\| (.*) \|$", table, re.M)
+    rows = re.findall(r"^\| `hfcore ([a-z-]+)[^|]*\| (.*) \|$", table, re.M)
     listed = {cmd for cmd, _ in rows}
     assert _cli_commands() == listed
     for cmd, methods in rows:
@@ -84,7 +84,7 @@ def test_every_command_is_in_the_cli_table_and_names_real_methods():
 
 def test_every_notification_the_core_sends_is_listed():
     sent = set()
-    for path in SRC.joinpath("heliad").rglob("*.py"):
+    for path in SRC.joinpath("heliofits_core").rglob("*.py"):
         sent |= set(re.findall(r'notify\("([a-z_.]+)"', path.read_text(encoding="utf-8")))
     assert sent == set(NOTIFICATIONS)
 
@@ -94,8 +94,8 @@ _BARE_ENV = {"PYTHONPATH": str(SRC), "PATH": "",
              **{k: os.environ[k] for k in ("SYSTEMROOT",) if k in os.environ}}
 
 
-def test_heliad_api_prints_every_method():
-    run = lambda *a: subprocess.run([sys.executable, "-m", "heliad", "api", *a],  # noqa: E731
+def test_hfcore_api_prints_every_method():
+    run = lambda *a: subprocess.run([sys.executable, "-m", "heliofits_core", "api", *a],  # noqa: E731
                                     capture_output=True, text=True,
                                     env=_BARE_ENV)
     listing = run()
@@ -106,13 +106,13 @@ def test_heliad_api_prints_every_method():
     one = run("ingest.path")
     assert one.returncode == 0 and one.stdout.startswith("ingest.path(path, source_url=None, query=None)")
     unknown = run("ingest.nothing")
-    assert unknown.returncode == 2 and "heliad api lists them" in unknown.stderr
+    assert unknown.returncode == 2 and "hfcore api lists them" in unknown.stderr
 
 
 def test_help_points_at_the_api():
-    out = subprocess.run([sys.executable, "-m", "heliad", "--help"], capture_output=True, text=True,
+    out = subprocess.run([sys.executable, "-m", "heliofits_core", "--help"], capture_output=True, text=True,
                          env=_BARE_ENV).stdout
-    assert "heliad api" in out and "docs/api.md" in out
+    assert "hfcore api" in out and "docs/api.md" in out
 
 
 def test_describe_refuses_an_unknown_name():

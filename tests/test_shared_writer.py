@@ -1,6 +1,6 @@
 """Two clients on one library, as when Studio starts a core while the Mac app is open.
 
-The first `heliad serve` holds the library's lock and is its one writer. A second
+The first `hfcore serve` holds the library's lock and is its one writer. A second
 one, finding the lock taken, relays its client's requests to the writer, so both
 clients can ingest and download, and both hear every download's progress."""
 
@@ -19,21 +19,21 @@ import pytest
 from conftest import aia_header, write_fits
 from test_blockers import QUERY, FakeSource
 
-from heliad import share
-from heliad.library import Library
-from heliad.rpc import Server
+from heliofits_core import share
+from heliofits_core.library import Library
+from heliofits_core.rpc import Server
 
 SRC = Path(__file__).resolve().parents[1] / "src"
 
 
 class Core:
-    """A `heliad serve` process, spoken to over its stdin and stdout."""
+    """A `hfcore serve` process, spoken to over its stdin and stdout."""
 
     def __init__(self, root, home):
-        env = {**os.environ, "HELIAD_HOME": str(home),
+        env = {**os.environ, "HFCORE_HOME": str(home),
                "PYTHONPATH": os.pathsep.join([str(SRC), os.environ.get("PYTHONPATH", "")])}
         self.proc = subprocess.Popen(
-            [sys.executable, "-m", "heliad", "--library", str(root), "serve"],
+            [sys.executable, "-m", "heliofits_core", "--library", str(root), "serve"],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
         self.lines: queue.Queue = queue.Queue()
         threading.Thread(target=self._read, daemon=True).start()
@@ -73,9 +73,9 @@ def home(tmp_path):
 def test_a_second_serve_relays_to_the_writer(tmp_path, home, src):
     root = tmp_path / "library"
     mac = Core(root, home)
-    assert mac.call("heliad.hello")["readonly"] is False
+    assert mac.call("core.hello")["readonly"] is False
     studio = Core(root, home)
-    hello = studio.call("heliad.hello")
+    hello = studio.call("core.hello")
     assert hello["readonly"] is False
     assert hello["library_root"] == str(root.resolve())
 
@@ -98,8 +98,8 @@ def test_a_second_serve_relays_to_the_writer(tmp_path, home, src):
 
 def test_serve_says_why_when_the_writer_is_not_serving(tmp_path, home, monkeypatch):
     root = tmp_path / "library"
-    monkeypatch.setenv("HELIAD_HOME", str(home))
-    with Library.open(root):  # a writer that is not `heliad serve`, like `heliad import`
+    monkeypatch.setenv("HFCORE_HOME", str(home))
+    with Library.open(root):  # a writer that is not `hfcore serve`, like `hfcore import`
         core = Core(root, home)
         core.end_input()
         assert core.wait() == 3
