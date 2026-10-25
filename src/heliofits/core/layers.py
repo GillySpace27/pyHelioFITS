@@ -206,8 +206,11 @@ def plan(lib: Library, headers: list, sample_s: float | None = None) -> dict:
 def _fetch(lib: Library, meta, physobs, keys, missing, tol, target) -> dict:
     lo, hi = missing[0] - tol, missing[-1] + tol
     sample = target if len(missing) > 1 else None
-    if keys:
-        base = upgrade.dataset_query(lib, keys[0])
+    try:
+        base = upgrade.dataset_query(lib, keys[0]) if keys else None
+    except ValueError:  # a dataset with no dated observations (LASCO files ingested before 2026-10-25)
+        base = None
+    if base is not None:
         q = replace(Query.from_json(base["query"]), start=upgrade._iso(lo), end=upgrade._iso(hi),
                     sample_s=sample)
         return {"fetch": {"query": asdict(q), "source": base["source"],

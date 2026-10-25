@@ -169,3 +169,27 @@ def test_an_hmi_picture_finds_a_file_from_the_other_camera(server, lib, src):
            "DATE-OBS": "2026-10-24T14:54:27.800"}
     out = server.methods["layer.upgrade"](headers=[pic])
     assert out["frames"][0]["status"] == "in_library"
+
+
+def test_a_lasco_file_is_dated_from_its_slashed_date_obs_and_time_obs(server, lib, src):
+    # A LASCO .fts file writes DATE-OBS with slashes and the time in TIME-OBS (2026-10-25: ingest
+    # stored no date for such files, and layer.upgrade then failed on the dataset).
+    lib.ingest(write_fits(src / "c2.fts", {"TELESCOP": "SOHO", "INSTRUME": "LASCO", "DETECTOR": "C2",
+                                           "DATE-OBS": "2026/09/23", "TIME-OBS": "00:00:31.443"}))
+    pic = {"TELESCOP": "SOHO", "INSTRUME": "LASCO", "DETECTOR": "C2",
+           "DATE_OBS": "2026/09/23", "TIME_OBS": "00:00:31.443"}
+    out = server.methods["layer.upgrade"](headers=[pic, {**pic, "TIME_OBS": "01:00:31.443"}])
+    assert [f["status"] for f in out["frames"]] == ["in_library", "missing"]
+    assert out["frames"][0]["fits_date_obs"] == "2026-09-23T00:00:31.443"
+
+
+def test_a_dataset_without_dated_observations_falls_back_to_the_headers(server, lib, src):
+    # A library filled before LASCO files were dated keeps them undated; planning must not fail on it.
+    lib.ingest(write_fits(src / "c2.fts", {"TELESCOP": "SOHO", "INSTRUME": "LASCO", "DETECTOR": "C2"}))
+    pic = {"TELESCOP": "SOHO", "INSTRUME": "LASCO", "DETECTOR": "C2",
+           "DATE_OBS": "2026/09/23", "TIME_OBS": "00:00:31.443"}
+    out = server.methods["layer.upgrade"](headers=[pic])
+    assert [f["status"] for f in out["frames"]] == ["missing"]
+    f = out["groups"][0]["fetch"]
+    assert f["source"] == "fido" and f["inferred"] is True
+    assert (f["query"]["instrument"], f["query"]["detector"]) == ("LASCO", "C2")
