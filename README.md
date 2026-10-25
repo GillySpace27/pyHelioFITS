@@ -70,6 +70,8 @@ through VSO) run against the real archives; the JSOC export route written but no
     hfcore cadences sdo/aia/-/-/1/193               # the archive's cadence against the library's
     hfcore upgrade sdo/aia/-/-/1/193 --sample 12    # shows the plan; add --yes to fetch what is missing
     hfcore reindex --dry-run && hfcore reindex
+    hfcore latest sdo/aia/-/-/1/193 --span 2h      # fetch the 2 h before the archive's newest frame
+    hfcore template refresh session.jhv --dry-run  # the same for a Studio session's library layers
     hfcore delete --dataset KEY                     # shows what would go; add --yes to delete
     hfcore serve        # JSON-RPC 2.0, one JSON object per line on stdin/stdout
     hfcore api          # the methods serve answers

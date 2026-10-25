@@ -25,6 +25,10 @@
                                      fetch only the frames a dataset lacks (a dry run without --yes)
     hfcore layer-upgrade HEADERS.json [--sample S] [--yes]
                                      FITS for a layer of pictures, from their headers (a dry run without --yes)
+    hfcore latest UID_OR_KEY... [--span 2h] [--lookback 3d] [--dry-run]
+                                     fetch the span before each dataset's newest archive frame
+    hfcore template refresh FILE.jhv [--dry-run]
+                                     the same, for the library datasets a Studio session shows
     hfcore reindex [--dry-run]       apply the current header rules to every file
     hfcore fix-extensions [--dry-run]  add .fits / .fits.gz to stored files without one
     hfcore delete [--file ID] [--observation ID] [--dataset KEY] [--yes]
@@ -38,9 +42,10 @@ result the same operation returns (docs/api.md), one document per command.
 
 Exit codes: 0 done; 1 the operation ran and reported a problem (verify found
 missing or altered files, a download ended partial or failed, an import had
-errors, the archive could not be asked); 2 bad arguments, an id or key the
-library does not have, or no library where one was expected; 3 the library is
-locked by another core that is not serving it.
+errors, the archive could not be asked, latest found a dataset unknown or an
+archive failing); 2 bad arguments, an id or key the library does not have, or no
+library where one was expected; 3 the library is locked by another core that is
+not serving it.
 
 Commands that only read open the library read-only, so they work while the
 Mac app (or another core) holds it. --library never changes the default
@@ -52,10 +57,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
-from . import __version__, config, coverage, jobs, layers, upgrade, views
+from . import __version__, config, coverage, jobs, layers, sources, upgrade, views
+from . import latest as hflatest
 from .library import Library, LibraryLocked
 from .query import Query
 from .sources import ArchiveError
@@ -88,6 +95,26 @@ def _query(ns) -> Query:
     keys = ("start", "end", "instrument", "wavelength", "wavelength_max", "source",
             "provider", "detector", "level", "physobs", "sample_s", "jsoc_series")
     return Query(**{k: getattr(ns, k) for k in keys})
+
+
+_DURATION = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*([smhd]?)\s*$")
+_UNIT_S = {"": 1, "s": 1, "m": 60, "h": 3600, "d": 86400}
+
+
+def _duration(text: str) -> float:
+    """Seconds in a duration such as 7200, 90s, 10m, 2h or 3d."""
+    m = _DURATION.match(text.lower())
+    if not m or float(m.group(1)) <= 0:
+        raise argparse.ArgumentTypeError(f"not a duration: {text!r} (say 7200, 90s, 10m, 2h or 3d)")
+    return float(m.group(1)) * _UNIT_S[m.group(2)]
+
+
+def _latest_args(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--span", type=_duration, default=hflatest.DEFAULT_SPAN_S, dest="span_s",
+                   help="how much to fetch before the archive's newest frame (default 2h)")
+    p.add_argument("--lookback", type=_duration, default=hflatest.DEFAULT_LOOKBACK_S, dest="lookback_s",
+                   help="how far back to look for the archive's newest frame (default 3d)")
+    p.add_argument("--dry-run", action="store_true", help="say what would be fetched; queue nothing")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -176,6 +203,14 @@ def build_parser() -> argparse.ArgumentParser:
     p = v.add_parser("build")
     p.add_argument("name")
     v.add_parser("rebuild")
+    p = sub.add_parser("latest", help="fetch the span before each dataset's newest archive frame")
+    p.add_argument("datasets", nargs="+", metavar="UID_OR_KEY")
+    _latest_args(p)
+    t = sub.add_parser("template", help="HelioFITS Studio templates (saved sessions)").add_subparsers(
+        dest="template_cmd", required=True)
+    p = t.add_parser("refresh", help="fetch the latest of the library datasets a session shows")
+    p.add_argument("file", metavar="FILE.jhv")
+    _latest_args(p)
     _query_args(sub.add_parser("search"))
     _query_args(sub.add_parser("get"))
     sub.add_parser("serve")
@@ -364,6 +399,8 @@ def _run(lib: Library, ns, out: "Output") -> int:
             out.show(views.materialize(lib, ns.name), _view_text)
         else:
             out.show(views.rebuild_all(lib), lambda rows: "\n".join(_view_text(r) for r in rows) or "No views.")
+    elif ns.cmd in ("latest", "template"):
+        return _latest(lib, ns, out)
     elif ns.cmd == "get":
         runner = _runner(lib)
         return _run_job(runner, runner.enqueue(_query(ns), ns.client), out)
@@ -383,6 +420,40 @@ def _run_job(runner: jobs.JobRunner, job: dict, out: "Output") -> int:
     finished = runner.run_pending()
     out.show(finished, _jobs_text)
     return OK if all(j["status"] == "done" for j in finished) else PROBLEM
+
+
+def _latest(lib: Library, ns, out: "Output") -> int:
+    """hfcore latest and hfcore template refresh: template.latest, its jobs run to the end."""
+    document = None
+    if ns.cmd == "template":
+        try:
+            document = json.loads(Path(ns.file).read_text(encoding="utf-8"))
+            hflatest.session_state(document)
+        except OSError as exc:
+            return _fail(USAGE, f"cannot read {ns.file}: {exc.strerror or exc}")
+        except ValueError as exc:
+            return _fail(USAGE, f"{ns.file}: {exc}")
+
+    def notify(method, params):
+        print(f"  {method} {json.dumps(params, default=str)}", file=sys.stderr)
+    runner = None if ns.dry_run else jobs.JobRunner(lib, notify=notify)
+    resolve = runner._source if runner is not None else sources.get
+    kw = {"span_s": ns.span_s, "lookback_s": ns.lookback_s, "dry_run": ns.dry_run,
+          "settings": config.load_settings()}
+    if document is not None:
+        entries = hflatest.refresh(lib, resolve, runner, document, **kw)
+    else:
+        entries = hflatest.latest(lib, resolve, runner, ns.datasets, **kw)
+    finished = []
+    queued = sorted({e["job_id"] for e in entries if e.get("job_id") is not None})
+    if queued and runner is not None:
+        print(", ".join(f"job {j} queued" for j in queued), file=sys.stderr)
+        finished = runner.run_pending()
+    out.show(entries, _latest_text)
+    if finished and not out.as_json:
+        print("\n" + _jobs_text(finished))
+    trouble = any(e["status"] in ("archive_error", "not_found") for e in entries)
+    return PROBLEM if trouble or any(j["status"] != "done" for j in finished) else OK
 
 
 # ---- output ------------------------------------------------------------------
@@ -603,6 +674,23 @@ def _jobs_text(rows: list[dict]) -> str:
                   [("job_id", "Job"), ("status", "Status"), ("source", "Via"), ("progress", "Progress"),
                    ("what", "What"), ("range", "Range (UTC)"), ("created_at", "Queued"), ("error", "Error")],
                   right={"job_id"})
+
+
+def _latest_text(rows: list[dict]) -> str:
+    if not rows:
+        return "Nothing to refresh: no image layers."
+    shaped = []
+    for r in rows:
+        status = r["status"] + (f" ({r['reason']})" if r.get("reason") else "")
+        shaped.append({**r, "status": status, "dataset": r.get("dataset_key") or r.get("requested") or "",
+                       "window": f"{r['start']} to {r['end']}" if r.get("start") else "",
+                       "error": r.get("error") or ""})
+    columns = [("status", "Status"), ("dataset", "Dataset"), ("newest_local", "Newest here (UTC)"),
+               ("newest_remote", "Newest at archive (UTC)"), ("job_id", "Job"), ("window", "Window (UTC)"),
+               ("error", "Error")]
+    if any("layer" in r for r in rows):
+        columns.insert(0, ("layer", "Layer"))
+    return _table(shaped, columns, right={"job_id"})
 
 
 def _import_text(results: list[dict]) -> str:
