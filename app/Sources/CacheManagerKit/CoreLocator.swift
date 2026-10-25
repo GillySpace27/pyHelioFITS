@@ -48,7 +48,10 @@ public enum CoreLocator {
                 // -s, -P: no user site-packages, no current folder on sys.path.
                 arguments += ["-B", "-s", "-P", "-m", module]
             } else if name.hasPrefix("python") {
-                arguments += ["-m", module]
+                // Isolated too: a named Python runs its own packages, never ones in ~/.local (an
+                // astropy there whose asdf_astropy lacked asdf broke every download, 2026-10-25).
+                // A core installed with pip --user is named by its hfcore command instead.
+                arguments += ["-s", "-P", "-m", module]
             }
             if let library, !library.isEmpty { arguments += ["--library", expand(library, home)] }
             arguments.append("serve")

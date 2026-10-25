@@ -279,13 +279,13 @@ final class CoreLocatorTests: XCTestCase {
                                             environment: ["HFCORE_CORE": "/opt/py/bin/python3", "HELIAD_CORE": "/old/bin/python3"],
                                             home: home, exists: everything)
         XCTAssertEqual(launch.executable.path, "/opt/py/bin/python3")
-        XCTAssertEqual(launch.arguments, ["-m", "heliofits_core", "--library", "/Users/someone/Lib", "serve"])
+        XCTAssertEqual(launch.arguments, ["-s", "-P", "-m", "heliofits_core", "--library", "/Users/someone/Lib", "serve"])  // isolated, as bundled
         // The variable's old name still works, and runs the module under its old name, which
         // cores from before the rename to HelioFITS Core also have.
         launch = try CoreLocator.launch(library: nil, corePath: nil, bundle: Bundle(for: Self.self),
                                         environment: ["HELIAD_CORE": "/old/bin/python3"], home: home, exists: everything)
         XCTAssertEqual(launch.executable.path, "/old/bin/python3")
-        XCTAssertEqual(launch.arguments, ["-m", "heliad", "serve"])
+        XCTAssertEqual(launch.arguments, ["-s", "-P", "-m", "heliad", "serve"])
         launch = try CoreLocator.launch(library: nil, corePath: nil, bundle: Bundle(for: Self.self),
                                         environment: [:], home: home,
                                         exists: { $0.hasSuffix(CoreLocator.devCheckout) })
