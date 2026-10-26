@@ -1,4 +1,4 @@
-"""Heliad's own error codes and the renamed methods. A client can act on a code
+"""HelioFITS Core's own error codes and the renamed methods. A client can act on a code
 without reading the message: not found, read-only, archive, locked."""
 
 import io
@@ -6,9 +6,9 @@ import json
 
 import pytest
 
-from heliad import rpc, sources
-from heliad.library import Library
-from heliad.rpc import Server
+from heliofits_core import rpc, sources
+from heliofits_core.library import Library
+from heliofits_core.rpc import Server
 from tests.conftest import aia_header, write_fits
 
 
@@ -72,25 +72,25 @@ def test_an_archive_that_cannot_be_asked_is_archive(call, monkeypatch):
 
 
 def test_jsoc_without_an_email_is_archive():
-    from heliad.sources import jsoc
+    from heliofits_core.sources import jsoc
     with pytest.raises(sources.ArchiveError):
         jsoc._client({})
 
 
 def test_the_old_names_answer_as_the_new_ones(call):
-    url = "heliad://get?start=2025-09-21T16:00:00&end=2025-09-21T17:00:00&wavelength=171"
+    url = "hfcore://get?start=2025-09-21T16:00:00&end=2025-09-21T17:00:00&wavelength=171"
     new, old = call("link.parse", url=url)["result"], call("query.from_url", url=url)["result"]
     assert new == old == {"action": "get", "query": {"start": "2025-09-21T16:00:00", "end": "2025-09-21T17:00:00",
                                                       "wavelength": 171.0}}
     uid = call("library.datasets")["result"][0]["dataset_uid"]
-    link = f"heliad://dataset/{uid}?start=2025-09-21T16:00:00"
+    link = f"hfcore://dataset/{uid}?start=2025-09-21T16:00:00"
     new, old = call("link.parse", url=link)["result"], call("dataset.from_url", url=link)["result"]
     assert new == old
     assert new["action"] == "dataset" and new["dataset_uid"] == uid and new["end"] is None
     assert new["dataset"]["dataset_key"] == "sdo/aia/-/-/1/193"
-    assert call("link.parse", url="heliad://dataset/")["error"]["code"] == rpc.INVALID_PARAMS
+    assert call("link.parse", url="hfcore://dataset/")["error"]["code"] == rpc.INVALID_PARAMS
     assert call("link.parse", url="https://example.org")["error"]["code"] == rpc.INVALID_PARAMS
-    hello = call("heliad.hello")["result"]
+    hello = call("core.hello")["result"]
     assert hello["aliases"] == rpc.ALIASES
     assert {"search", "archive.search", "link.parse", "query.from_url"} <= set(hello["methods"])
     # The alias of a background method answers in the background too.

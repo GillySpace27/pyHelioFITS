@@ -1,8 +1,8 @@
-# Heliad API
+# HelioFITS Core API
 
-Everything the Heliad app and HelioFITS Studio do with a library goes through one interface:
-`heliad serve`, which speaks JSON-RPC 2.0 over its stdin and stdout. Scripts can use it the same
-way. `heliad api` prints the list below from the installed core, and `heliad api METHOD` prints
+Everything the HelioFITS Cache Manager app and HelioFITS Studio do with a library goes through one interface:
+`hfcore serve`, which speaks JSON-RPC 2.0 over its stdin and stdout. Scripts can use it the same
+way. `hfcore api` prints the list below from the installed core, and `hfcore api METHOD` prints
 one entry; this page is the full reference.
 
 If you only need to read a library, you do not need the API: open the index read-only as
@@ -31,16 +31,16 @@ The examples come from a scratch library (paths shortened, long results cut with
 
 Start a core on a library:
 
-    heliad --library ~/HeliadLibrary serve
+    hfcore --library ~/HelioFITSLibrary serve
 
-Without `--library` it serves the default library (the one `heliad init` chose). Then write one
+Without `--library` it serves the default library (the one `hfcore init` chose). Then write one
 request per line to its stdin:
 
     {"jsonrpc": "2.0", "id": 1, "method": "library.stats"}
 
 and read one line per reply from its stdout:
 
-    {"jsonrpc":"2.0","id":1,"result":{"library_root":"/Users/you/HeliadLibrary","schema_version":4,"rules_version":3,"reindex_due":false,"datasets":2,"observations":2,"files":3,"bytes":17280,"warnings":0,"collisions":0}}
+    {"jsonrpc":"2.0","id":1,"result":{"library_root":"/Users/you/HelioFITSLibrary","schema_version":4,"rules_version":3,"reindex_due":false,"datasets":2,"observations":2,"files":3,"bytes":17280,"warnings":0,"collisions":0}}
 
 - **Params are named**: `"params": {"file_id": 1}`. Leave `params` out for a method that takes none.
 - **Match replies by `id`.** Most methods answer in order. `archive.search`, `library.thumbnail` and
@@ -52,14 +52,14 @@ and read one line per reply from its stdout:
 
 From a shell:
 
-    echo '{"jsonrpc":"2.0","id":1,"method":"library.datasets"}' | heliad --library ~/HeliadLibrary serve
+    echo '{"jsonrpc":"2.0","id":1,"method":"library.datasets"}' | hfcore --library ~/HelioFITSLibrary serve
 
 From Python:
 
 ```python
 import json, subprocess
 
-core = subprocess.Popen(["heliad", "--library", "/Users/you/HeliadLibrary", "serve"],
+core = subprocess.Popen(["hfcore", "--library", "/Users/you/HelioFITSLibrary", "serve"],
                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
 
 def call(method, id=1, **params):
@@ -79,8 +79,8 @@ core.wait()
 
 ## Several clients on one library
 
-The first `heliad serve` on a library holds its lock and is the writer. A second `heliad serve` on
-the same library (Studio while the Heliad app is open, say) does not fail: it relays its client's
+The first `hfcore serve` on a library holds its lock and is the writer. A second `hfcore serve` on
+the same library (Studio while the HelioFITS Cache Manager app is open, say) does not fail: it relays its client's
 lines to the writer. Every client gets its own replies, and every client hears every
 notification, so a download started from one shows its progress in all of them. When the
 writer's own client leaves, the writer keeps running until the last relay has gone.
@@ -88,9 +88,9 @@ writer's own client leaves, the writer keeps running until the last relay has go
 The writer listens on 127.0.0.1 only, at a port it picks. It writes the port and a random token
 to `<library>/.heliad.endpoint`, readable only by you on macOS and Linux (not restricted on
 Windows). A connection that does not send the token first is closed. You never need to use this
-socket yourself: start `heliad serve` and it relays.
+socket yourself: start `hfcore serve` and it relays.
 
-If the lock is held by something that is not serving (`heliad import`, say), `heliad serve` waits
+If the lock is held by something that is not serving (`hfcore import`, say), `hfcore serve` waits
 5 seconds for an endpoint, then exits with code 3 and says why.
 
 ## Queries
@@ -109,20 +109,21 @@ optional except `start` and `end`. Times are UTC, ISO 8601.
 
     {"start": "2025-09-21T16:00:00", "end": "2025-09-21T17:00:00", "instrument": "AIA", "wavelength": 193.0}
 
-The same fields, URL-encoded, make a `heliad://search?...` or `heliad://get?...` link; see
+The same fields, URL-encoded, make a `hfcore://search?...` or `hfcore://get?...` link; see
 [`link.parse`](#linkparse).
 
 ## Library methods
 
-### `heliad.hello`
+### `core.hello`
 
 Params: none. Versions, the library, and every method this core answers. Call it first to check
 that the core is new enough.
 
-    {"name": "heliad", "version": "0.1.0", "schema_version": 5, "reader_compat": 1, "rules_version": 4,
+    {"name": "heliofits-core", "version": "0.1.0", "schema_version": 5, "reader_compat": 1, "rules_version": 4,
      "reindex_due": false, "readonly": false, "library_root": ".../library",
-     "db_path": ".../library/heliad.sqlite", "methods": ["archive.search", "dataset.cadences", ...],
-     "aliases": {"search": "archive.search", "query.from_url": "link.parse", "dataset.from_url": "link.parse"}}
+     "db_path": ".../library/hfcore.sqlite", "methods": ["archive.search", "dataset.cadences", ...],
+     "aliases": {"search": "archive.search", "query.from_url": "link.parse", "dataset.from_url": "link.parse",
+                 "heliad.hello": "core.hello"}}
 
 `aliases` maps each old method name this core still answers to the method it stands for.
 
@@ -206,7 +207,7 @@ Params: `dry_run=True`. **A dry run unless `dry_run` is false.** Gives every sto
 name has no FITS suffix one: `.fits`, or `.fits.gz` when the file starts with gzip's magic bytes
 (`1f 8b`); a file that starts with neither, or a name already ending in `.gz`, is left alone
 (`not_fits`). Ingest does the same for new files (Studio's oldest cache files are named by a bare
-SHA-256). The CLI is `heliad fix-extensions [--dry-run]`; both run in the writer, under its lock.
+SHA-256). The CLI is `hfcore fix-extensions [--dry-run]`; both run in the writer, under its lock.
 
 For each file, in this order: rename it in its folder; in one transaction, point `files.relpath`
 at the new name and record the old one in `file_aliases`; then leave a relative symlink at the old
@@ -329,24 +330,24 @@ cannot use is -32602.
 
 ### `link.parse`
 
-Params: `url`. What a `heliad://` link asks for. Unknown parameters are refused (-32602). A
-`heliad://search?...` or `heliad://get?...` link carries a query:
+Params: `url`. What a `hfcore://` link asks for. Unknown parameters are refused (-32602). A
+`hfcore://search?...` or `hfcore://get?...` link carries a query:
 
-    link.parse(url="heliad://search?start=2025-09-21T16:00:00&end=2025-09-21T17:00:00&instrument=AIA&wavelength=193")
+    link.parse(url="hfcore://search?start=2025-09-21T16:00:00&end=2025-09-21T17:00:00&instrument=AIA&wavelength=193")
     {"action": "search", "query": {"end": "2025-09-21T17:00:00", "instrument": "AIA",
                                    "start": "2025-09-21T16:00:00", "wavelength": 193.0}}
 
-A `heliad://dataset/<dataset_uid>?start=<iso>&end=<iso>` link names one dataset over a range
+A `hfcore://dataset/<dataset_uid>?start=<iso>&end=<iso>` link names one dataset over a range
 (see [Stable dataset ids](#stable-dataset-ids)); `dataset` is null when this library has no such
 uid, and `start` or `end` is null when the link leaves it out:
 
-    link.parse(url="heliad://dataset/0b6f8d2e-8a1f-4c1e-9d55-2f3c7e1a4b90?start=2025-09-21T16:00:00&end=2025-09-21T17:00:00")
+    link.parse(url="hfcore://dataset/0b6f8d2e-8a1f-4c1e-9d55-2f3c7e1a4b90?start=2025-09-21T16:00:00&end=2025-09-21T17:00:00")
     {"action": "dataset", "dataset_uid": "0b6f8d2e-8a1f-4c1e-9d55-2f3c7e1a4b90", "start": "2025-09-21T16:00:00",
      "end": "2025-09-21T17:00:00", "dataset": {"dataset_key": "punch/wfi+nfi/-/cam/3/5300", ...}}
 
 ## Cache editor methods
 
-The Heliad app's cache editor works on a library HelioFITS Studio filled: it sets bad frames
+The HelioFITS Core app's cache editor works on a library HelioFITS Studio filled: it sets bad frames
 aside, asks the archive again for one frame, and densifies a dataset by fetching only the frames
 it lacks.
 
@@ -493,7 +494,7 @@ in anything that has to find a dataset again.
 
 In the examples below the uid is an illustration, not a real one.
 
-The link form is `heliad://dataset/<dataset_uid>?start=<iso>&end=<iso>` (start and end optional).
+The link form is `hfcore://dataset/<dataset_uid>?start=<iso>&end=<iso>` (start and end optional).
 The Mac app opens it by selecting the dataset; [`link.parse`](#linkparse) reads one.
 
 ### `dataset.get`
@@ -552,12 +553,12 @@ Params: none.
 
 ## Settings methods
 
-Settings live in `settings.json` in Heliad's app-support folder, beside `config.json`. They are per
+Settings live in `settings.json` in HelioFITS Core's app-support folder, beside `config.json`. They are per
 user, not per library.
 
 ### `settings.get`
 
-Params: none. Every setting, as an object. `HELIAD_JSOC_EMAIL` in the environment overrides
+Params: none. Every setting, as an object. `HFCORE_JSOC_EMAIL` in the environment overrides
 `jsoc_email`.
 
 ### `settings.set`
@@ -569,7 +570,7 @@ mirrors to retry, comma-separated, or `none`).
 ## Old names
 
 A method keeps answering under a name it once had, so a client written against it keeps
-working; `heliad.hello` lists them as `aliases`. A new client uses the new name.
+working; `core.hello` lists them as `aliases`. A new client uses the new name.
 
 ### `search`
 
@@ -584,9 +585,14 @@ Params: `url`. The old name of [`link.parse`](#linkparse); answers the same.
 Params: `url`. The old name of [`link.parse`](#linkparse); answers the same (a dataset link's
 result has gained `"action": "dataset"`).
 
+### `heliad.hello`
+
+Params: none. The old name of [`core.hello`](#corehello), from before HelioFITS Core was renamed
+(it was Heliad); answers the same.
+
 ## Processing record methods
 
-A processing record (format `hfrecord` 1.x, schema in `src/heliad/schemas/hfrecord-1.schema.json`)
+A processing record (format `hfrecord` 1.x, schema in `src/heliofits_core/schemas/hfrecord-1.schema.json`)
 says what made an exported image or movie: each layer's dataset, its source files by SHA-256, and
 the steps applied to them in order. HelioFITS Studio writes it beside the export
 (`<export file name>.hfrec.json`, the complete copy) and inside it where the container takes one. These
@@ -702,7 +708,7 @@ An error reply has `error` instead of `result`:
 | -32700 | the line is not JSON |
 | -32600 | not a JSON-RPC 2.0 request |
 | -32601 | no such method |
-| -32602 | wrong or missing params (`params` must be an object), or a param the core cannot use: a bad `heliad://` link, a time it cannot read, a range that ends before it starts, a rejection without a reason, `bins` out of range |
+| -32602 | wrong or missing params (`params` must be an object), or a param the core cannot use: a bad `hfcore://` link, a time it cannot read, a range that ends before it starts, a rejection without a reason, `bins` out of range |
 | -32603 | the method failed; `message` names the exception, `data` holds a short traceback |
 | -32002 | not found: no dataset, observation, file, job, view or source of that id or name; `message` names it |
 | -32003 | a write (a download, a rejection, a delete) asked of a core that opened the library read-only |
@@ -714,7 +720,7 @@ An error reply has `error` instead of `result`:
 
 ## The command line and the API
 
-Every `heliad` command is a thin layer over the same library code. Commands that only read open
+Every `hfcore` command is a thin layer over the same library code. Commands that only read open
 the library read-only, so they work while a core holds it. A command prints a table or a few lines
 for a person; with `--json` it prints exactly the method's result. Exit codes: 0 done; 1 the
 operation ran and reported a problem (`verify` found missing or altered files, `get` ended partial
@@ -723,31 +729,31 @@ library does not have, or no library; 3 the library is locked by another core th
 
 | Command | Method |
 |---|---|
-| `heliad stats` | `library.stats` |
-| `heliad datasets` | `library.datasets` |
-| `heliad files [--dataset KEY] [--start T] [--end T]` | `library.files` |
-| `heliad versions OBSERVATION_ID` | `library.versions` |
-| `heliad checks FILE_ID` | `library.checks` |
-| `heliad coverage [--start T] [--end T] [--bins N] [--dataset KEY ...]` | `library.coverage` |
-| `heliad collisions` | `library.collisions` |
-| `heliad verify` | `library.verify` |
-| `heliad thumb FILE_ID [--size N]` | `library.thumbnail` |
-| `heliad import PATH...` | `ingest.path`, `ingest.tree` |
-| `heliad search --start T --end T ...` | `archive.search` |
-| `heliad get --start T --end T ...` | `download.enqueue`, run to the end |
-| `heliad jobs [--status S]` | `download.list` |
-| `heliad delete ... [--yes]` | `library.delete` |
-| `heliad reindex [--dry-run]` | `library.reindex` |
-| `heliad fix-extensions [--dry-run]` | `library.fix_extensions` |
-| `heliad reject OBSERVATION_ID... --reason TEXT` | `library.reject` |
-| `heliad unreject OBSERVATION_ID...` | `library.unreject` |
-| `heliad rejected [--dataset KEY]` | `library.rejected` |
-| `heliad refetch OBSERVATION_ID` | `library.refetch`, run to the end |
-| `heliad cadences DATASET_KEY [--start T] [--end T]` | `dataset.cadences` |
-| `heliad upgrade DATASET_KEY [--sample S] [--start T] [--end T] [--yes]` | `dataset.upgrade` (a dry run without `--yes`), run to the end |
-| `heliad layer-upgrade HEADERS.json [--sample S] [--yes]` | `layer.upgrade` (a dry run without `--yes`), its jobs run to the end |
-| `heliad view create NAME ...`, `view build NAME`, `view rebuild` | `view.create` and `view.materialize`, `view.materialize`, `view.rebuild_all` |
-| `heliad settings [KEY [VALUE] \| --unset KEY]` | `settings.get`, `settings.set` |
-| `heliad init` | makes a library and its config; no method |
-| `heliad serve` | all of them, over stdin and stdout |
-| `heliad api [METHOD]` | prints this list |
+| `hfcore stats` | `library.stats` |
+| `hfcore datasets` | `library.datasets` |
+| `hfcore files [--dataset KEY] [--start T] [--end T]` | `library.files` |
+| `hfcore versions OBSERVATION_ID` | `library.versions` |
+| `hfcore checks FILE_ID` | `library.checks` |
+| `hfcore coverage [--start T] [--end T] [--bins N] [--dataset KEY ...]` | `library.coverage` |
+| `hfcore collisions` | `library.collisions` |
+| `hfcore verify` | `library.verify` |
+| `hfcore thumb FILE_ID [--size N]` | `library.thumbnail` |
+| `hfcore import PATH...` | `ingest.path`, `ingest.tree` |
+| `hfcore search --start T --end T ...` | `archive.search` |
+| `hfcore get --start T --end T ...` | `download.enqueue`, run to the end |
+| `hfcore jobs [--status S]` | `download.list` |
+| `hfcore delete ... [--yes]` | `library.delete` |
+| `hfcore reindex [--dry-run]` | `library.reindex` |
+| `hfcore fix-extensions [--dry-run]` | `library.fix_extensions` |
+| `hfcore reject OBSERVATION_ID... --reason TEXT` | `library.reject` |
+| `hfcore unreject OBSERVATION_ID...` | `library.unreject` |
+| `hfcore rejected [--dataset KEY]` | `library.rejected` |
+| `hfcore refetch OBSERVATION_ID` | `library.refetch`, run to the end |
+| `hfcore cadences DATASET_KEY [--start T] [--end T]` | `dataset.cadences` |
+| `hfcore upgrade DATASET_KEY [--sample S] [--start T] [--end T] [--yes]` | `dataset.upgrade` (a dry run without `--yes`), run to the end |
+| `hfcore layer-upgrade HEADERS.json [--sample S] [--yes]` | `layer.upgrade` (a dry run without `--yes`), its jobs run to the end |
+| `hfcore view create NAME ...`, `view build NAME`, `view rebuild` | `view.create` and `view.materialize`, `view.materialize`, `view.rebuild_all` |
+| `hfcore settings [KEY [VALUE] \| --unset KEY]` | `settings.get`, `settings.set` |
+| `hfcore init` | makes a library and its config; no method |
+| `hfcore serve` | all of them, over stdin and stdout |
+| `hfcore api [METHOD]` | prints this list |

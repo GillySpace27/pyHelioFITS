@@ -11,9 +11,9 @@ import pytest
 from astropy.io import fits
 from conftest import punch_header, write_fits
 
-from heliad import db, fitsmeta
-from heliad.query import dataset_link, parse_dataset_link
-from heliad.rpc import Server
+from heliofits_core import db, fitsmeta
+from heliofits_core.query import dataset_link, parse_dataset_link
+from heliofits_core.rpc import Server
 
 
 def _schema_4(path):
@@ -32,7 +32,7 @@ def _schema_4(path):
 
 
 def test_schema_4_migrates_to_5_minting_a_uid_for_every_row(tmp_path):
-    path = tmp_path / "heliad.sqlite"
+    path = tmp_path / "hfcore.sqlite"
     _schema_4(path)
     conn = db.connect_writer(path)
     assert db.schema_version(conn) == 5 and db.meta_value(conn, "reader_compat") == "1"
@@ -50,7 +50,7 @@ def test_schema_4_migrates_to_5_minting_a_uid_for_every_row(tmp_path):
         conn.execute("INSERT INTO file_aliases(old_relpath, file_id, sha256) VALUES ('r1', 9, 'x')")
     conn.close()
     # The index as it was is kept beside it, and opening again changes nothing.
-    backup = tmp_path / "heliad.sqlite.schema4.bak"
+    backup = tmp_path / "hfcore.sqlite.schema4.bak"
     assert backup.exists()
     old = sqlite3.connect(backup)
     assert old.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()[0] == "4"
@@ -61,7 +61,7 @@ def test_schema_4_migrates_to_5_minting_a_uid_for_every_row(tmp_path):
 
 
 def test_new_datasets_and_views_get_uids(lib, src):
-    from heliad import views
+    from heliofits_core import views
     lib.ingest(write_fits(src / "PUNCH_L3_CTM_20250921170000_v0l.fits", punch_header()))
     (d,) = lib.datasets()
     assert uuid.UUID(d["dataset_uid"]).version == 4
@@ -78,7 +78,7 @@ def _punch_530(src, n):
 
 
 def test_reindex_carries_the_uid_across_a_key_change(lib, src, monkeypatch):
-    # Ingest as Heliad did before it read WAVEUNIT 'nanometer' (530 taken as 530 Å) ...
+    # Ingest as the core did before it read WAVEUNIT 'nanometer' (530 taken as 530 Å) ...
     monkeypatch.delitem(fitsmeta._WAVE_TO_ANGSTROM, "nanometer", raising=False)
     for f in _punch_530(src, 3):
         lib.ingest(f)
@@ -140,12 +140,12 @@ def test_rpc_dataset_get_resolve_and_link(lib, src, monkeypatch):
     assert m["dataset.resolve"](key=old["dataset_key"])["dataset_uid"] == old["dataset_uid"]
 
     url = dataset_link(old["dataset_uid"], "2025-09-21T20:00:00", "2025-09-21T21:00:00")
-    assert url == (f"heliad://dataset/{old['dataset_uid']}"
+    assert url == (f"hfcore://dataset/{old['dataset_uid']}"
                    "?start=2025-09-21T20%3A00%3A00&end=2025-09-21T21%3A00%3A00")
     link = m["dataset.from_url"](url=url)
     assert link["start"] == "2025-09-21T20:00:00" and link["end"] == "2025-09-21T21:00:00"
     assert link["dataset"]["dataset_uid"] == old["dataset_uid"]
-    assert parse_dataset_link(f"heliad://dataset/{old['dataset_uid']}")["start"] is None
-    for bad in ("heliad://search?start=a&end=b", "heliad://dataset/", "heliad://dataset/x?colour=red"):
+    assert parse_dataset_link(f"hfcore://dataset/{old['dataset_uid']}")["start"] is None
+    for bad in ("hfcore://search?start=a&end=b", "hfcore://dataset/", "hfcore://dataset/x?colour=red"):
         with pytest.raises(ValueError):
             parse_dataset_link(bad)

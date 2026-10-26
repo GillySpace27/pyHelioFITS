@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "heliad"
+name = "heliofits-core"
 version = "0.1.0"
 description = "Find solar data, download it and keep it in one library."
 requires-python = ">=3.10"
@@ -14,13 +14,14 @@ archives = ["sunpy[net]>=6", "drms"]
 test = ["pytest", "jsonschema"]
 
 [project.scripts]
-heliad = "heliad.cli:main"
+hfcore = "heliofits_core.cli:main"
+heliad = "heliofits_core.cli:main"  # the old command name, kept
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-heliad = ["schemas/*.json"]
+heliofits_core = ["schemas/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

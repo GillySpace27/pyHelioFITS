@@ -1,4 +1,4 @@
-# Keeps Heliad on HelioFITS Peek's current renderer. Weekly (and by hand) this moves
+# Keeps HelioFITS Cache Manager on HelioFITS Peek's current renderer. Weekly (and by hand) this moves
 # app/Package.resolved to the newest commit of the Peek branch app/Package.swift follows,
 # builds and tests the app against it, and opens a draft PR with the result. Gilly merges it;
 # nothing merges itself. Builds stay reproducible: every other build uses the committed
@@ -63,7 +63,7 @@ jobs:
           python -m venv "$RUNNER_TEMP/core"
           "$RUNNER_TEMP/core/bin/python" -m pip install "..[archives]"
           swift build --disable-automatic-resolution
-          HELIAD_CORE="$RUNNER_TEMP/core/bin/python3" HELIAD_TEST_LIBRARY="$RUNNER_TEMP/library" \
+          HFCORE_CORE="$RUNNER_TEMP/core/bin/python3" HFCORE_TEST_LIBRARY="$RUNNER_TEMP/library" \
             swift test --disable-automatic-resolution
       - name: Open a draft PR
         if: steps.update.outputs.changed == 'yes'

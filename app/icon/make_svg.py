@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Write heliad_icon.svg: the Heliad app icon master, the Sun rising out of an open book.
+"""Write cachemanager_icon.svg: the HelioFITS Cache Manager icon master, the Sun rising out of an open book.
 
 The Sun is the main shape so it still reads at Dock size. The book is drawn as a thick white
-outline with header-card text lines on both pages, for the metadata Heliad keeps beside the data.
+outline with header-card text lines on both pages, for the metadata HelioFITS Core keeps beside the data.
 
 The family look is Heliogram's (gillyspace27/heliogram, icons/make_app_icon.py): the same violet-black
 ground, the same chrome white (#E7EAF3) outline at the same weight, and the same dark inside. Each
-product's outline names it: a monitor for Heliogram, a file for Peek, a book for Heliad. The art
+product's outline names it: a monitor for Heliogram, a file for Peek, a book for the Cache Manager. The art
 fills the whole square; make_app_icon.py applies the shape.
 """
 import math, os
@@ -101,6 +101,6 @@ svg = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width=
   <path d="{page(X1)}" fill="none" stroke="{CHROME}" stroke-width="{STROKE}" stroke-linejoin="round"/>
 </svg>
 '''
-out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "heliad_icon.svg")
+out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cachemanager_icon.svg")
 open(out, "w").write(svg)
 print(out)

@@ -8,11 +8,11 @@ import time
 
 import pytest
 
-from heliad import config, db, fitsmeta, jobs, library, rpc, views
-from heliad.library import Library, ReadOnlyLibrary
-from heliad.query import Query
-from heliad.rpc import Server
-from heliad.sources import jsoc
+from heliofits_core import config, db, fitsmeta, jobs, library, rpc, views
+from heliofits_core.library import Library, ReadOnlyLibrary
+from heliofits_core.query import Query
+from heliofits_core.rpc import Server
+from heliofits_core.sources import jsoc
 from conftest import aia_header, punch_header, write_fits
 
 ASPIICS = {"OBSRVTRY": "Proba-3", "INSTRUME": "ASPIICS", "LEVEL": "L3", "WAVEUNIT": "Angstrom",
@@ -33,7 +33,7 @@ def test_read_only_open_works_while_the_writer_holds_the_library(lib, src):
 
 
 def test_read_only_open_of_a_missing_library_creates_nothing(tmp_path, monkeypatch):
-    monkeypatch.setenv("HELIAD_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("HFCORE_HOME", str(tmp_path / "home"))
     with pytest.raises(FileNotFoundError):
         Library.open(tmp_path / "nothing", readonly=True)
     assert not (tmp_path / "nothing").exists()
@@ -41,7 +41,7 @@ def test_read_only_open_of_a_missing_library_creates_nothing(tmp_path, monkeypat
 
 
 def test_library_flag_does_not_redirect_the_default(tmp_path, monkeypatch):
-    monkeypatch.setenv("HELIAD_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("HFCORE_HOME", str(tmp_path / "home"))
     with Library.open(tmp_path / "main"):
         pass
     with Library.open(tmp_path / "scratch"):
@@ -53,7 +53,7 @@ def test_library_flag_does_not_redirect_the_default(tmp_path, monkeypatch):
 
 
 def test_cli_read_commands_run_beside_a_writer(lib, src, capsys):
-    from heliad import cli
+    from heliofits_core import cli
     lib.ingest(write_fits(src / "a.fits", aia_header()))
     assert cli.main(["--library", str(lib.root), "--json", "stats"]) == 0
     assert json.loads(capsys.readouterr().out)["files"] == 1
@@ -62,7 +62,7 @@ def test_cli_read_commands_run_beside_a_writer(lib, src, capsys):
 # ---- schema 2 ----------------------------------------------------------------
 
 def test_schema_1_library_migrates_to_current(tmp_path):
-    path = tmp_path / "heliad.sqlite"
+    path = tmp_path / "hfcore.sqlite"
     conn = sqlite3.connect(path, isolation_level=None)
     for statement in db._split(db.SCHEMA_V1):
         conn.execute(statement)
@@ -78,7 +78,7 @@ def test_schema_1_library_migrates_to_current(tmp_path):
 
 def test_reader_refuses_a_library_it_cannot_read(lib):
     db.set_meta(lib.conn, "reader_compat", db.SCHEMA_VERSION + 1)
-    with pytest.raises(RuntimeError, match="newer Heliad"):
+    with pytest.raises(RuntimeError, match="newer HelioFITS Core"):
         Library.open(lib.root, readonly=True)
 
 
@@ -322,7 +322,7 @@ def test_rpc_enqueue_returns_before_the_download_runs(lib, src):
     assert notes[-1]["method"] == "download.finished"
     listed = server.handle_line(json.dumps({"jsonrpc": "2.0", "id": 2, "method": "download.list"}))
     assert listed["result"][0]["result"]["ingest"] == {"added": 1}
-    hello = server.handle_line(json.dumps({"jsonrpc": "2.0", "id": 3, "method": "heliad.hello"}))
+    hello = server.handle_line(json.dumps({"jsonrpc": "2.0", "id": 3, "method": "core.hello"}))
     assert hello["result"]["reader_compat"] == db.READER_COMPAT
 
 
@@ -352,19 +352,19 @@ def test_jsoc_query_and_record_set():
 
 
 def test_settings_and_environment(tmp_path, monkeypatch):
-    monkeypatch.setenv("HELIAD_HOME", str(tmp_path / "home"))
-    monkeypatch.delenv("HELIAD_JSOC_EMAIL", raising=False)
+    monkeypatch.setenv("HFCORE_HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("HFCORE_JSOC_EMAIL", raising=False)
     assert config.load_settings() == {}
     config.save_setting("jsoc_email", "someone@example.org")
     assert config.load_settings()["jsoc_email"] == "someone@example.org"
-    monkeypatch.setenv("HELIAD_JSOC_EMAIL", "other@example.org")
+    monkeypatch.setenv("HFCORE_JSOC_EMAIL", "other@example.org")
     assert config.load_settings()["jsoc_email"] == "other@example.org"
     assert config.save_setting("jsoc_email", None) == {}
 
 
 def test_location_warnings(tmp_path):
-    assert config.location_warnings(tmp_path / "HeliadLibrary") == []
-    (synced,) = config.location_warnings(tmp_path / "Dropbox" / "HeliadLibrary")
+    assert config.location_warnings(tmp_path / "HelioFITSLibrary") == []
+    (synced,) = config.location_warnings(tmp_path / "Dropbox" / "HelioFITSLibrary")
     assert "sync service" in synced
 
 
