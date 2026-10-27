@@ -1110,11 +1110,12 @@ class Library:
         row = next((d for d in self.datasets() if d.get("dataset_uid") == dataset_uid), None)
         return None if row is None else {**row, "resolved_by": how}
 
-    def resolve_dataset(self, key_or_uid: str) -> dict | None:
+    def resolve_dataset(self, key_or_uid: str, conn=None) -> dict | None:
         """{dataset_uid, dataset_key, resolved_by} for a uid, a current key or an old
         key recorded in dataset_aliases; None when nothing matches. A current key wins
-        over an alias of the same text."""
-        conn = self.reader
+        over an alias of the same text. conn, when given, is read instead of the
+        library's reader (the core's background pool reads through its own)."""
+        conn = conn or self.reader
         if not db.has_column(conn, "datasets", "dataset_uid"):
             return None
         for how, sql in (("uid", "SELECT dataset_uid, dataset_key FROM datasets WHERE dataset_uid = ?"),
