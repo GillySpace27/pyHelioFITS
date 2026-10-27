@@ -1,0 +1,20 @@
+{"org.helioviewer.jhv.state": {
+  "time": "2025-09-21T16:01:12.840",
+  "masterStartTime": "2025-09-21T16:00:00",
+  "masterEndTime": "2025-09-21T16:02:00",
+  "layers": [],
+  "imageLayers": [
+    {"className": "org.helioviewer.jhv.layers.ImageLayer", "name": "SDO AIA 193",
+     "id": "layer-heliad-aia",
+     "data": {"uris": ["file:@LIBRARY@/store/sdo/aia/1/193/2025/09/21/lib0.fits",
+                       "file:@LIBRARY@/store/sdo/aia/1/193/2025/09/21/lib3.fits"],
+              "imageParams": {}, "filter": "NONE"},
+     "enabled": true, "master": true},
+    {"className": "org.helioviewer.jhv.layers.ImageLayer", "name": "AIA 171 (Helioviewer)",
+     "id": "layer-helioviewer-aia",
+     "data": {"APIRequest": {"server": "ROB", "sourceId": 10, "startTime": "2025-09-21T16:00:00",
+                             "endTime": "2025-09-21T16:02:00", "cadence": 60},
+              "imageParams": {}, "filter": "NONE"},
+     "enabled": true}
+  ]
+}}
