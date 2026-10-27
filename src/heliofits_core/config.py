@@ -28,14 +28,14 @@ def env(name: str) -> str | None:
 
 
 def _support_dirs() -> tuple[Path, Path]:
-    """(this platform's per-user settings folder for HelioFITS Core, the one HelioFITS Core used)."""
+    """(this platform's per-user settings folder for HelioFITS Core, the one Heliad used)."""
     home = Path.home()
     if sys.platform == "darwin":
         base = home / "Library" / "Application Support"
-        return base / "HelioFITS Core", base / "HelioFITS Core"
+        return base / "HelioFITS Core", base / "Heliad"
     if os.name == "nt":
         base = Path(os.environ.get("APPDATA", home / "AppData" / "Roaming"))
-        return base / "HelioFITS Core", base / "HelioFITS Core"
+        return base / "HelioFITS Core", base / "Heliad"
     base = Path(os.environ.get("XDG_CONFIG_HOME", home / ".config"))
     return base / "hfcore", base / "heliad"
 

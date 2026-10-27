@@ -110,3 +110,19 @@ def test_a_view_folder_built_before_the_rename_is_still_ours(lib, src):
     assert [v for v in views.list_views(lib) if v["name"] == "ev"][0]["materialized"]
     views.materialize(lib, "ev")  # replaces it rather than refusing a folder it did not make
     assert (folder / views.MARKER).exists()
+
+
+def test_a_mac_set_up_before_the_rename_keeps_its_heliad_folder(tmp_path, monkeypatch):
+    for name in ("HFCORE_HOME", "HELIAD_HOME"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(config.Path, "home", classmethod(lambda cls: tmp_path / "home"))
+    support = tmp_path / "home" / "Library" / "Application Support"
+    old = support / "Heliad"
+    old.mkdir(parents=True)
+    (old / "config.json").write_text("{}")
+    assert config.app_support_dir() == old
+    new = support / "HelioFITS Core"
+    new.mkdir()
+    (new / "config.json").write_text("{}")
+    assert config.app_support_dir() == new  # once the new folder has a config, it is the one
