@@ -5,7 +5,8 @@ The Sun is the main shape so it still reads at Dock size. The book is drawn as a
 outline with header-card text lines on both pages, for the metadata HelioFITS Core keeps beside the data.
 
 The family look is Heliogram's (gillyspace27/heliogram, icons/make_app_icon.py): the same violet-black
-ground, the same chrome white (#E7EAF3) outline at the same weight, and the same dark inside. Each
+ground (#2F2263 to #15102A since Gilly's family-wide lift of 2026-10-28), the same chrome white
+(#E7EAF3) outline at the same weight, and the same dark inside. Each
 product's outline names it: a monitor for Heliogram, a file for Peek, a book for the Cache Manager. The art
 fills the whole square; make_app_icon.py applies the shape.
 """
@@ -71,8 +72,8 @@ def header_lines(n=3, gap=45, stroke=13, sag=22):
 svg = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
   <defs>
     <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#171132"/>
-      <stop offset="1" stop-color="#090711"/>
+      <stop offset="0" stop-color="#2F2263"/>
+      <stop offset="1" stop-color="#15102A"/>
     </linearGradient>
     <radialGradient id="glow" cx="{CX}" cy="{CY}" r="520" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#FFB347" stop-opacity="0.55"/>
