@@ -20,7 +20,9 @@ from astropy.time import Time
 # `hfcore reindex` rebuilds them when the two differ.
 # 4: a LEVEL keyword with more in it keeps only its trailing level (SUVI)
 # 5: WAVEUNIT spelled out ('nanometer', PUNCH) is converted, so PUNCH keys move /530 -> /5300
-RULES_VERSION = 5
+# 6: a date written with slashes (LASCO: DATE-OBS 2026/04/11, TIME-OBS 22:30:23) is read,
+#    so LASCO files get an observation time instead of none
+RULES_VERSION = 6
 
 # Keywords copied into the index for every file, so readers can filter and
 # display without opening the FITS file.
@@ -170,11 +172,16 @@ def _wavelength(header: fits.Header) -> float | None:
     return round(wave * _WAVE_TO_ANGSTROM.get(unit, 1.0), 4)
 
 
+# LASCO writes its dates as 2026/04/11 (and some files as '2026/04/11 22:30:23').
+_SLASHED_DATE = re.compile(r"^(\d{4})/(\d{2})/(\d{2})(?=$|[ T])")
+
+
 def _date_obs(header: fits.Header) -> str | None:
     for key in ("DATE-OBS", "DATE_OBS", "DATE-BEG", "DATE-AVG"):
         raw = _clean(header.get(key))
         if not raw:
             continue
+        raw = _SLASHED_DATE.sub(r"\1-\2-\3", raw)
         if "T" not in raw and _clean(header.get("TIME-OBS")):
             raw = f"{raw}T{_clean(header.get('TIME-OBS'))}"
         try:
