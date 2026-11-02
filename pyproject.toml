@@ -7,21 +7,24 @@ name = "heliofits-core"
 version = "0.1.0"
 description = "Find solar data, download it and keep it in one library."
 requires-python = ">=3.10"
-dependencies = ["astropy>=6", "numpy"]
+dependencies = ["astropy>=6", "numpy", "jsonschema"]
 
 [project.optional-dependencies]
 archives = ["sunpy[net]>=6", "drms"]
+mcp = ["mcp>=2"]
 test = ["pytest", "jsonschema"]
 
 [project.scripts]
 hfcore = "heliofits_core.cli:main"
 heliad = "heliofits_core.cli:main"  # the old command name, kept
+heliofits-mcp = "heliofits.mcp:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
 heliofits_core = ["schemas/*.json"]
+heliofits = ["data/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
