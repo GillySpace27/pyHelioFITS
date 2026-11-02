@@ -47,7 +47,10 @@ def parse(value) -> datetime | None:
         if m:
             return _from_jsoc(m)
         try:
-            when = datetime.fromisoformat(text.removesuffix("Z").replace(" ", "T"))
+            iso = text.removesuffix("Z").replace(" ", "T")
+            # Python 3.10 reads only 3 or 6 fractional digits; pad or cut to 6 (newer Pythons read any)
+            iso = re.sub(r"(\.\d+)", lambda f: (f.group(1) + "000000")[:7], iso, count=1)
+            when = datetime.fromisoformat(iso)
         except ValueError:
             return None
     if when.tzinfo is not None:
