@@ -89,9 +89,10 @@ def test_every_notification_the_core_sends_is_listed():
     assert sent == set(NOTIFICATIONS)
 
 
-# No PATH, so nothing outside Python is found. Windows Python cannot start without SYSTEMROOT.
+# No PATH, so nothing outside Python is found. Windows Python cannot start without SYSTEMROOT,
+# and Path.home() there needs USERPROFILE.
 _BARE_ENV = {"PYTHONPATH": str(SRC), "PATH": "",
-             **{k: os.environ[k] for k in ("SYSTEMROOT",) if k in os.environ}}
+             **{k: os.environ[k] for k in ("SYSTEMROOT", "USERPROFILE", "HOMEDRIVE", "HOMEPATH") if k in os.environ}}
 
 
 def test_hfcore_api_prints_every_method():

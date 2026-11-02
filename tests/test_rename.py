@@ -44,7 +44,6 @@ def _linux_home(tmp_path, monkeypatch):
     for name in ("HFCORE_HOME", "HELIAD_HOME"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(sys, "platform", "linux")
-    monkeypatch.setattr(config.os, "name", "posix")
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.setattr(config.Path, "home", classmethod(lambda cls: tmp_path / "home"))

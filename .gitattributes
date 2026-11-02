@@ -1,0 +1,2 @@
+# The design copy of the record schema is compared byte for byte (tests/test_record.py): no line-ending conversion.
+src/heliofits_core/schemas/*.json -text
