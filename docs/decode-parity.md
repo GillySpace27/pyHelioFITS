@@ -88,7 +88,7 @@ Real files (needs the Mac, the library and Studio's `bin/`):
 2. Dump each with Studio's decoder: copy `tools/studio/DecodeParityDump.java` to
    `src/org/helioviewer/jhv/view/uri/` in HelioFITS Studio (it must sit in `view.uri`, because
    `FITSImage.readData` is package-private), `ant compile`, then
-   `java -Djava.awt.headless=true -cp "bin:resources:lib/*" org.helioviewer.jhv.view.uri.DecodeParityDump OUT FILE.fits [--plane N] [--subtract-background]`.
+   `java -Djava.awt.headless=true -cp "bin:resources:$(find lib -name '*.jar' | tr '\n' ':')" org.helioviewer.jhv.view.uri.DecodeParityDump OUT FILE.fits [--plane N] [--subtract-background]`.
    Use `--plane 0..2` on a PUNCH PTM, and `--subtract-background` on a LASCO frame (needs the network).
 3. Compare: `HFPARITY_DIR=OUT HFPARITY_SOURCES=<library root> pytest tests/test_parity_real.py`, or one file:
    `python -m heliofits_core.parity compare OUT/NAME.p0.hfdump.json --source FILE.fits`.

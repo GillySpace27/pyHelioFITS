@@ -83,6 +83,9 @@ public final class DecodeParityDump {
         Platform.init();
         Directories.createCacheDirs();
         AppInit.loadSpice();
+        // Studio ships with this on (Settings defaults); the parity claim is made with it off. It only scales the
+        // display, but the dump records the setting, so set it for real in the throwaway home.
+        DisplaySettings.setNormalizeAIA(false);
 
         Files.createDirectories(outDir);
         write(outDir, file, plane, subtract);
