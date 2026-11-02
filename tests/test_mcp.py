@@ -61,4 +61,4 @@ def test_studio_not_running_is_a_tool_error(tmp_path, monkeypatch):
         async with Client(hmcp.build(Studio())) as c:
             return await c.call_tool("studio_seekFrame", {"frame": 0})
     r = anyio.run(go)
-    assert r.is_error and "Scripting API" in r.content[0].text
+    assert r.is_error and "Local API" in r.content[0].text

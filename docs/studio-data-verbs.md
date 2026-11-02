@@ -1,29 +1,22 @@
-# Studio data verbs (proposed)
+# Studio data commands
 
-Studio's command registry (`docs/commands.json` in HelioFITS Studio) is mostly menu actions: loading
-a layer opens a dialog and takes no arguments. A script or an LLM needs commands that do the task.
-These are defined in `src/heliofits/verbs.py` with JSON Schemas, implemented by `heliofits.testing.FakeStudio`
-over synthetic frames (so the notebooks run), and are what Studio has to register next, with the same
-ids and schemas, so the fake and the real thing agree. Ids are camelCase like the rest of the registry.
+Studio registers the data commands a script needs (`DataCommands` in HelioFITS Studio, listed in
+its `docs/commands.md` and carried by `docs/commands.json`): `layerAdd`, `layerList`,
+`layerRemove`, `layerReload`, `filterSet`, `viewSet`, `viewGet`, `frameGet`, `previewRender`,
+`exportStill` and `exportMovie`. Studio is the source of their ids and schemas; this package ships
+a copy of that file (`src/heliofits/data/studio-commands.json`) for offline use, docs and tests,
+and a running Studio's own list wins. Nothing is added on the Python side.
 
-| id | effect | what it does |
-| --- | --- | --- |
-| `layerAdd` | write | add a layer: `source` (jp2, fits-library, punch, synoptic), `dataset`, `start`, `end`, `cadence_s`; returns `layer_id`, `frames` |
-| `layerList` | read | the layers: id, name, source, frames, start, end, filter |
-| `layerRemove` | destructive | remove a layer |
-| `layerReload` | write | re-read a layer's frames (after the cache gained files) |
-| `filterSet` | write | `layer_id`, `filter`, `params` |
-| `viewSet`, `viewGet` | write, read | projection, zoom, Box-Cox `warp_lambda` |
-| `frameGet` | read | one frame's decoded values as an `hf-decode-dump/1` document (docs/decode-parity.md); returns the file's path |
-| `previewRender` | read | render the scene to a temporary PNG, no export saved |
-| `exportStill`, `exportMovie` | write | write a PNG, or an .mp4 of the loaded frames |
+`heliofits.testing.FakeStudio` answers the same commands over synthetic frames (a smooth disc plus
+a bright blob that moves outward with the frame number), with answers of the shape Studio's have,
+so the notebooks and `tests/test_notebooks.py` run without Studio. Nothing it returns is data.
 
-Also needed in Studio, not in this list: the localhost listener that serves `commands.list` and
-`commands.invoke` (see docs/mcp.md), and `seekTime`/`seekFrame` already exist.
+Shapes worth knowing: a layer is named by `layer_id`, a small integer that is not stable across
+runs; `layerAdd` answers when every frame is loaded (`wait`: `all`, `first` or `none`), so it can
+take minutes; `layerList` reports `source` as `jp2`, `fits` or `file`; `frameGet` answers the path
+of an `hf-decode-dump/1` document (docs/decode-parity.md) and works for FITS layers; exports take
+`long_side` in pixels and read Studio's recording settings without changing them. A jp2 dataset is
+named as the server lists it, `observatory="SDO", dataset="AIA 193"`.
 
-The fake gives a layer one synthetic frame per cadence step, a smooth disc plus a bright blob that
-moves outward with the frame number. Nothing it returns is data.
-
-Open points for the Studio side: what `layerAdd` should do when a dataset name is ambiguous (the fake
-accepts anything); whether `frameGet` should also accept a time instead of a frame number; progress
-for `layerAdd` and `exportMovie`, which can be slow (the client waits up to 10 minutes by default).
+Not in Studio yet: a filter's own parameters, a frame range or rate on `exportMovie`, `frameGet`
+for jp2 layers, and SOAR, ASPIICS, synoptic or PUNCH-by-query sources on `layerAdd`.

@@ -45,7 +45,7 @@ def test_destructive_declined(tmp_path, monkeypatch):
 
 def test_not_running(tmp_path, monkeypatch):
     monkeypatch.setenv("HFSTUDIO_API", str(tmp_path / "missing.json"))
-    with pytest.raises(StudioNotRunning, match="Scripting API"):
+    with pytest.raises(StudioNotRunning, match="Local API"):
         Studio().seek_frame(frame=0)
 
 

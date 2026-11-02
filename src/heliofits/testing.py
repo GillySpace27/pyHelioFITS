@@ -72,23 +72,29 @@ class FakeStudio:
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
 
     def _data_verbs(self) -> dict[str, Callable[[dict], dict]]:
-        """The proposed data verbs (verbs.py) over synthetic frames: a layer has one frame per
-        cadence step; a frame is a smooth disc plus a bright blob moving outward with time, so
-        a notebook measuring it gets a sensible answer. Nothing here is real data."""
+        """Studio's data commands (DataCommands in Studio, docs/commands.json) over synthetic
+        frames: a layer has one frame per cadence step; a frame is a smooth disc plus a bright blob
+        moving outward with time, so a notebook measuring it gets a sensible answer. Nothing here
+        is real data. The answers have the shape Studio's have."""
         def layer_add(a):
             start, end = _t(a["start"]), _t(a["end"])
             step = float(a.get("cadence_s") or 720)
             n = int((end - start).total_seconds() // step) + 1
             lid = max(self.layers, default=0) + 1
-            self.layers[lid] = {"id": lid, "name": a["dataset"], "source": a["source"], "filter": "none",
+            name = (a.get("observatory", "") + " " + a["dataset"]).strip()
+            self.layers[lid] = {"layer_id": lid, "name": name, "source": "jp2" if a["source"] == "jp2" else "fits",
+                                "filter": "none", "current": 0,
                                 "times": [(start + timedelta(seconds=step * i)).isoformat(timespec="milliseconds")
-                                          for i in range(n)], "current": 0}
-            return {"layer_id": lid, "frames": n}
+                                          for i in range(n)]}
+            return describe(self.layers[lid])
+
+        def describe(L):
+            return {"layer_id": L["layer_id"], "name": L["name"], "source": L["source"], "frames": len(L["times"]),
+                    "loading": False, "active": L is list(self.layers.values())[-1], "filter": L["filter"],
+                    "start": L["times"][0], "end": L["times"][-1], "frame": L["current"]}
 
         def layer_list(a):
-            return {"layers": [{"id": L["id"], "name": L["name"], "source": L["source"], "frames": len(L["times"]),
-                                "start": L["times"][0], "end": L["times"][-1], "filter": L["filter"]}
-                               for L in self.layers.values()]}
+            return {"layers": [describe(L) for L in self.layers.values()]}
 
         def layer_remove(a):
             self.layers.pop(a["layer_id"])
@@ -127,13 +133,15 @@ class FakeStudio:
                     "data": {"b64": base64.b64encode(_npy(data)).decode(), "encoding": "npy-float32-le"}}
             path = self.workdir / f"frame-{a['layer_id']}-{i}.json"
             path.write_text(json.dumps(dump), "utf-8")
-            return {"path": str(path), "format": "hf-decode-dump/1"}
+            return {"path": str(path), "format": "hf-decode-dump/1", "frame": i, "time": L["times"][i]}
 
         def preview(a):
-            return {"path": _png(self.workdir / "preview.png", a.get("width", 8), a.get("height", 8))}
+            side = a.get("long_side", 8)
+            return {"path": _png(self.workdir / "preview.png", side, side)}
 
         def still(a):
-            return {"path": _png(Path(a["path"]), a.get("width", 8), a.get("height", 8))}
+            side = a.get("long_side", 8)
+            return {"path": _png(Path(a["path"]), side, side)}
 
         def movie(a):
             frames = max((len(L["times"]) for L in self.layers.values()), default=0)
@@ -150,8 +158,8 @@ class FakeStudio:
             return {}
 
         return {"layerAdd": layer_add, "layerList": layer_list, "layerRemove": layer_remove,
-                "layerReload": lambda a: {"frames": len(need(a)["times"])}, "filterSet": filter_set,
-                "viewSet": view_set, "viewGet": lambda a: {"view": dict(self.view)}, "frameGet": frame_get,
+                "layerReload": lambda a: describe(need(a)), "filterSet": filter_set,
+                "viewSet": view_set, "viewGet": lambda a: dict(self.view), "frameGet": frame_get,
                 "previewRender": preview, "exportStill": still, "exportMovie": movie,
                 "seekTime": seek_time, "seekFrame": seek_frame}
 

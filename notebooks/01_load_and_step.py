@@ -15,7 +15,7 @@ START, END = "2025-09-21T22:00", "2025-09-21T23:00"
 # cache (see notebook 3). Studio loads the frames and returns the layer's id.
 
 # %%
-layer = studio.layer_add(source="jp2", dataset="SDO/AIA 193", start=START, end=END, cadence_s=720)
+layer = studio.layer_add(source="jp2", observatory="SDO", dataset="AIA 193", start=START, end=END, cadence_s=720)
 print(layer)
 
 # %% [markdown]

@@ -52,7 +52,7 @@ def front_heights(frames):
 # %%
 summary = []
 for ev in EVENTS:
-    layer = studio.layer_add(source="jp2", dataset="SOHO/LASCO C2", start=ev["start"], end=ev["end"])
+    layer = studio.layer_add(source="jp2", observatory="SOHO", dataset="LASCO C2", start=ev["start"], end=ev["end"])
     lid = layer["layer_id"]
     studio.seek_frame(frame=layer["frames"] // 2)
     studio.export_still(path=str(OUT / f"{ev['name']}.png"))
