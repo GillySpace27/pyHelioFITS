@@ -6,8 +6,12 @@ build-backend = "setuptools.build_meta"
 name = "heliofits-core"
 version = "0.1.0"
 description = "Find solar data, download it and keep it in one library."
+readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["astropy>=6", "numpy", "jsonschema"]
+
+[project.urls]
+Repository = "https://github.com/GillySpace27/heliad"  # renamed with the repository
 
 [project.optional-dependencies]
 archives = ["sunpy[net]>=6", "drms"]
