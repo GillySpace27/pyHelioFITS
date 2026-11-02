@@ -58,3 +58,20 @@ def test_cache_stats(tmp_path, monkeypatch):
     assert cache.library_stats()["files"] == 0
     with pytest.raises(CommandError):
         cache.call("nope.nope")
+
+
+def test_cache_runs_a_queued_job_to_the_end(tmp_path, monkeypatch):
+    from heliofits import cache
+    from heliofits_core import jobs
+    from heliofits_core.library import Library
+    monkeypatch.setenv("HFCORE_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("HFCORE_LIBRARY", str(tmp_path / "lib"))
+    Library.open(tmp_path / "lib").close()
+    ran = []
+    monkeypatch.setattr(jobs.JobRunner, "enqueue", lambda self, q, source="fido", options=None:
+                        {"job_id": 7, "status": "queued"})
+    monkeypatch.setattr(jobs.JobRunner, "run_pending", lambda self: ran.append(1) or [])
+    monkeypatch.setattr(jobs.JobRunner, "get", lambda self, i: {"job_id": i, "status": "done"})
+    query = {"start": "2025-09-21T16:00:00", "end": "2025-09-21T17:00:00", "instrument": "AIA", "wavelength": 193.0}
+    assert cache.download_enqueue(query=query) == {"job_id": 7, "status": "done"} and ran == [1]
+    assert cache.call("download.enqueue", _wait=False, query=query)["status"] == "queued"

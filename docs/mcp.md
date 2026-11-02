@@ -28,3 +28,21 @@ underscores: `cache_library_stats`). Hints: read-only, destructive. Options: `--
 tool that changes anything; `--include-ui` adds Studio's menu and dialog commands.
 
 Client config example: `{"mcpServers": {"heliofits": {"command": "heliofits-mcp"}}}`.
+
+## Notebooks
+
+`notebooks/*.py` (percent format, the source) and `*.ipynb` (built by `python tools/pct2ipynb.py`):
+
+1. load a dataset and step through time
+2. sweep a view parameter and export a still for each value
+3. find and fill a cadence gap in the cache, then reload the layer
+4. preview, then export stills and a movie
+5. beyond the GUI: a height-time curve for each event in a list
+
+They need data verbs Studio does not have yet (docs/studio-data-verbs.md). Until it does, try them on
+the fake: `python -m heliofits.testing`, then `export HFSTUDIO_API=<the file it prints>`. The fake's
+frames are synthetic. `tests/test_notebooks.py` runs every notebook against it.
+
+`cache` calls that queue a download (`dataset_upgrade`, `download_enqueue`, `library_refetch`) are run
+to the end in your process and return the finished job; pass `_wait=False` to `cache.call` to queue
+and return, for a separate `hfcore serve` or the app to do.

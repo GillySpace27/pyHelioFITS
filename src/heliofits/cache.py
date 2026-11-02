@@ -27,7 +27,11 @@ def _open() -> Library:
         return Library.open(root, readonly=True)
 
 
-def call(method: str, **params: Any) -> Any:
+def call(method: str, _wait: bool = True, **params: Any) -> Any:
+    """Run one Core method. A method that queues a download (download.enqueue, dataset.upgrade,
+    library.refetch) is run to the end here, because nothing else in this process would run it;
+    the result is the finished job. Pass `_wait=False` to get the queued job back instead (a
+    separate `hfcore serve` or the Cache Manager app then does the work)."""
     lib = _open()
     server = rpc.Server(lib, out=io.StringIO())
     try:
@@ -37,7 +41,12 @@ def call(method: str, **params: Any) -> Any:
         reply = server._call(1, server.methods[name], params)
         if "error" in reply:
             raise CommandError("failed", f"{reply['error']['code']}: {reply['error']['message']}")
-        return reply["result"]
+        result = reply["result"]
+        if _wait and server.jobs is not None and isinstance(result, dict) and result.get("status") == "queued" \
+                and "job_id" in result:
+            server.jobs.run_pending()
+            result = server.jobs.get(result["job_id"])
+        return result
     finally:
         server._pool.shutdown(wait=False)
         lib.close()
