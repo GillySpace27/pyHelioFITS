@@ -33,7 +33,7 @@ def _support_dirs() -> tuple[Path, Path]:
     if sys.platform == "darwin":
         base = home / "Library" / "Application Support"
         return base / "HelioFITS Core", base / "Heliad"
-    if sys.platform.startswith("win"):
+    if sys.platform == "win32":
         base = Path(os.environ.get("APPDATA", home / "AppData" / "Roaming"))
         return base / "HelioFITS Core", base / "Heliad"
     base = Path(os.environ.get("XDG_CONFIG_HOME", home / ".config"))

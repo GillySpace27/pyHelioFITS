@@ -28,7 +28,6 @@ from datetime import datetime, timedelta, timezone
 
 INDEX_FORMAT = "%Y-%m-%dT%H:%M:%S.%f"
 _EPOCH = datetime(1970, 1, 1)
-_FRACTION = re.compile(r"\.\d+")
 _JSOC = re.compile(r"^(\d{4})\.(\d{2})\.(\d{2})_(\d{2}):(\d{2}):(\d{2}(?:\.\d+)?)_(TAI|UTC)$")
 
 
@@ -49,8 +48,8 @@ def parse(value) -> datetime | None:
             return _from_jsoc(m)
         try:
             iso = text.removesuffix("Z").replace(" ", "T")
-            # Python 3.10's fromisoformat reads exactly 3 or 6 fractional digits; later versions any number.
-            iso = _FRACTION.sub(lambda f: (f.group(0) + "000000")[:7], iso, count=1)
+            # Python 3.10 reads only 3 or 6 fractional digits; pad or cut to 6 (newer Pythons read any)
+            iso = re.sub(r"(\.\d+)", lambda f: (f.group(1) + "000000")[:7], iso, count=1)
             when = datetime.fromisoformat(iso)
         except ValueError:
             return None

@@ -90,7 +90,7 @@ def test_every_notification_the_core_sends_is_listed():
 
 
 # No PATH, so nothing outside Python is found. Windows Python cannot start without SYSTEMROOT,
-# and Path.home() there needs USERPROFILE.
+# and cannot find a home directory without USERPROFILE.
 _BARE_ENV = {"PYTHONPATH": str(SRC), "PATH": "",
              **{k: os.environ[k] for k in ("SYSTEMROOT", "USERPROFILE", "HOMEDRIVE", "HOMEPATH") if k in os.environ}}
 

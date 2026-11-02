@@ -2,8 +2,6 @@
 documented codes: 0 done, 1 a problem the operation reported, 2 usage, 3 locked."""
 
 import json
-import os
-import stat
 
 import pytest
 
@@ -50,9 +48,9 @@ def test_verify_reports_a_problem_with_exit_1(filled, capsys):
     code, out, _ = run(capsys, "--library", str(filled.root), "verify")
     assert code == 0 and out.startswith("Verified 1 files; 0 missing, 0 altered.")
     relpath = filled.current_files()[0]["relpath"]
-    stored = filled.abspath(relpath)
-    os.chmod(stored, stat.S_IWRITE | stat.S_IREAD)  # store files are read-only; Windows will not unlink those
-    stored.unlink()
+    gone = filled.abspath(relpath)
+    gone.chmod(0o600)  # stored files are read-only, and Windows will not unlink those
+    gone.unlink()
     code, out, _ = run(capsys, "--library", str(filled.root), "verify")
     assert code == 1 and "1 missing" in out and relpath in out
     code, out, _ = run(capsys, "--library", str(filled.root), "--json", "verify")

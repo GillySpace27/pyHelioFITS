@@ -4,7 +4,6 @@ are faked; nothing here reaches one."""
 
 import io
 import json
-from pathlib import Path
 
 import pytest
 
@@ -40,7 +39,7 @@ def test_a_picture_finds_its_fits_whatever_the_level(server, lib, src):
     first = out["frames"][0]
     assert first["status"] == "in_library" and first["dataset_key"] == AIA171
     assert first["fits_date_obs"] == "2025-09-21T16:00:04.840"
-    assert Path(first["path"]).parts[-len(Path(first["relpath"]).parts):] == Path(first["relpath"]).parts
+    assert first["path"].replace("\\", "/").endswith(first["relpath"])
     (g,) = out["groups"]
     assert g["datasets"] == [AIA171] and g["spacing_s"] == 1800.0 and g["tolerance_s"] == 60.0
     f = g["fetch"]
