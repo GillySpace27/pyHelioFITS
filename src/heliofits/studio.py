@@ -30,10 +30,13 @@ def endpoint_path() -> Path:
 
 
 def bundled_commands() -> list[dict]:
-    """The command list shipped with this package (a copy of Studio's docs/commands.json).
-    A running Studio's own list wins; this is for offline use, docs and tests."""
+    """The command list shipped with this package: a copy of Studio's docs/commands.json plus the
+    proposed data verbs (verbs.py) that Studio does not have yet. A running Studio's own list wins;
+    this is for offline use, docs and tests."""
+    from .verbs import VERBS
     text = resources.files("heliofits").joinpath("data/studio-commands.json").read_text("utf-8")
-    return json.loads(text)["tools"]
+    have = {t["name"] for t in json.loads(text)["tools"]}
+    return json.loads(text)["tools"] + [v for v in VERBS if v["name"] not in have]
 
 
 def snake(name: str) -> str:

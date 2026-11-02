@@ -5,22 +5,46 @@ call and answers `{}` unless a handler is given. Destructive commands answer 'de
 
 from __future__ import annotations
 
+import base64
+import io
 import json
 import secrets
+import struct
+import tempfile
 import threading
+import zlib
+from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable
 
 import jsonschema
+import numpy as np
 
 from .studio import bundled_commands
+
+
+def _png(path: Path, w: int = 8, h: int = 8) -> str:
+    """A small valid grey PNG, so a notebook can open what the fake 'rendered'."""
+    raw = b"".join(b"\x00" + bytes([(x * 255) // max(w - 1, 1) for x in range(w)]) for _ in range(h))
+    chunk = lambda t, d: struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d))  # noqa: E731
+    path.write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 0, 0, 0, 0))
+                     + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+    return str(path)
+
+
+def _t(text: str) -> datetime:
+    return datetime.fromisoformat(text.replace("Z", ""))
 
 
 class FakeStudio:
     def __init__(self, handlers: dict[str, Callable[[dict], dict]] | None = None, confirm: bool = True):
         self.tools = {t["name"]: t for t in bundled_commands()}
-        self.handlers = handlers or {}
+        self.layers: dict[int, dict] = {}
+        self.view: dict = {"projection": "orthographic", "zoom": 1.0, "warp_lambda": 1.0}
+        self.time: str | None = None
+        self.workdir = Path(tempfile.mkdtemp(prefix="fake-studio-"))
+        self.handlers = {**self._data_verbs(), **(handlers or {})}
         self.confirm = confirm
         self.calls: list[tuple[str, dict]] = []
         self.token = secrets.token_hex(16)
@@ -47,6 +71,90 @@ class FakeStudio:
         self.port = self._server.server_address[1]
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
 
+    def _data_verbs(self) -> dict[str, Callable[[dict], dict]]:
+        """The proposed data verbs (verbs.py) over synthetic frames: a layer has one frame per
+        cadence step; a frame is a smooth disc plus a bright blob moving outward with time, so
+        a notebook measuring it gets a sensible answer. Nothing here is real data."""
+        def layer_add(a):
+            start, end = _t(a["start"]), _t(a["end"])
+            step = float(a.get("cadence_s") or 720)
+            n = int((end - start).total_seconds() // step) + 1
+            lid = max(self.layers, default=0) + 1
+            self.layers[lid] = {"id": lid, "name": a["dataset"], "source": a["source"], "filter": "none",
+                                "times": [(start + timedelta(seconds=step * i)).isoformat(timespec="milliseconds")
+                                          for i in range(n)], "current": 0}
+            return {"layer_id": lid, "frames": n}
+
+        def layer_list(a):
+            return {"layers": [{"id": L["id"], "name": L["name"], "source": L["source"], "frames": len(L["times"]),
+                                "start": L["times"][0], "end": L["times"][-1], "filter": L["filter"]}
+                               for L in self.layers.values()]}
+
+        def layer_remove(a):
+            self.layers.pop(a["layer_id"])
+            return {}
+
+        def need(a):
+            if a["layer_id"] not in self.layers:
+                raise KeyError(f"no layer {a['layer_id']}")
+            return self.layers[a["layer_id"]]
+
+        def filter_set(a):
+            need(a)["filter"] = a["filter"]
+            return {}
+
+        def view_set(a):
+            self.view.update(a)
+            return {}
+
+        def frame_get(a):
+            L = need(a)
+            i = a.get("frame", L["current"])
+            if not 0 <= i < len(L["times"]):
+                raise ValueError(f"frame {i} outside 0..{len(L['times']) - 1}")
+            n = 64
+            yy, xx = np.mgrid[0:n, 0:n].astype(np.float32)
+            r = np.hypot(xx - n / 2, yy - n / 2)
+            data = np.exp(-(r / 20) ** 2) + 3 * np.exp(-((r - (6 + 1.5 * i)) / 1.5) ** 2) * (xx > n / 2)
+            data = data.astype(np.float32)
+            grid = np.linspace(0, n - 1, 9)
+            arcsec = (grid - n / 2) * 30.0
+            dump = {"format": "hf-decode-dump/1", "writer": {"name": "FakeStudio"}, "plane": 0, "shape": [n, n],
+                    "orientation": "fits", "bad_pixels": "nan", "unit": "DN", "corrections": [], "notes": ["synthetic"],
+                    "instrument": "other", "time": {"keyword": "DATE-OBS", "iso": L["times"][i]},
+                    "wcs": {"grid_pixels": [[float(x), float(y)] for y in grid for x in grid],
+                            "grid_arcsec": [[float(x), float(y)] for y in arcsec for x in arcsec]},
+                    "data": {"b64": base64.b64encode(_npy(data)).decode(), "encoding": "npy-float32-le"}}
+            path = self.workdir / f"frame-{a['layer_id']}-{i}.json"
+            path.write_text(json.dumps(dump), "utf-8")
+            return {"path": str(path), "format": "hf-decode-dump/1"}
+
+        def preview(a):
+            return {"path": _png(self.workdir / "preview.png", a.get("width", 8), a.get("height", 8))}
+
+        def still(a):
+            return {"path": _png(Path(a["path"]), a.get("width", 8), a.get("height", 8))}
+
+        def movie(a):
+            frames = max((len(L["times"]) for L in self.layers.values()), default=0)
+            Path(a["path"]).write_bytes(b"fake movie")
+            return {"path": a["path"], "frames": frames}
+
+        def seek_time(a):
+            self.time = a["time"]
+            return {}
+
+        def seek_frame(a):
+            for L in self.layers.values():
+                L["current"] = min(a["frame"], len(L["times"]) - 1)
+            return {}
+
+        return {"layerAdd": layer_add, "layerList": layer_list, "layerRemove": layer_remove,
+                "layerReload": lambda a: {"frames": len(need(a)["times"])}, "filterSet": filter_set,
+                "viewSet": view_set, "viewGet": lambda a: {"view": dict(self.view)}, "frameGet": frame_get,
+                "previewRender": preview, "exportStill": still, "exportMovie": movie,
+                "seekTime": seek_time, "seekFrame": seek_frame}
+
     def _answer(self, req: dict) -> dict:
         rid, params = req.get("id"), req.get("params") or {}
 
@@ -68,7 +176,10 @@ class FakeStudio:
         if tool.get("x-effect") == "destructive" and not self.confirm:
             return err("declined", f"'{name}' was declined in the confirmation dialog")
         self.calls.append((name, args))
-        result: Any = self.handlers.get(name, lambda a: {})(args)
+        try:
+            result: Any = self.handlers.get(name, lambda a: {})(args)
+        except (KeyError, ValueError) as e:
+            return err("failed", str(e.args[0]) if isinstance(e, KeyError) else str(e))
         return {"jsonrpc": "2.0", "id": rid, "result": result}
 
     def endpoint_file(self, path: Path) -> Path:
@@ -82,3 +193,27 @@ class FakeStudio:
     def __exit__(self, *exc):
         self._server.shutdown()
         self._server.server_close()
+
+
+def _npy(a: np.ndarray) -> bytes:
+    buf = io.BytesIO()
+    np.save(buf, a.astype("<f4"), allow_pickle=False)
+    return buf.getvalue()
+
+
+def main() -> None:
+    """`python -m heliofits.testing`: run a fake Studio and print how to point notebooks at it."""
+    import tempfile
+    import time
+    with FakeStudio() as f:
+        ep = f.endpoint_file(Path(tempfile.mkdtemp()) / "api.json")
+        print(f"Fake Studio (synthetic frames, nothing real). In another terminal:\n  export HFSTUDIO_API={ep}")
+        try:
+            while True:
+                time.sleep(3600)
+        except KeyboardInterrupt:
+            pass
+
+
+if __name__ == "__main__":
+    main()
