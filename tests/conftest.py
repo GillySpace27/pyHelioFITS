@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 from astropy.io import fits
 
-from heliofits_core.library import Library
+from heliofits.core.library import Library
 
 
 def write_fits(path, header: dict, compressed: bool = False):

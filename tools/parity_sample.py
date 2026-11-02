@@ -3,7 +3,7 @@
     python tools/parity_sample.py [--library DIR] [--out manifest.json]
 
 Reads the index read-only. For every dataset it opens the newest-first file's header, classes it
-with heliofits_core.parity.instrument_of, and keeps the first file of each class (LASCO: one per
+with heliofits.core.parity.instrument_of, and keeps the first file of each class (LASCO: one per
 detector). Prints the picks and, with --out, writes them as a manifest of SHA-256 hashes (the
 parity test finds files by hash; nothing is copied). Instruments with no file in the library are
 listed as missing, never invented.
@@ -12,8 +12,8 @@ listed as missing, never invented.
 import argparse
 import json
 
-from heliofits_core import fitsmeta, parity
-from heliofits_core.library import Library
+from heliofits.core import fitsmeta, parity
+from heliofits.core.library import Library
 
 
 def main() -> None:

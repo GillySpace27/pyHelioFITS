@@ -16,7 +16,7 @@ def fake(tmp_path, monkeypatch):
         monkeypatch.setenv("HFSTUDIO_API", str(f.endpoint_file(tmp_path / "api.json")))
         monkeypatch.setenv("HFCORE_HOME", str(tmp_path / "home"))
         monkeypatch.setenv("HFCORE_LIBRARY", str(tmp_path / "lib"))
-        from heliofits_core.library import Library
+        from heliofits.core.library import Library
         Library.open(tmp_path / "lib").close()
         yield f
 

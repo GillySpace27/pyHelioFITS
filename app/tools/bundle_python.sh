@@ -59,12 +59,12 @@ mkdir -p "$(dirname "$OUT")"
 mv "$WORK/python" "$OUT"
 PY="$OUT/bin/python3"
 
-echo "Installing heliofits-core[archives] from $REPO_ROOT"
+echo "Installing heliofits[archives] from $REPO_ROOT"
 # -s: without it pip counts packages in the build machine's ~/.local user site as
 # already installed and leaves them out of the bundle (seen on the first real run).
 "$PY" -s -m pip install --quiet --no-cache-dir --no-compile --disable-pip-version-check "$REPO_ROOT[archives]"
 find "$OUT" -name __pycache__ -type d -prune -exec rm -rf {} +
 
-"$PY" -B -s -c "import heliofits_core, sunpy, sunpy.net, drms, astropy, numpy; print('heliofits_core', heliofits_core.__version__, 'sunpy', sunpy.__version__, 'numpy', numpy.__version__)"
-"$PY" -B -s -m heliofits_core --help > /dev/null
+"$PY" -B -s -c "import heliofits.core, sunpy, sunpy.net, drms, astropy, numpy; print('heliofits_core', heliofits.core.__version__, 'sunpy', sunpy.__version__, 'numpy', numpy.__version__)"
+"$PY" -B -s -m heliofits.core --help > /dev/null
 echo "Python ready in $OUT ($(du -sh "$OUT" | cut -f1))"

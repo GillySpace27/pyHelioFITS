@@ -14,10 +14,10 @@ Both sides write the same document, a decode dump (format ``hf-decode-dump/1``):
 ``compare_dumps(studio, reference)`` then returns a report of named checks, each with the
 tolerance it used and the basis for that tolerance. Run it from the command line:
 
-    python -m heliofits_core.parity reference FILE [--plane N] [-o OUT.hfdump.json]
-    python -m heliofits_core.parity compare STUDIO.hfdump.json [--source FILE] [--json]
+    python -m heliofits.core.parity reference FILE [--plane N] [-o OUT.hfdump.json]
+    python -m heliofits.core.parity compare STUDIO.hfdump.json [--source FILE] [--json]
 
-sunpy is an optional dependency (``pip install "heliofits-core[parity]"``).
+sunpy is an optional dependency (``pip install "heliofits[parity]"``).
 """
 
 from __future__ import annotations
@@ -478,7 +478,7 @@ def compare_dumps(studio: Dump, ref: Dump, *, wcs_tol_arcsec: float = WCS_TOL_AR
 # ---------------------------------------------------------------------------
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="python -m heliofits_core.parity", description=__doc__.split("\n")[0])
+    ap = argparse.ArgumentParser(prog="python -m heliofits.core.parity", description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("reference", help="write the sunpy reference dump for a FITS file")
     r.add_argument("file")

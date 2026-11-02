@@ -279,7 +279,7 @@ final class CoreLocatorTests: XCTestCase {
                                             environment: ["HFCORE_CORE": "/opt/py/bin/python3", "HELIAD_CORE": "/old/bin/python3"],
                                             home: home, exists: everything)
         XCTAssertEqual(launch.executable.path, "/opt/py/bin/python3")
-        XCTAssertEqual(launch.arguments, ["-s", "-P", "-m", "heliofits_core", "--library", "/Users/someone/Lib", "serve"])  // isolated, as bundled
+        XCTAssertEqual(launch.arguments, ["-s", "-P", "-m", "heliofits.core", "--library", "/Users/someone/Lib", "serve"])  // isolated, as bundled
         // The variable's old name still works, and runs the module under its old name, which
         // cores from before the rename to HelioFITS Core also have.
         launch = try CoreLocator.launch(library: nil, corePath: nil, bundle: Bundle(for: Self.self),
@@ -359,7 +359,7 @@ final class CoreClientTests: XCTestCase {
             exited.fulfill()
         }
         try client.start(.init(executable: URL(fileURLWithPath: "/bin/sh"),
-                               arguments: ["-c", "echo 'heliofits_core.library.LibraryLocked: another HelioFITS Core process' >&2; exit 3"]))
+                               arguments: ["-c", "echo 'heliofits.core.library.LibraryLocked: another HelioFITS Core process' >&2; exit 3"]))
         await fulfillment(of: [exited], timeout: 5)
     }
 

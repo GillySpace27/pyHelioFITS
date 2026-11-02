@@ -1,6 +1,6 @@
 # heliofits: Python client and MCP server
 
-`pip install "heliofits-core[mcp]"` gives one package with three front ends over the same code:
+`pip install "heliofits[mcp]"` gives one package with three front ends over the same code:
 
     from heliofits import studio, cache
     studio.seek_time(time="2024-05-10T12:00")   # same as studio.seekTime(...)

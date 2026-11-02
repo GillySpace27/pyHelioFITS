@@ -57,7 +57,7 @@ CREATE INDEX observations_dataset_time ON observations(dataset_id, date_obs);
 CREATE TABLE queries (
     id          INTEGER PRIMARY KEY,
     source      TEXT NOT NULL,      -- e.g. "fido", "local"
-    query_json  TEXT NOT NULL,      -- canonical JSON, see heliofits_core.query
+    query_json  TEXT NOT NULL,      -- canonical JSON, see heliofits.core.query
     created_at  TEXT NOT NULL
 );
 

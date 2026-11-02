@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from heliofits_core import cli, jobs, latest, rpc, sources, upgrade
-from heliofits_core.library import Library
-from heliofits_core.rpc import Server
+from heliofits.core import cli, jobs, latest, rpc, sources, upgrade
+from heliofits.core.library import Library
+from heliofits.core.rpc import Server
 from tests.conftest import aia_header, write_fits
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"

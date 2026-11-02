@@ -1,7 +1,7 @@
 """No test may reach the machine's own config folder (conftest's _no_real_config)."""
 
-from heliofits_core import config
-from heliofits_core.library import Library
+from heliofits.core import config
+from heliofits.core.library import Library
 
 
 def test_a_library_opened_in_a_test_writes_its_config_under_the_test(tmp_path):

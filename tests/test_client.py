@@ -53,7 +53,7 @@ def test_cache_stats(tmp_path, monkeypatch):
     from heliofits import cache
     monkeypatch.setenv("HFCORE_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("HFCORE_LIBRARY", str(tmp_path / "lib"))
-    from heliofits_core.library import Library
+    from heliofits.core.library import Library
     Library.open(tmp_path / "lib").close()
     assert cache.library_stats()["files"] == 0
     with pytest.raises(CommandError):
@@ -62,8 +62,8 @@ def test_cache_stats(tmp_path, monkeypatch):
 
 def test_cache_runs_a_queued_job_to_the_end(tmp_path, monkeypatch):
     from heliofits import cache
-    from heliofits_core import jobs
-    from heliofits_core.library import Library
+    from heliofits.core import jobs
+    from heliofits.core.library import Library
     monkeypatch.setenv("HFCORE_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("HFCORE_LIBRARY", str(tmp_path / "lib"))
     Library.open(tmp_path / "lib").close()
