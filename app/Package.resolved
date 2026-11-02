@@ -1,5 +1,5 @@
 {
-  "originHash" : "fc244d3c9823c70ac826f63eee019375af3c37f6fc22bd03a961b88c9ed919a7",
+  "originHash" : "7a3c9cc8a13715886d7014ae930958106313ba7abb7dbff7b39e87ceab0de6bf",
   "pins" : [
     {
       "identity" : "heliofits-peek",
@@ -7,7 +7,7 @@
       "location" : "https://github.com/GillySpace27/HelioFITS-Peek.git",
       "state" : {
         "branch" : "main",
-        "revision" : "2b0c5e340e8000b87a0f283bff9fc19aecf9b135"
+        "revision" : "911b11a4e39b3682e28fb8de5121155f060e6f9f"
       }
     }
   ],
