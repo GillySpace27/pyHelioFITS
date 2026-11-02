@@ -1,2 +1,2 @@
 # The schema is hashed byte for byte (tests/test_record.py), so it must not get CRLF on Windows.
-src/heliofits_core/schemas/*.json text eol=lf
+src/heliofits/core/schemas/*.json text eol=lf
