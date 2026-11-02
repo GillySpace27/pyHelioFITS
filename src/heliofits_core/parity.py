@@ -391,7 +391,7 @@ class Report:
 
 def data_tolerance(ref: np.ndarray, *, integer_exact: bool) -> tuple[float, float, str]:
     """(rtol, atol, basis) for comparing two float32 decodes of the same frame."""
-    scale = float(np.nanmax(np.abs(ref))) if np.isfinite(ref).any() else 0.0
+    scale = float(np.abs(ref[np.isfinite(ref)]).max()) if np.isfinite(ref).any() else 0.0  # +-inf must not make atol infinite
     if integer_exact:
         return 0.0, 0.0, ("values are whole numbers below 2^24 and no arithmetic touched them, so float32 holds them "
                           "exactly and any difference is a defect")
@@ -443,8 +443,9 @@ def compare_dumps(studio: Dump, ref: Dump, *, wcs_tol_arcsec: float = WCS_TOL_AR
         add("bad_pixels", mism == 0, mism, 0, "NaN positions must agree exactly (Studio's BAD_PIXEL sentinel is written as NaN)")
         rtol, atol, basis = data_tolerance(ref.data, integer_exact=_is_integer_exact(ref.data, ref.corrections))
         close = np.isclose(studio.data, ref.data, rtol=rtol, atol=atol, equal_nan=True)
-        worst = float(np.nanmax(np.abs(studio.data.astype(np.float64) - ref.data.astype(np.float64)))) \
-            if np.isfinite(studio.data).any() else float("nan")
+        both = np.isfinite(studio.data) & np.isfinite(ref.data)
+        worst = float(np.abs(studio.data[both].astype(np.float64) - ref.data[both].astype(np.float64)).max()) \
+            if both.any() else float("nan")
         hint = "" if close.all() else _flip_hint(studio.data, ref.data, rtol, atol)
         add("data", bool(close.all()), {"max_abs_difference": worst, "pixels_outside": int((~close).sum())},
             {"rtol": rtol, "atol": atol}, basis, hint)

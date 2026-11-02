@@ -287,3 +287,10 @@ def test_command_line_reference_then_compare(tmp_path, aia):
     out = tmp_path / "studio.hfdump.json"
     parity.write_dump(studio_stand_in(aia, parity.reference_dump(aia)), out)
     assert parity.main(["compare", str(out), "--source", str(aia)]) == 0
+
+
+def test_infinite_reference_pixel_does_not_make_the_data_tolerance_infinite():
+    # found on a real ASPIICS L3 frame (10 +inf pixels): atol = 8 eps * max|ref| was inf, so the check could not fail
+    ref = np.array([[1.0, 2.0], [np.inf, 4.0]], dtype=np.float32)
+    rtol, atol, _ = parity.data_tolerance(ref, integer_exact=False)
+    assert np.isfinite(atol) and atol < 1e-5

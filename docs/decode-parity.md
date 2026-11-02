@@ -9,6 +9,24 @@ Status (2026-11-02): the Python side (`heliofits_core.parity`), the dump format 
 dump tool are written and tested on **synthetic** files only. No real file has been compared yet:
 the cloud session has no route to the archives, so the real run needs Gilly's Mac (see "Running it").
 
+## First real run (2026-11-02)
+
+Ten dumps, from one library file per instrument (AIA 131, SUVI 195, ASPIICS, LASCO C2 and C3, PUNCH CAM,
+PUNCH PTM planes 0 to 2), LASCO also with the background subtracted. Studio at origin/master 7cfa47b57.
+All numbers below were computed by this harness.
+
+* Time: 0 ms on every file. NaN positions agree on every file. Orientation: no flip anywhere.
+* WCS grid: largest deviation 8.5e-10 arcsec (assumed tolerance 1e-3).
+* Data: AIA, LASCO (with and without background), ASPIICS: 0.0. SUVI: 3.8e-6 absolute, about one float32 ulp.
+* **PUNCH failed**: Studio was exactly +0.5 x ZSCALE above astropy on every non-dithered tile-compressed
+  pixel (nom-tam-fits 1.22.0 adds the half quantum that belongs to subtractive dithering). Fixed in Studio
+  (`FITSImage.removeHalfQuantum`, `FitsQuantumCheck`); after the fix the largest PUNCH difference is 3.5e-18.
+* Harness defects found and fixed: an `inf` pixel made the data tolerance infinite (ASPIICS passed vacuously),
+  and the dump recorded Studio's shipped `normalize_aia = true`, which failed `settings_in_scope`.
+* Seen, not fixed: `CCOR2_1A_20260902T211514_V00_NC.fits` (in Studio's test data) has 416,690 NaN pixels in
+  astropy that Studio decodes as finite near-zero values.
+* LASCO with background: the reference reuses Studio's own background array, so only the arithmetic is checked.
+
 ## Named corrections
 
 Read from Studio's source on 2026-11-02 (`FITSImage.java`, `FitsMetaData.java`, `LascoPointing.java`).
@@ -88,7 +106,7 @@ Real files (needs the Mac, the library and Studio's `bin/`):
 2. Dump each with Studio's decoder: copy `tools/studio/DecodeParityDump.java` to
    `src/org/helioviewer/jhv/view/uri/` in HelioFITS Studio (it must sit in `view.uri`, because
    `FITSImage.readData` is package-private), `ant compile`, then
-   `java -Djava.awt.headless=true -cp "bin:resources:lib/*" org.helioviewer.jhv.view.uri.DecodeParityDump OUT FILE.fits [--plane N] [--subtract-background]`.
+   `java -Djava.awt.headless=true -cp "bin:resources:$(find lib -name '*.jar' | tr '\n' ':')" org.helioviewer.jhv.view.uri.DecodeParityDump OUT FILE.fits [--plane N] [--subtract-background]`.
    Use `--plane 0..2` on a PUNCH PTM, and `--subtract-background` on a LASCO frame (needs the network).
 3. Compare: `HFPARITY_DIR=OUT HFPARITY_SOURCES=<library root> pytest tests/test_parity_real.py`, or one file:
    `python -m heliofits_core.parity compare OUT/NAME.p0.hfdump.json --source FILE.fits`.
