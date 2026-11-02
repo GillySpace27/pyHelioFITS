@@ -1,0 +1,10 @@
+{
+ "about": "One real fixture per instrument for the decode-parity test. 'file' stays null until tools/parity_sample.py picks it on the machine that holds the data; the test finds files by SHA-256, so the manifest holds hashes, not paths. No data is committed.",
+ "instruments": {
+  "AIA":     {"want": "level 1 (JSOC image_lev1), any wavelength", "file": null},
+  "LASCO":   {"want": "C2 and C3 native FITS, one frame each; also one C2 frame from the 2025-08-21..31 pointing gap", "file": null},
+  "PUNCH":   {"want": "L3 PTM (3-plane cube) or CTM; test every plane", "file": null},
+  "ASPIICS": {"want": "L3 frame", "file": null},
+  "SUVI":    {"want": "level 1b or 2 frame", "file": null}
+ }
+}
