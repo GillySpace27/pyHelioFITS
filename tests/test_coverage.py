@@ -138,7 +138,7 @@ def test_rpc_coverage_and_views(lib, src):
     (made,) = call("view.list")["result"]
     assert (made["name"], made["observations"], made["datasets"], made["materialized"]) == ("flare", 4, 2, False)
     assert (made["first"], made["last"]) == ("2025-09-21T16:00:00.000", "2025-09-21T16:30:00.000")
-    assert made["path"].endswith("views/flare")
+    assert made["path"].replace("\\", "/").endswith("views/flare")
     views.materialize(lib, "flare")
     assert call("view.list")["result"][0]["materialized"] is True
 
