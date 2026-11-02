@@ -12,6 +12,7 @@ dependencies = ["astropy>=6", "numpy", "jsonschema"]
 [project.optional-dependencies]
 archives = ["sunpy[net]>=6", "drms"]
 mcp = ["mcp>=2"]
+parity = ["sunpy[map]>=6"]
 test = ["pytest", "jsonschema"]
 
 [project.scripts]
