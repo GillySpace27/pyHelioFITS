@@ -1,3 +1,6 @@
+import pytest
+
+pytest.importorskip("mcp")
 import anyio
 import pytest
 from mcp.client import Client
