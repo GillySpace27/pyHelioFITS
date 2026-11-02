@@ -15,6 +15,7 @@ import java.util.Optional;
 
 import org.helioviewer.jhv.app.AppInit;
 import org.helioviewer.jhv.app.DisplaySettings;
+import org.helioviewer.jhv.app.Log;
 import org.helioviewer.jhv.app.Platform;
 import org.helioviewer.jhv.io.Directories;
 import org.helioviewer.jhv.io.FitsHeaderContainer;
@@ -187,7 +188,7 @@ public final class DecodeParityDump {
             doc.put("background", new JSONObject().put("file", stem + ".bg.hfdump.npy").put("encoding", "npy-float32-le"));
         }
         Files.writeString(outDir.resolve(base + ".json"), doc.toString(1));
-        System.out.println(outDir.resolve(base + ".json"));
+        Log.info("decode dump " + outDir.resolve(base + ".json"));
     }
 
     /** Evenly spaced zero-based indices, ends included, as np.unique(np.round(np.linspace(0, n - 1, GRID))) gives them. */
