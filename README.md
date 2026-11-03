@@ -1,12 +1,12 @@
-# heliofits
+# pyHelioFITS
 
-The Python side of HelioFITS, one package: `pip install heliofits`.
+The Python side of the HelioFITS Suite, one package, imported as `heliofits`: `pip install heliofits`.
 
     from heliofits import core, studio, cache
 
 - **HelioFITS Core** (`heliofits.core`, command `hfcore`): find solar data, download it and keep it
-  in one library. The "find it and keep it" half of HelioFITS Software; the HelioFITS apps look at
-  what it keeps. Most of this file is about it.
+  in one library. The "find it and keep it" half of the HelioFITS Suite; HelioFITS Peek and HelioFITS
+  Studio look at what it keeps. Most of this file is about it.
 - **`heliofits.studio`**: a client for a running HelioFITS Studio, and **`heliofits.cache`**: the
   library's cache verbs from a script. Both for notebooks, with `heliofits-mcp` wrapping them for an
   LLM client (docs/mcp.md).

@@ -1,6 +1,6 @@
-"""The Python side of HelioFITS: the data cache engine (HelioFITS Core, `heliofits.core`), a client
-for a running HelioFITS Studio (`heliofits.studio`), the cache verbs for scripts (`heliofits.cache`),
-and the MCP server over both (`heliofits-mcp`).
+"""The Python side of the HelioFITS Suite: the data cache engine (HelioFITS Core, `heliofits.core`),
+a client for a running HelioFITS Studio (`heliofits.studio`), the cache verbs for scripts
+(`heliofits.cache`), and the MCP server over both (`heliofits-mcp`).
 
     from heliofits import core, studio, cache
     studio.seek_time(time="2024-05-10T12:00")

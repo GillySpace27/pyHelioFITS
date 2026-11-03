@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "heliofits"
 version = "0.1.0"
-description = "The Python side of HelioFITS: its data cache (HelioFITS Core), a client for HelioFITS Studio, and an MCP server over both."
+description = "The Python side of the HelioFITS Suite: its data cache (HelioFITS Core), a client for HelioFITS Studio, and an MCP server over both."
 readme = "README.md"
 license = "MPL-2.0"
 license-files = ["LICENSE"]
@@ -13,7 +13,7 @@ requires-python = ">=3.10"
 dependencies = ["astropy>=6", "numpy", "jsonschema"]
 
 [project.urls]
-Repository = "https://github.com/GillySpace27/heliad"  # renamed with the repository
+Repository = "https://github.com/GillySpace27/pyHelioFITS"
 
 [project.optional-dependencies]
 archives = ["sunpy[net]>=6", "drms"]
