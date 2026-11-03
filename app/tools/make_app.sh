@@ -70,7 +70,7 @@ PLIST
 
 if [ -n "${PYTHON_DIR:-}" ]; then
     # A relocatable Python (python-build-standalone) with HelioFITS Core and its dependencies
-    # installed; the app runs it as Contents/Resources/python/bin/python3 -m heliofits_core.
+    # installed; the app runs it as Contents/Resources/python/bin/python3 -m heliofits.core.
     cp -R "$PYTHON_DIR" "$APP/Contents/Resources/python"
     find "$APP/Contents/Resources/python" -name __pycache__ -type d -prune -exec rm -rf {} +
 fi

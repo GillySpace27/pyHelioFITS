@@ -40,5 +40,5 @@ if cad["missing"]:
 # %%
 layers = studio.layer_list()["layers"]
 for layer in layers:
-    if layer["source"] == "fits-library":
-        print("reloaded", layer["id"], studio.layer_reload(layer_id=layer["id"])["frames"], "frames")
+    if layer["source"] == "fits":
+        print("reloaded", layer["layer_id"], studio.layer_reload(layer_id=layer["layer_id"])["frames"], "frames")

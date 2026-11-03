@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from heliofits_core import coverage, rpc, views
-from heliofits_core.rpc import API, NOTIFICATIONS, Server
+from heliofits.core import coverage, rpc, views
+from heliofits.core.rpc import API, NOTIFICATIONS, Server
 
 DOCS = (Path(__file__).resolve().parents[1] / "docs" / "api.md").read_text(encoding="utf-8")
 SRC = Path(__file__).resolve().parents[1] / "src"
@@ -67,7 +67,7 @@ def test_every_alias_answers_as_its_method(methods):
 
 
 def _cli_commands() -> set[str]:
-    from heliofits_core.cli import build_parser
+    from heliofits.core.cli import build_parser
     (sub,) = [a for a in build_parser()._actions if isinstance(a, argparse._SubParsersAction)]
     return set(sub.choices)
 
@@ -84,7 +84,7 @@ def test_every_command_is_in_the_cli_table_and_names_real_methods():
 
 def test_every_notification_the_core_sends_is_listed():
     sent = set()
-    for path in SRC.joinpath("heliofits_core").rglob("*.py"):
+    for path in SRC.joinpath("heliofits", "core").rglob("*.py"):
         sent |= set(re.findall(r'notify\("([a-z_.]+)"', path.read_text(encoding="utf-8")))
     assert sent == set(NOTIFICATIONS)
 
@@ -96,7 +96,7 @@ _BARE_ENV = {"PYTHONPATH": str(SRC), "PATH": "",
 
 
 def test_hfcore_api_prints_every_method():
-    run = lambda *a: subprocess.run([sys.executable, "-m", "heliofits_core", "api", *a],  # noqa: E731
+    run = lambda *a: subprocess.run([sys.executable, "-m", "heliofits.core", "api", *a],  # noqa: E731
                                     capture_output=True, text=True,
                                     env=_BARE_ENV)
     listing = run()
@@ -111,7 +111,7 @@ def test_hfcore_api_prints_every_method():
 
 
 def test_help_points_at_the_api():
-    out = subprocess.run([sys.executable, "-m", "heliofits_core", "--help"], capture_output=True, text=True,
+    out = subprocess.run([sys.executable, "-m", "heliofits.core", "--help"], capture_output=True, text=True,
                          env=_BARE_ENV).stdout
     assert "hfcore api" in out and "docs/api.md" in out
 

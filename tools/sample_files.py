@@ -7,7 +7,7 @@ Reads the index read-only, so it runs while HelioFITS Core works.
 
 import argparse
 
-from heliofits_core.library import Library
+from heliofits.core.library import Library
 
 
 def main() -> None:

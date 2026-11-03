@@ -10,9 +10,9 @@ import sys
 import pytest
 from conftest import aia_header, write_fits
 
-from heliofits_core import cli, library, views
-from heliofits_core.library import Library, clone_or_copy, fits_name
-from heliofits_core.rpc import Server
+from heliofits.core import cli, library, views
+from heliofits.core.library import Library, clone_or_copy, fits_name
+from heliofits.core.rpc import Server
 
 
 def _bare(src, name, wave, gz=False):

@@ -4,9 +4,9 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from heliofits_core import coverage, times, upgrade
-from heliofits_core.library import time_bound
-from heliofits_core.sources import jsoc
+from heliofits.core import coverage, times, upgrade
+from heliofits.core.library import time_bound
+from heliofits.core.sources import jsoc
 
 INDEX = "2025-09-21T16:00:00.000"
 

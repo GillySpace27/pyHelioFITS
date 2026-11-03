@@ -17,8 +17,8 @@ import numpy as np
 import pytest
 from astropy.io import fits
 
-from heliofits_core import record
-from heliofits_core.rpc import RECORD_UNSUPPORTED, Server
+from heliofits.core import record
+from heliofits.core.rpc import RECORD_UNSUPPORTED, Server
 from conftest import aia_header, punch_header, write_fits
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "example-studio-connect-still.hfrec.json"

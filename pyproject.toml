@@ -1,13 +1,19 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]  # SPDX license expression
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "heliofits-core"
+name = "heliofits"
 version = "0.1.0"
-description = "Find solar data, download it and keep it in one library."
+description = "The Python side of HelioFITS: its data cache (HelioFITS Core), a client for HelioFITS Studio, and an MCP server over both."
+readme = "README.md"
+license = "MPL-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 dependencies = ["astropy>=6", "numpy", "jsonschema"]
+
+[project.urls]
+Repository = "https://github.com/GillySpace27/heliad"  # renamed with the repository
 
 [project.optional-dependencies]
 archives = ["sunpy[net]>=6", "drms"]
@@ -16,16 +22,15 @@ parity = ["sunpy[map]>=6"]
 test = ["pytest", "jsonschema"]
 
 [project.scripts]
-hfcore = "heliofits_core.cli:main"
-heliad = "heliofits_core.cli:main"  # the old command name, kept
+hfcore = "heliofits.core.cli:main"
+heliad = "heliofits.core.cli:main"  # the old command name, kept
 heliofits-mcp = "heliofits.mcp:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-heliofits_core = ["schemas/*.json"]
-heliofits = ["data/*.json"]
+heliofits = ["data/*.json", "core/schemas/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1552,6 +1552,392 @@
     {
       "outputSchema": {
         "type": "object",
+        "properties": {
+          "layer_id": {"type": "integer"},
+          "frames": {"type": "integer"},
+          "name": {"type": "string"},
+          "loading": {"type": "boolean"}
+        }
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "observatory": {
+            "description": "jp2 only: the observatory, e.g. 'SDO'",
+            "type": "string"
+          },
+          "wait": {
+            "description": "Answer when every frame is loaded (default), when the first is shown, or at once",
+            "type": "string",
+            "enum": [
+              "all",
+              "first",
+              "none"
+            ]
+          },
+          "start": {
+            "description": "UTC time, ISO 8601 (2024-05-10T12:00 or 2024-05-10T12:00:00.000)",
+            "type": "string"
+          },
+          "end": {
+            "description": "UTC time, ISO 8601 (2024-05-10T12:00 or 2024-05-10T12:00:00.000)",
+            "type": "string"
+          },
+          "source": {
+            "description": "jp2: Helioviewer pictures over JPIP; fits-library: the HelioFITS Core cache on this computer",
+            "type": "string",
+            "enum": [
+              "jp2",
+              "fits-library"
+            ]
+          },
+          "cadence_s": {
+            "description": "jp2 only: wanted spacing in seconds; omit for the server's default",
+            "type": "integer",
+            "minimum": 1
+          },
+          "dataset": {
+            "description": "jp2: the dataset as the server lists it, e.g. 'AIA 193' (with observatory); fits-library: a Core dataset key or uid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "dataset",
+          "start",
+          "end"
+        ]
+      },
+      "name": "layerAdd",
+      "description": "Add an image layer for a dataset over a time range and wait for its frames",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": false
+      },
+      "x-effect": "write"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {"layers": {
+          "type": "array",
+          "items": {"type": "object"}
+        }}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "name": "layerList",
+      "description": "The image layers in the scene, with their ids",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "read"
+    },
+    {
+      "outputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {"layer_id": {
+          "description": "From layerAdd or layerList",
+          "type": "integer"
+        }},
+        "required": ["layer_id"]
+      },
+      "name": "layerRemove",
+      "description": "Remove an image layer from the scene",
+      "annotations": {
+        "destructiveHint": true,
+        "readOnlyHint": false
+      },
+      "x-effect": "destructive"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "layer_id": {"type": "integer"},
+          "frames": {"type": "integer"},
+          "name": {"type": "string"},
+          "loading": {"type": "boolean"}
+        }
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "wait": {
+            "description": "As layerAdd",
+            "type": "string",
+            "enum": [
+              "all",
+              "first",
+              "none"
+            ]
+          },
+          "layer_id": {
+            "description": "From layerAdd or layerList",
+            "type": "integer"
+          }
+        },
+        "required": ["layer_id"]
+      },
+      "name": "layerReload",
+      "description": "Read a layer's frames again; a FITS library layer queries the cache afresh, so files added since are picked up",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": false
+      },
+      "x-effect": "write"
+    },
+    {
+      "outputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "filter": {
+            "description": "The filter",
+            "type": "string",
+            "enum": [
+              "none",
+              "mgn",
+              "wow",
+              "rhef"
+            ]
+          },
+          "layer_id": {
+            "description": "From layerAdd or layerList",
+            "type": "integer"
+          },
+          "params": {
+            "description": "The layer's image parameters by the names a saved session uses: clippingMode, clippingMin, clippingMax, scalingMode, gamma, beta, alpha, plane, subtractBackground, and the display settings",
+            "type": "object"
+          }
+        },
+        "required": ["layer_id"]
+      },
+      "name": "filterSet",
+      "description": "Set a layer's image filter and its FITS display parameters",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": false
+      },
+      "x-effect": "write"
+    },
+    {
+      "outputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "multiview": {"type": "boolean"},
+          "show_corona": {"type": "boolean"},
+          "zoom": {
+            "description": "Zoom by this factor, above 1 closer",
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "differential_rotation": {"type": "boolean"},
+          "projection": {
+            "type": "string",
+            "enum": [
+              "orthographic",
+              "hpc",
+              "helioradial",
+              "helioradialUnrolled",
+              "latitudinal"
+            ]
+          },
+          "warp_lambda": {
+            "maximum": 1,
+            "description": "Box-Cox radial lambda of the helioradial projections",
+            "type": "number",
+            "minimum": -1
+          },
+          "tracking": {"type": "boolean"}
+        },
+        "required": []
+      },
+      "name": "viewSet",
+      "description": "Set the view: projection, zoom, Box-Cox lambda, tracking, corona",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": false
+      },
+      "x-effect": "write"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "multiview": {"type": "boolean"},
+          "show_corona": {"type": "boolean"},
+          "surface_model": {"type": "string"},
+          "zoom": {"type": "number"},
+          "differential_rotation": {"type": "boolean"},
+          "projection": {"type": "string"},
+          "warp_lambda": {"type": "number"},
+          "tracking": {"type": "boolean"},
+          "annotation_mode": {"type": "string"}
+        }
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "name": "viewGet",
+      "description": "The current view",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "read"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {"type": "string"},
+          "format": {"type": "string"},
+          "time": {"type": "string"},
+          "frame": {"type": "integer"}
+        }
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "layer_id": {
+            "description": "From layerAdd or layerList",
+            "type": "integer"
+          },
+          "frame": {
+            "description": "Frame number, 0 is the first; default the frame on screen",
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["layer_id"]
+      },
+      "name": "frameGet",
+      "description": "Write one FITS frame's decoded values, as the layer shows them before any colour table, to an hf-decode-dump/1 document and return its path",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "read"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {"path": {"type": "string"}}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {"long_side": {
+          "description": "Pixels on the long side; omit for the export size in the settings",
+          "type": "integer",
+          "minimum": 16
+        }},
+        "required": []
+      },
+      "name": "previewRender",
+      "description": "Render the scene as an export would, to a PNG in Studio's cache (not among the exports), and return its path",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "read"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {"path": {"type": "string"}}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "path": {
+            "description": "Where to write the PNG",
+            "type": "string"
+          },
+          "long_side": {
+            "description": "Pixels on the long side; omit for the export size in the settings",
+            "type": "integer",
+            "minimum": 16
+          }
+        },
+        "required": ["path"]
+      },
+      "name": "exportStill",
+      "description": "Export the frame on screen as a PNG, with its processing record beside it",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": false
+      },
+      "x-effect": "write"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "path": {"type": "string"},
+          "frames": {"type": "integer"}
+        }
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "path": {
+            "description": "Where to write the movie",
+            "type": "string"
+          },
+          "long_side": {
+            "description": "Pixels on the long side; omit for the export size in the settings",
+            "type": "integer",
+            "minimum": 16
+          }
+        },
+        "required": ["path"]
+      },
+      "name": "exportMovie",
+      "description": "Export one loop of the loaded frames as a movie in the format the settings choose, with its processing record beside it",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": false
+      },
+      "x-effect": "write"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
         "properties": {"commands": {"type": "array"}}
       },
       "inputSchema": {

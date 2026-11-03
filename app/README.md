@@ -45,7 +45,7 @@ command line it holds for that run only and is not saved.
 
 ## Packaging
 
-    tools/bundle_python.sh      # build/python: a standalone CPython 3.12 with heliofits-core[archives]
+    tools/bundle_python.sh      # build/python: a standalone CPython 3.12 with heliofits[archives]
     PYTHON_DIR=build/python SIGN_IDENTITY="Developer ID Application: ..." tools/make_app.sh
 
 The first run on Gilly's Mac (2026-10-18) gave a 213 MB app (68 MB zipped) with 116

@@ -18,7 +18,7 @@ import pytest
 
 pytest.importorskip("sunpy.map", reason="decode parity needs sunpy")
 
-from heliofits_core import parity  # noqa: E402
+from heliofits.core import parity  # noqa: E402
 
 DUMP_DIR = os.environ.get("HFPARITY_DIR")
 MANIFEST = json.loads((Path(__file__).parent / "parity" / "manifest.json").read_text())

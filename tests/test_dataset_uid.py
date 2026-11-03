@@ -11,9 +11,9 @@ import pytest
 from astropy.io import fits
 from conftest import punch_header, write_fits
 
-from heliofits_core import db, fitsmeta
-from heliofits_core.query import dataset_link, parse_dataset_link
-from heliofits_core.rpc import Server
+from heliofits.core import db, fitsmeta
+from heliofits.core.query import dataset_link, parse_dataset_link
+from heliofits.core.rpc import Server
 
 
 def _schema_4(path):
@@ -61,7 +61,7 @@ def test_schema_4_migrates_to_5_minting_a_uid_for_every_row(tmp_path):
 
 
 def test_new_datasets_and_views_get_uids(lib, src):
-    from heliofits_core import views
+    from heliofits.core import views
     lib.ingest(write_fits(src / "PUNCH_L3_CTM_20250921170000_v0l.fits", punch_header()))
     (d,) = lib.datasets()
     assert uuid.UUID(d["dataset_uid"]).version == 4

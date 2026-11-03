@@ -12,7 +12,7 @@ from heliofits import studio
 OUT = Path("hfs-out/sweep")
 OUT.mkdir(parents=True, exist_ok=True)
 
-layer = studio.layer_add(source="jp2", dataset="SOHO/LASCO C2", start="2025-09-21T22:00",
+layer = studio.layer_add(source="jp2", observatory="SOHO", dataset="LASCO C2", start="2025-09-21T22:00",
                          end="2025-09-21T23:00", cadence_s=720)["layer_id"]
 studio.seek_time(time="2025-09-21T22:35:47")
 

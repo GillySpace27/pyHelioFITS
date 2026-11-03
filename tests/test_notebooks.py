@@ -53,8 +53,8 @@ def test_sweep_writes_a_png_per_lambda(fake, tmp_path):
 
 
 def test_fill_a_gap(fake, monkeypatch, capsys):
-    fake.layers[5] = {"id": 5, "name": "x", "source": "fits-library", "filter": "none",
-                      "times": ["2025-09-21T16:00:00.000"], "current": 0}
+    fake.layers[5] = {"layer_id": 5, "name": "x", "source": "fits", "filter": "none",
+                      "times": ["2025-09-21T22:00:00.000", "2025-09-21T22:12:00.000"], "current": 0}
     seen = []
 
     def stub(method, _wait=True, **params):

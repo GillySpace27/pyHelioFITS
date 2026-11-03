@@ -1,7 +1,18 @@
-# HelioFITS Core
+# heliofits
 
-Find solar data, download it and keep it in one library. HelioFITS Core is the "find it and keep it"
-half of HelioFITS Software; the HelioFITS apps look at what it keeps.
+The Python side of HelioFITS, one package: `pip install heliofits`.
+
+    from heliofits import core, studio, cache
+
+- **HelioFITS Core** (`heliofits.core`, command `hfcore`): find solar data, download it and keep it
+  in one library. The "find it and keep it" half of HelioFITS Software; the HelioFITS apps look at
+  what it keeps. Most of this file is about it.
+- **`heliofits.studio`**: a client for a running HelioFITS Studio, and **`heliofits.cache`**: the
+  library's cache verbs from a script. Both for notebooks, with `heliofits-mcp` wrapping them for an
+  LLM client (docs/mcp.md).
+
+The engine was the `heliofits_core` package until 2026-11-02; that import name and `python -m
+heliofits_core` keep working.
 
 HelioFITS Core and its Mac app, HelioFITS Cache Manager, were called Heliad until
 2026-10-25. Everything made under the old name keeps working, and nothing new is made
@@ -9,7 +20,7 @@ with it:
 
 | New | Old, still read |
 | --- | --- |
-| package `heliofits_core`, command `hfcore` | `import heliad`, `python -m heliad`, the `heliad` command |
+| package `heliofits.core` (was `heliofits_core`), command `hfcore` | `import heliad`, `python -m heliad`, the `heliad` command |
 | `HFCORE_HOME`, `HFCORE_LIBRARY`, `HFCORE_JSOC_EMAIL` (and the apps' `HFCORE_CORE`) | the same with `HELIAD_` |
 | config folder `HelioFITS Core` (`hfcore` on Linux) | `Heliad` (`heliad`), used while the new one has no config |
 | new libraries at `~/HelioFITSLibrary`, index `hfcore.sqlite` | `~/HeliadLibrary`, `heliad.sqlite` |
@@ -57,7 +68,7 @@ through VSO) run against the real archives; the JSOC export route written but no
 
 ## Use
 
-    pip install -e .[archives]
+    pip install -e ".[archives]"
     hfcore --library ~/HelioFITSLibrary import ~/Documents/NWRA/PUNCH_Science/events/2025-09-21_CONNECT
     hfcore datasets
     hfcore view create "2025-09-21 CONNECT" --start 2025-09-20T00:00 --end 2025-09-23T00:00
@@ -77,7 +88,7 @@ through VSO) run against the real archives; the JSOC export route written but no
     hfcore api          # the methods serve answers
     hfcore --json stats # any command: the JSON-RPC result instead of a table
 
-Every time a command, a query or an archive hands the core is read by `heliofits_core.times` (ISO 8601
+Every time a command, a query or an archive hands the core is read by `heliofits.core.times` (ISO 8601
 with T or a space, with or without Z or an offset, JSOC's `_TAI` form) and written in the index's
 own form, `2025-09-21T16:00:00.000` UTC.
 

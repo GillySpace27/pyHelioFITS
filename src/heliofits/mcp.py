@@ -22,7 +22,7 @@ from mcp import types
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 
-from heliofits_core import rpc
+from heliofits.core import rpc
 
 from . import cache
 from .errors import CommandError, StudioNotRunning

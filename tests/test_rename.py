@@ -1,4 +1,5 @@
-"""HelioFITS Core was called Heliad until 2026-10-25. Everything made under the old name
+"""HelioFITS Core was called Heliad until 2026-10-25, and was the `heliofits_core` package until
+it became `heliofits.core` on 2026-11-02. Everything made under the old name
 keeps working: the import name and `python -m heliad`, the HELIAD_ variables, the old config
 folder, a library at ~/HeliadLibrary with its heliad.sqlite, heliad:// links, the
 heliad.hello method and view folders marked .heliad-view. Nothing new is made with it."""
@@ -8,23 +9,28 @@ import json
 import subprocess
 import sys
 
-import heliofits_core
-from heliofits_core import config, query, views
-from heliofits_core.library import Library
-from heliofits_core.rpc import Server
+import pytest
+
+import heliofits.core
+from heliofits.core import config, query, views
+from heliofits.core.library import Library
+from heliofits.core.rpc import Server
 from conftest import aia_header, write_fits
 
 
-def test_the_old_import_name_is_the_same_package():
-    import heliad
-    import heliad.cli
-    from heliad.query import Query
-    assert heliad is heliofits_core
-    assert heliad.cli is heliofits_core.cli and Query is query.Query
+@pytest.mark.parametrize("old", ["heliad", "heliofits_core"])
+def test_the_old_import_names_are_the_same_package(old):
+    import importlib
+    pkg = importlib.import_module(old)
+    cli = importlib.import_module(old + ".cli")
+    Query = importlib.import_module(old + ".query").Query
+    assert pkg is heliofits.core
+    assert cli is heliofits.core.cli and Query is query.Query
 
 
-def test_python_m_heliad_still_runs_the_command():
-    out = subprocess.run([sys.executable, "-m", "heliad", "--version"], capture_output=True, text=True, timeout=60)
+@pytest.mark.parametrize("old", ["heliad", "heliofits_core", "heliofits.core"])
+def test_python_m_old_names_still_run_the_command(old):
+    out = subprocess.run([sys.executable, "-m", old, "--version"], capture_output=True, text=True, timeout=60)
     assert out.returncode == 0 and out.stdout.startswith("hfcore ")
 
 

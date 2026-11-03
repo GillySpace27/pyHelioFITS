@@ -649,7 +649,7 @@ Params: none. The old name of [`core.hello`](#corehello), from before HelioFITS 
 
 ## Processing record methods
 
-A processing record (format `hfrecord` 1.x, schema in `src/heliofits_core/schemas/hfrecord-1.schema.json`)
+A processing record (format `hfrecord` 1.x, schema in `src/heliofits/core/schemas/hfrecord-1.schema.json`)
 says what made an exported image or movie: each layer's dataset, its source files by SHA-256, and
 the steps applied to them in order. HelioFITS Studio writes it beside the export
 (`<export file name>.hfrec.json`, the complete copy) and inside it where the container takes one. These

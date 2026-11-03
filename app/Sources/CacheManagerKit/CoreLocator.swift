@@ -15,7 +15,7 @@ import Foundation
 public enum CoreLocator {
     public static let devCheckout = "Documents/NWRA/heliad/.venv/bin/heliad"
     /// The core's Python package, and its name from before the rename (still importable).
-    public static let module = "heliofits_core"
+    public static let module = "heliofits.core"
     public static let legacyModule = "heliad"
 
     public static func launch(library: String?,

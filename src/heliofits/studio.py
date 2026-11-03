@@ -30,13 +30,11 @@ def endpoint_path() -> Path:
 
 
 def bundled_commands() -> list[dict]:
-    """The command list shipped with this package: a copy of Studio's docs/commands.json plus the
-    proposed data verbs (verbs.py) that Studio does not have yet. A running Studio's own list wins;
-    this is for offline use, docs and tests."""
-    from .verbs import VERBS
+    """The command list shipped with this package: a copy of Studio's docs/commands.json, the
+    registry's own manifest. A running Studio's own list wins; this is for offline use, docs and
+    tests. Studio is the source of the verbs; nothing is added here."""
     text = resources.files("heliofits").joinpath("data/studio-commands.json").read_text("utf-8")
-    have = {t["name"] for t in json.loads(text)["tools"]}
-    return json.loads(text)["tools"] + [v for v in VERBS if v["name"] not in have]
+    return json.loads(text)["tools"]
 
 
 def snake(name: str) -> str:
@@ -59,7 +57,7 @@ class Studio:
             except (OSError, ValueError):
                 raise StudioNotRunning(
                     f"No Studio endpoint at {path}. Start HelioFITS Studio and turn on "
-                    "Settings > Scripting API (or set HFSTUDIO_API to the endpoint file).") from None
+                    "Settings > General > Local API (or set HFSTUDIO_API to the endpoint file).") from None
         return self._endpoint
 
     def _rpc(self, method: str, params: dict | None = None) -> Any:

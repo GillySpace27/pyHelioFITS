@@ -8,8 +8,8 @@ from __future__ import annotations
 import io
 from typing import Any
 
-from heliofits_core import config, rpc
-from heliofits_core.library import Library, LibraryLocked
+from heliofits.core import config, rpc
+from heliofits.core.library import Library, LibraryLocked
 
 from .errors import CommandError
 
