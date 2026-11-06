@@ -182,8 +182,9 @@ def _date_obs(header: fits.Header) -> str | None:
         if not raw:
             continue
         raw = _SLASHED_DATE.sub(r"\1-\2-\3", raw)
-        if "T" not in raw and _clean(header.get("TIME-OBS")):
-            raw = f"{raw}T{_clean(header.get('TIME-OBS'))}"
+        time_obs = _clean(header.get("TIME-OBS")) or _clean(header.get("TIME_OBS"))
+        if "T" not in raw and time_obs:
+            raw = f"{raw}T{time_obs}"
         try:
             return Time(raw.rstrip("Z"), format="isot", scale="utc").isot
         except ValueError:
