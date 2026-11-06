@@ -820,7 +820,11 @@ def read(path: str | Path) -> dict:
     found = find(path)
     if found is None:
         return {"found": False, "path": str(path), "record": None, "view": None}
-    return {"found": True, "path": str(path), **found, "view": display(found["record"])}
+    from . import report  # imported here: report reads this module
+    view = display(found["record"])
+    stored = found["record"].get("report")
+    view["report"] = [x for x in stored if isinstance(x, str)] if isinstance(stored, list) else report.block(found["record"])
+    return {"found": True, "path": str(path), **found, "view": view}
 
 
 # ---- against the library ------------------------------------------------------------------------

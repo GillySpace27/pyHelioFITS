@@ -238,6 +238,13 @@
       "type": "string",
       "description": "Generated plain text for people: program, time, one line per layer (dataset, frame count, filter, colour table, caveat), citations. Readers show it first."
     },
+    "report": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "The human-readable report, one line per element, written first in the sidecar so a person opening the file sees it before the data. Everything a scientist needs about the output, the scene and every layer, with the source file list reduced to a count, the first and the last file. Readers regenerate it from the record when it is absent."
+    },
     "provenance": {
       "type": "object",
       "description": "The suite provenance object (provenance.md fields: product, version, instrument, observed, credit, rhef, citation), repeated so one file holds both."

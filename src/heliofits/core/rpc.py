@@ -32,6 +32,7 @@ from urllib.parse import urlsplit
 from . import __version__, config, coverage, db, fitsmeta, jobs, layers, upgrade, views
 from . import latest as hflatest
 from . import record as hfrecord
+from . import report as hfreport
 from .library import Library, LibraryLocked, ReadOnlyLibrary
 from .query import Query, URL_SCHEMES, parse_dataset_link
 from .sources import ArchiveError
@@ -51,7 +52,7 @@ RECORD_UNREADABLE = -32011   # record.read: the file named is a sidecar that is 
 # Methods slow enough that answering them in order would stall the app; none of
 # them writes to the index, except that template.latest and template.refresh queue
 # jobs, through the writer's lock as download.enqueue does.
-BACKGROUND = frozenset({"archive.search", "library.thumbnail", "dataset.cadences", "record.read",
+BACKGROUND = frozenset({"archive.search", "library.thumbnail", "dataset.cadences", "record.read", "record.report",
                         "template.latest", "template.refresh"})
 
 # Old names, kept so a client written against them keeps working; each answers
@@ -119,6 +120,7 @@ API: dict[str, tuple[str, str]] = {
     "view.members": ("name", "The current files of a view."),
     "view.list": ("", "Every view with its size, span and folder."),
     "record.read": ("path", "The processing record of an exported image or movie, with rows ready to show."),
+    "record.report": ("path, format='text', full=False", "A processing record as readable text: a report, a methods paragraph, LaTeX or a Python script."),
     "record.resolve": ("record", "Look a record's sources up in the library by SHA-256; groups the missing by dataset."),
     "settings.get": ("", "HelioFITS Core's settings (jsoc_email, vso_mirrors, ...)."),
     "settings.set": ("key, value=None", "Set a setting; a null value removes it."),
@@ -234,6 +236,7 @@ class Server:
             "view.list": lambda: views.list_views(lib),
             "library.coverage": lambda **kw: coverage.library(lib, **kw),
             "record.read": self.record_read,
+            "record.report": self.record_report,
             "record.resolve": self.record_resolve,
             "archive.search": self.search,
         }
@@ -437,6 +440,17 @@ class Server:
             raise RpcError(INVALID_PARAMS, str(exc))
         except hfrecord.RecordError as exc:
             raise RpcError(RECORD_UNREADABLE, str(exc))
+
+    def record_report(self, path: str, format: str = "text", full: bool = False) -> dict:
+        """record.report: record.read, then the record written out for people in the format asked."""
+        found = self.record_read(path)
+        if not found.get("found"):
+            return {"found": False, "path": str(path), "format": format, "text": None}
+        try:
+            text = hfreport.render(found["record"], format, full=bool(full))
+        except ValueError as exc:
+            raise RpcError(INVALID_PARAMS, str(exc))
+        return {"found": True, "path": str(path), "format": format, "text": text}
 
     def record_resolve(self, record: dict) -> dict:
         try:

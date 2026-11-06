@@ -706,6 +706,18 @@ line that opens a layer's dataset in Studio over its sources' time span: `-datas
 record's `dataset_uid` when it has one, else its `dataset_key`. The view's own `studio` is the
 layer Studio marked master, else the top layer.
 
+### `record.report`
+
+Params: `path`, as `record.read`; `format`, one of `text` (the default), `methods`, `tex`, `python`
+or `json`; `full` (default `False`), true to list every source file instead of the first and the last. Reads the record
+the way `record.read` does, then writes it out for people and answers
+`{"found", "path", "format", "text"}` (`text` is null when the file has no record). `text` is the
+report every reader shows: who made the file and with what, the output, the scene, then each layer
+(top first) with its dataset, frames and times, source files, every processing step with its
+parameters, caveats and credit, then the caveats and citations for the whole file. `methods` is a
+paragraph with the citations beneath it, `tex` the same escaped for LaTeX, `python` a script that
+opens the same sources and lists the steps (it does not re-run them). Answers in the background.
+
 ### `record.resolve`
 
 Params: `record`, as `record.read` returned it. Looks every source up in the index by `sha256`
@@ -792,6 +804,7 @@ library does not have, or no library; 3 the library is locked by another core th
 | `hfcore files [--dataset KEY] [--start T] [--end T]` | `library.files` |
 | `hfcore versions OBSERVATION_ID` | `library.versions` |
 | `hfcore checks FILE_ID` | `library.checks` |
+| `hfcore record show FILE [--format F] [--full]` | `record.report` |
 | `hfcore coverage [--start T] [--end T] [--bins N] [--dataset KEY ...]` | `library.coverage` |
 | `hfcore collisions` | `library.collisions` |
 | `hfcore verify` | `library.verify` |
