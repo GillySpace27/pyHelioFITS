@@ -69,7 +69,7 @@ from .sources import ArchiveError
 
 READ_ONLY = {"stats", "datasets", "files", "verify", "collisions", "versions", "jobs", "thumb",
              "checks", "coverage", "rejected", "cadences"}
-NO_LIBRARY = {"search", "settings", "api"}
+NO_LIBRARY = {"search", "settings", "api", "record"}
 
 OK, PROBLEM, USAGE, LOCKED = 0, 1, 2, 3
 
@@ -142,6 +142,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("observation_id", type=int)
     p = sub.add_parser("checks", help="the header checks recorded for one file")
     p.add_argument("file_id", type=int)
+    p = sub.add_parser("record", help="read the processing record of an exported image, movie or sidecar")
+    rsub = p.add_subparsers(dest="record_cmd", required=True)
+    q = rsub.add_parser("show", help="print the record as a report, methods paragraph, LaTeX or Python script")
+    q.add_argument("file", type=Path, help="the exported file or its .hfrec.json sidecar")
+    q.add_argument("--format", choices=["text", "methods", "tex", "python", "json"], default="text")
+    q.add_argument("--full", action="store_true", help="list every source file, not the first and the last")
     p = sub.add_parser("coverage", help="per dataset, how many observations fall in each bin of a time range")
     p.add_argument("--start")
     p.add_argument("--end")
@@ -276,6 +282,8 @@ def _no_library(ns, out: "Output") -> int:
             sys.stdout.write(describe(ns.method))
         except KeyError:
             return _fail(USAGE, f"no method {ns.method!r} (hfcore api lists them)")
+    elif ns.cmd == "record":
+        return _record_show(ns, out)
     elif ns.cmd == "search":
         from . import sources
         out.show(sources.get(ns.client).search(_query(ns), settings=config.load_settings()), _search_text)
@@ -733,6 +741,25 @@ def _delete_text(r: dict) -> str:
     if r.get("views_rebuilt"):
         lines.append("Views rebuilt: " + ", ".join(r["views_rebuilt"]))
     return "\n".join(lines)
+
+
+def _record_show(ns, out: "Output") -> int:
+    from . import record as hfrecord
+    from . import report as hfreport
+    try:
+        found = hfrecord.read(ns.file)
+    except (hfrecord.RecordError, OSError) as exc:
+        print(f"hfcore: {exc}", file=sys.stderr)
+        return PROBLEM
+    if not found.get("found"):
+        print(f"hfcore: no processing record for {ns.file}", file=sys.stderr)
+        return PROBLEM
+    if out.as_json and ns.format == "text":
+        out.show({"path": str(ns.file), "format": "text", "text": hfreport.text(found["record"], full=ns.full)},
+                 lambda r: r["text"])
+    else:
+        sys.stdout.write(hfreport.render(found["record"], ns.format, full=ns.full))
+    return OK
 
 
 def _view_text(r: dict) -> str:
