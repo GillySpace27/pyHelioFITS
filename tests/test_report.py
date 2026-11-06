@@ -16,7 +16,7 @@ def _record():
 
 def test_the_text_report_covers_the_file_the_scene_and_every_layer():
     out = report.text(_record())
-    assert out.startswith("HELIOFITS PROCESSING RECORD")
+    assert out.startswith("HELIOFITS SUITE PROCESSING RECORD")
     for needle in ("LAYERS (3, top layer first)", "PUNCH WFI+NFI Mosaic 530", "Proba-3 ASPIICS", "SDO AIA 193",
                    "RHEF", "PLEASE CITE", "CAVEATS", "not a calibrated radiance"):
         assert needle in out, needle
@@ -57,7 +57,7 @@ def test_read_gives_the_view_a_report_block(tmp_path):
     side.write_text(FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
     (tmp_path / "x.png").write_bytes(b"")
     found = hfrecord.read(side)
-    assert found["view"]["report"][0] == "HELIOFITS PROCESSING RECORD"
+    assert found["view"]["report"][0] == "HELIOFITS SUITE PROCESSING RECORD"
     rec = _record()
     rec["report"] = ["written by the producer"]
     side.write_text(json.dumps(rec), encoding="utf-8")

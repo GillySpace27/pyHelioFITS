@@ -78,7 +78,7 @@ def _dataset_line(ds: dict) -> str:
 def text(record: dict, *, full: bool = False) -> str:
     """The plain text report: one block for the file, one for the scene, one per layer."""
     view = hfrecord.display(record)
-    out = ["HELIOFITS PROCESSING RECORD", ""]
+    out = ["HELIOFITS SUITE PROCESSING RECORD", ""]
     out += _wrap("Made by:", view["producer"] or "unknown program", 0)
     if view["created"]:
         out += _wrap("Created:", view["created"], 0)
