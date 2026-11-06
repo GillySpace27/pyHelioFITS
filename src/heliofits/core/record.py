@@ -1,7 +1,7 @@
 """Processing records (hfrecord 1.x): what made an exported image, and from which files.
 
 HelioFITS Studio (and later Send to Python) writes a record beside or inside each export:
-a sidecar `<export file name>.hfrec.json` (such as frame.png.hfrec.json), a PNG tEXt chunk, an OpenEXR header attribute, an MP4
+a sidecar `<export file name>.hfrec` (such as frame.png.hfrec; `.hfrec.json`, its older name, is read too), a PNG tEXt chunk, an OpenEXR header attribute, an MP4
 metadata tag or a FITS extension named HFRECORD. The format is
 schemas/hfrecord-1.schema.json, copied byte for byte from the design folder.
 
@@ -34,7 +34,8 @@ from .library import sha256_of
 SCHEMA_PATH = Path(__file__).resolve().parent / "schemas" / "hfrecord-1.schema.json"
 FORMAT_MAJOR = 1       # the hfrecord major version this reader understands
 READER_VERSION = 1     # a record whose reader_compat is above this needs a newer reader
-SIDECAR_SUFFIX = ".hfrec.json"
+SIDECAR_SUFFIX = ".hfrec"  # the name Studio writes from 0.9.2: Finder types a file by its last extension
+SIDECAR_SUFFIXES = (".hfrec", ".hfrec.json")  # both are read; .hfrec.json is the older name
 KEYWORD = "hfrecord"   # PNG tEXt/iTXt keyword, EXR attribute, MP4 tag
 LEGACY_KEYWORD = "hfstudio"
 FITS_EXTNAME = "HFRECORD"
@@ -165,11 +166,12 @@ def check_version(record: Any) -> None:
 
 
 def sidecar_paths(path: Path) -> list[Path]:
-    """Where a sidecar for an export may be: <file>.hfrec.json (the full export name, the
-    canonical form), then <basename>.hfrec.json as a fallback."""
-    out = [path.with_name(path.name + SIDECAR_SUFFIX)]
+    """Where a sidecar for an export may be: <file>.hfrec (the full export name, the canonical
+    form), <file>.hfrec.json (the older name), then the same two on the basename as a fallback."""
+    out = [path.with_name(path.name + suffix) for suffix in SIDECAR_SUFFIXES]
     if "." in path.name:
-        out.append(path.with_name(path.name.rsplit(".", 1)[0] + SIDECAR_SUFFIX))
+        stem = path.name.rsplit(".", 1)[0]
+        out += [path.with_name(stem + suffix) for suffix in SIDECAR_SUFFIXES]
     return list(dict.fromkeys(out))
 
 
@@ -192,7 +194,7 @@ def find(path: str | Path) -> dict | None:
     skipped: list[dict] = []
     legacy: tuple[dict, str, str] | None = None  # (session, kind, container)
 
-    if p.name.endswith(SIDECAR_SUFFIX):
+    if p.name.endswith(SIDECAR_SUFFIXES):
         record = _parse(p.read_bytes(), str(p), skipped)
         if record is None:
             raise RecordError(f"{p.name} is not a readable processing record: {skipped[-1]['problem']}")
@@ -282,11 +284,11 @@ def _export_beside(sidecar: Path, record: dict) -> Path | None:
     name = (record.get("output") or {}).get("file_name") if isinstance(record.get("output"), dict) else None
     if isinstance(name, str) and name and "/" not in name and (sidecar.parent / name).is_file():
         return sidecar.parent / name
-    stem = sidecar.name[: -len(SIDECAR_SUFFIX)]
+    stem = sidecar.name[: -len(next(x for x in SIDECAR_SUFFIXES if sidecar.name.endswith(x)))]
     if (sidecar.parent / stem).is_file():
         return sidecar.parent / stem
     matches = sorted(q for q in sidecar.parent.glob(f"{_glob_escape(stem)}.*")
-                     if q.is_file() and q != sidecar and not q.name.endswith(SIDECAR_SUFFIX))
+                     if q.is_file() and q != sidecar and not q.name.endswith(SIDECAR_SUFFIXES))
     return matches[0] if len(matches) == 1 else None
 
 

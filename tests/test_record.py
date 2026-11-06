@@ -119,7 +119,8 @@ def test_sidecar_by_full_name_first_and_basename_as_fallback(tmp_path):
     full = tmp_path / "still.png.hfrec.json"  # the canonical name wins when both are there
     full.write_bytes(FIXTURE.read_bytes())
     assert record.find(png)["found_in"]["path"] == str(full)
-    assert record.sidecar_paths(png) == [full, stem]
+    assert record.sidecar_paths(png)[:2] == [tmp_path / "still.png.hfrec", full]
+    assert stem in record.sidecar_paths(png)
 
 
 def test_a_sidecar_checks_the_exports_hash(tmp_path):

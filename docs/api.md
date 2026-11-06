@@ -652,7 +652,7 @@ Params: none. The old name of [`core.hello`](#corehello), from before HelioFITS 
 A processing record (format `hfrecord` 1.x, schema in `src/heliofits/core/schemas/hfrecord-1.schema.json`)
 says what made an exported image or movie: each layer's dataset, its source files by SHA-256, and
 the steps applied to them in order. HelioFITS Studio writes it beside the export
-(`<export file name>.hfrec.json`, the complete copy) and inside it where the container takes one. These
+(`<export file name>.hfrec`, the complete copy; the older `.hfrec.json` name is read too) and inside it where the container takes one. These
 methods read records; neither writes anything.
 
 ### `record.read`
@@ -660,9 +660,9 @@ methods read records; neither writes anything.
 Params: `path`, an exported file or a sidecar. Answers in the background, like `archive.search`. The core
 looks, in this order, for:
 
-1. a sidecar named for the whole export file, `<file>.hfrec.json` (`frame.png.hfrec.json`, the
-   canonical name), then `<basename>.hfrec.json` (`frame.hfrec.json`) as a fallback, or `path`
-   itself when it ends in `.hfrec.json`;
+1. a sidecar named for the whole export file, `<file>.hfrec` (`frame.png.hfrec`, the
+   canonical name since Studio 0.9.2), then `<file>.hfrec.json`, then the same two on the basename
+   (`frame.hfrec`) as a fallback, or `path` itself when it ends in `.hfrec` or `.hfrec.json`;
 2. a PNG `tEXt`, `zTXt` or `iTXt` chunk with keyword `hfrecord`;
 3. an OpenEXR string header attribute `hfrecord` (the header is parsed directly; OpenEXR is not needed);
 4. an MP4 or MOV metadata tag `hfrecord`, through `ffprobe -show_format` when `ffprobe` is on

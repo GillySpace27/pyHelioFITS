@@ -145,7 +145,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("record", help="read the processing record of an exported image, movie or sidecar")
     rsub = p.add_subparsers(dest="record_cmd", required=True)
     q = rsub.add_parser("show", help="print the record as a report, methods paragraph, LaTeX or Python script")
-    q.add_argument("file", type=Path, help="the exported file or its .hfrec.json sidecar")
+    q.add_argument("file", type=Path, help="the exported file or its .hfrec (or older .hfrec.json) sidecar")
     q.add_argument("--format", choices=["text", "methods", "tex", "python", "json"], default="text")
     q.add_argument("--full", action="store_true", help="list every source file, not the first and the last")
     p = sub.add_parser("coverage", help="per dataset, how many observations fall in each bin of a time range")
