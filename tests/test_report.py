@@ -80,3 +80,19 @@ def test_a_dot_hfrec_sidecar_is_found_beside_its_export(tmp_path):
     (tmp_path / "x.png.hfrec").write_text(FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
     assert hfrecord.find(tmp_path / "x.png")["found_in"]["path"].endswith("x.png.hfrec")
     assert hfrecord.find(tmp_path / "x.png.hfrec")["record"]["hfrecord"]
+
+
+def test_migrate_renames_only_with_yes_and_never_overwrites(tmp_path):
+    a, b, c = (tmp_path / n for n in ("a.png.hfrec.json", "b.png.hfrec.json", "c.png.hfrec.json"))
+    for f in (a, b):
+        f.write_text(FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
+    c.write_text("not json", encoding="utf-8")
+    (tmp_path / "b.png.hfrec").write_text("taken", encoding="utf-8")
+    plan = {Path(r["from"]).name: r["status"] for r in hfrecord.migrate_sidecars([tmp_path])}
+    assert plan == {a.name: "would_rename", b.name: "exists", c.name: "not_a_record"}
+    assert a.exists()
+    done = {Path(r["from"]).name: r["status"] for r in hfrecord.migrate_sidecars([tmp_path], apply=True)}
+    assert done[a.name] == "renamed" and not a.exists() and (tmp_path / "a.png.hfrec").exists()
+    assert (tmp_path / "b.png.hfrec").read_text() == "taken" and b.exists()
+    (tmp_path / "a.png").write_bytes(b"")
+    assert hfrecord.find(tmp_path / "a.png")["found_in"]["path"].endswith("a.png.hfrec")

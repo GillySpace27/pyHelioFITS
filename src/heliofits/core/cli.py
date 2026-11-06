@@ -148,6 +148,9 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument("file", type=Path, help="the exported file or its .hfrec (or older .hfrec.json) sidecar")
     q.add_argument("--format", choices=["text", "methods", "tex", "python", "json"], default="text")
     q.add_argument("--full", action="store_true", help="list every source file, not the first and the last")
+    q = rsub.add_parser("migrate", help="rename .hfrec.json sidecars to .hfrec (shows the plan unless --yes)")
+    q.add_argument("paths", nargs="+", type=Path, help="sidecar files or folders (searched recursively)")
+    q.add_argument("--yes", action="store_true", help="do the renames; without it, only show them")
     p = sub.add_parser("coverage", help="per dataset, how many observations fall in each bin of a time range")
     p.add_argument("--start")
     p.add_argument("--end")
@@ -745,6 +748,14 @@ def _delete_text(r: dict) -> str:
 
 def _record_show(ns, out: "Output") -> int:
     from . import record as hfrecord
+    if ns.record_cmd == "migrate":
+        try:
+            rows = hfrecord.migrate_sidecars(ns.paths, apply=ns.yes)
+        except FileNotFoundError as exc:
+            return _fail(USAGE, str(exc))
+        out.show(rows, lambda r: "\n".join(f"{x['status']}: {x['from']} -> {x['to']}" for x in r)
+                 or "No .hfrec.json sidecars found.")
+        return PROBLEM if any(x["status"].startswith("error") for x in rows) else OK
     from . import report as hfreport
     try:
         found = hfrecord.read(ns.file)
