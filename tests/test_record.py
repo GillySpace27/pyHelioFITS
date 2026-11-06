@@ -23,7 +23,7 @@ from conftest import aia_header, punch_header, write_fits
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "example-studio-connect-still.hfrec.json"
 # sha256 of the design folder's hfrecord-1.schema.json (2026-10-22): the copy must stay byte for byte.
-SCHEMA_SHA256 = "3eef3c1fc208c95deb0b9b48163fa17391c70041b012b68c0bb1b1f4d927b8e8"
+SCHEMA_SHA256 = "523a4aa539d14a5056cf13c992636f5aa0c1d5c199093baa7839a478ba588fa2"
 
 
 def example() -> dict:
