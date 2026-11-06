@@ -805,6 +805,7 @@ library does not have, or no library; 3 the library is locked by another core th
 | `hfcore versions OBSERVATION_ID` | `library.versions` |
 | `hfcore checks FILE_ID` | `library.checks` |
 | `hfcore record show FILE [--format F] [--full]` | `record.report` |
+| `hfcore record migrate PATH ... [--yes]` | (none: renames files, so it is not an API method) |
 | `hfcore coverage [--start T] [--end T] [--bins N] [--dataset KEY ...]` | `library.coverage` |
 | `hfcore collisions` | `library.collisions` |
 | `hfcore verify` | `library.verify` |

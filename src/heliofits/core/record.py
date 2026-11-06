@@ -175,6 +175,41 @@ def sidecar_paths(path: Path) -> list[Path]:
     return list(dict.fromkeys(out))
 
 
+def migrate_sidecars(paths: list[str | Path], *, apply: bool = False) -> list[dict]:
+    """Rename `<name>.hfrec.json` sidecars to `<name>.hfrec` (the name Finder can give Peek's
+    previews). A folder is searched recursively. Nothing changes unless apply is true; a sidecar
+    whose new name is taken, or that is not a readable record, is left alone and says why.
+    Each answer: {"from", "to", "status"} with status renamed, would_rename, exists or not_a_record."""
+    legacy = SIDECAR_SUFFIXES[1]
+    todo: list[Path] = []
+    for raw in paths:
+        p = Path(raw).expanduser()
+        if p.is_dir():
+            todo += sorted(q for q in p.rglob("*" + legacy) if q.is_file())
+        elif p.name.endswith(legacy):
+            todo.append(p)
+        else:
+            raise FileNotFoundError(f"not a {legacy} file or a folder: {p}")
+    out = []
+    for old in todo:
+        new = old.with_name(old.name[: -len(".json")])
+        row = {"from": str(old), "to": str(new)}
+        try:
+            if _parse(old.read_bytes(), str(old), []) is None:
+                row["status"] = "not_a_record"
+            elif new.exists():
+                row["status"] = "exists"
+            elif apply:
+                old.rename(new)
+                row["status"] = "renamed"
+            else:
+                row["status"] = "would_rename"
+        except OSError as exc:
+            row["status"] = f"error: {exc}"
+        out.append(row)
+    return out
+
+
 def find(path: str | Path) -> dict | None:
     """The processing record for an exported file, or None when it carries none.
 
