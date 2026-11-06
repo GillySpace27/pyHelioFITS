@@ -73,3 +73,10 @@ def test_cli_record_show(tmp_path):
     for fmt, needle in (("text", "LAYERS"), ("methods", "processed with"), ("tex", "itemize"), ("python", "sunpy")):
         r = run("--format", fmt)
         assert r.returncode == 0 and needle in r.stdout, (fmt, r.stderr)
+
+
+def test_a_dot_hfrec_sidecar_is_found_beside_its_export(tmp_path):
+    (tmp_path / "x.png").write_bytes(b"")
+    (tmp_path / "x.png.hfrec").write_text(FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
+    assert hfrecord.find(tmp_path / "x.png")["found_in"]["path"].endswith("x.png.hfrec")
+    assert hfrecord.find(tmp_path / "x.png.hfrec")["record"]["hfrecord"]
