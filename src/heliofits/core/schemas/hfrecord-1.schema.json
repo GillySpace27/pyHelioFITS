@@ -277,6 +277,46 @@
           "type": "boolean"
         }
       }
+    },
+    "preview": {
+      "type": "object",
+      "description": "A small picture of the export, so a reader that cannot see the export file (Quick Look in a sandbox, a thumbnail, a record moved without its image) can still show it. Writers put it LAST in the sidecar so the report stays at the top. For a movie, one representative frame. At most 320 px on the long side and 64 KB of image bytes.",
+      "required": [
+        "media_type",
+        "width",
+        "height",
+        "data"
+      ],
+      "properties": {
+        "media_type": {
+          "enum": [
+            "image/png",
+            "image/jpeg"
+          ]
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 320
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 320
+        },
+        "data": {
+          "type": "string",
+          "contentEncoding": "base64",
+          "description": "The image file, base64 encoded."
+        },
+        "frame": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "For a movie or series: the index of the frame shown."
+        }
+      }
     }
   },
   "$defs": {

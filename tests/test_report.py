@@ -96,3 +96,15 @@ def test_migrate_renames_only_with_yes_and_never_overwrites(tmp_path):
     assert (tmp_path / "b.png.hfrec").read_text() == "taken" and b.exists()
     (tmp_path / "a.png").write_bytes(b"")
     assert hfrecord.find(tmp_path / "a.png")["found_in"]["path"].endswith("a.png.hfrec")
+
+
+def test_a_record_with_an_embedded_preview_validates_and_the_report_is_unchanged():
+    import base64
+    rec = _record()
+    plain = report.text(rec)
+    rec["preview"] = {"media_type": "image/png", "width": 1, "height": 1,
+                      "data": base64.b64encode(b"\x89PNG").decode()}
+    assert not hfrecord.validate(rec)
+    assert report.text(rec) == plain
+    rec["preview"]["media_type"] = "image/gif"
+    assert hfrecord.validate(rec)
