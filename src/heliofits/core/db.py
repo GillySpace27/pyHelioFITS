@@ -19,7 +19,7 @@ import uuid
 from pathlib import Path
 from typing import Callable
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 READER_COMPAT = 1  # see the module docstring
 
 SCHEMA_V1 = """
@@ -241,7 +241,24 @@ def _mint_uids(conn: sqlite3.Connection) -> None:
         conn.execute(f"CREATE UNIQUE INDEX {table}_{column} ON {table}({column})")
 
 
-MIGRATIONS: dict[int, str] = {1: SCHEMA_V1, 2: SCHEMA_V2, 3: SCHEMA_V3, 4: SCHEMA_V4, 5: SCHEMA_V5}
+# Version 6: every URL a stored file came from. files.source_url keeps the first one only, and
+# a second download of the same bytes (another mirror, a re-fetch) is a duplicate that used to
+# leave no trace, so a program that looks files up by URL (Studio, once the library is its one
+# store) would fetch it again forever. file_sources maps each URL to the file it delivered; a URL
+# that later delivers other bytes points at the newer file. Additive: reader_compat stays 1.
+SCHEMA_V6 = """
+CREATE TABLE file_sources (
+    url          TEXT PRIMARY KEY,
+    file_id      INTEGER NOT NULL REFERENCES files(id),
+    recorded_at  TEXT
+);
+CREATE INDEX file_sources_file ON file_sources(file_id);
+INSERT OR IGNORE INTO file_sources(url, file_id, recorded_at)
+    SELECT source_url, id, ingested_at FROM files WHERE source_url IS NOT NULL AND source_url != '';
+"""
+
+
+MIGRATIONS: dict[int, str] = {1: SCHEMA_V1, 2: SCHEMA_V2, 3: SCHEMA_V3, 4: SCHEMA_V4, 5: SCHEMA_V5, 6: SCHEMA_V6}
 # Steps SQL cannot express, run after a version's SQL in the same transaction.
 MIGRATION_STEPS: dict[int, Callable[[sqlite3.Connection], None]] = {5: _mint_uids}
 

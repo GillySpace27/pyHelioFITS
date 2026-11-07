@@ -104,7 +104,7 @@ API: dict[str, tuple[str, str]] = {
     "library.coverage": ("start=None, end=None, bins=240, dataset_keys=None, instrument=None, "
                          "wavelength=None, wavelength_max=None",
                          "Per dataset, how many observations fall in each equal bin of a time range."),
-    "ingest.path": ("path, source_url=None, query=None", "Add one FITS file to the library (copied, deduplicated by checksum)."),
+    "ingest.path": ("path, source_url=None, query=None, consume=False", "Add one FITS file to the library (copied, or moved with consume, deduplicated by checksum)."),
     "ingest.tree": ("path", "Add every FITS file under a folder; reports ingest.progress."),
     "download.enqueue": ("query, source='fido'", "Queue a download; returns the job at once, then reports download.progress."),
     "download.list": ("status=None, limit=50", "Download jobs, newest first."),
@@ -358,10 +358,11 @@ class Server:
             "aliases": dict(ALIASES),
         }
 
-    def ingest_path(self, path: str, source_url: str | None = None, query: dict | None = None) -> dict:
+    def ingest_path(self, path: str, source_url: str | None = None, query: dict | None = None,
+                    consume: bool = False) -> dict:
         q = Query.from_json(query) if query else None
         try:
-            return self.lib.ingest(path, source_url=source_url, query=q).to_dict()
+            return self.lib.ingest(path, consume=bool(consume), source_url=source_url, query=q).to_dict()
         except fitsmeta.Unstorable as exc:
             raise RpcError(UNSTORABLE, str(exc))
 

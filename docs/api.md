@@ -248,9 +248,13 @@ bins of the range (the app's Timeline). Without `start` or `end`, the library's 
 
 ### `ingest.path`
 
-Params: `path, source_url=None, query=None`. Adds one FITS file. The file is copied into the store
-(an APFS clone on a Mac, so no extra disk) and left where it was. `source_url` and `query` are
-recorded with it, for provenance. A file cut off in transit, or not readable as FITS, is refused
+Params: `path, source_url=None, query=None, consume=False`. Adds one FITS file. The file is copied
+into the store (an APFS clone on a Mac, so no extra disk) and left where it was; with `consume` it is
+moved instead and nothing is left at `path` (a duplicate is removed from `path` too), which is how a
+program that downloads into a staging folder hands its files over without keeping a second copy.
+`source_url` and `query` are recorded with it, for provenance. Every `source_url` a file arrives
+from, a duplicate's included, is kept in the index table `file_sources` (url, file_id), so a
+reader can find the stored file a URL delivered (schema 6; reader_compat unchanged). A file cut off in transit, or not readable as FITS, is refused
 with code -32001 (see [Errors](#errors)).
 
     {"status": "added", "file_id": 1, "relpath": "store/sdo/aia/1/193/2025/09/21/a.fits", "findings": []}

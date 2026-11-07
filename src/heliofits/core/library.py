@@ -371,6 +371,7 @@ class Library:
                     remove_file(path)  # may be a read-only hard link to the stored copy (jobs._restage)
                     if os.name == "nt":
                         protect(self.abspath(row["relpath"]))
+                self._remember_source(row["id"], source_url)
                 return IngestResult("duplicate", row["id"], row["relpath"])
 
             try:
@@ -399,7 +400,28 @@ class Library:
                 os.chmod(dest, stat.S_IWUSR | stat.S_IRUSR)
                 dest.unlink(missing_ok=True)
                 raise
+            self._remember_source(file_id, source_url)
             return IngestResult(status, file_id, relpath, findings)
+
+    def _remember_source(self, file_id: int, source_url: str | None) -> None:
+        """Record that source_url delivered file_id (file_sources). A URL seen before now points at
+        this file: the newest bytes it served. Nothing to record without a URL."""
+        if not source_url or not db.has_table(self.conn, "file_sources"):
+            return
+        self.conn.execute(
+            "INSERT INTO file_sources(url, file_id, recorded_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(url) DO UPDATE SET file_id = excluded.file_id, recorded_at = excluded.recorded_at",
+            (source_url, file_id, now()))
+
+    def path_for_source(self, source_url: str) -> Path | None:
+        """The stored file a URL delivered, or None: how a program that downloads by URL finds
+        what it already has without keeping a copy of its own."""
+        if not db.has_table(self.reader, "file_sources"):
+            return None
+        row = self.reader.execute(
+            "SELECT f.relpath FROM file_sources s JOIN files f ON f.id = s.file_id WHERE s.url = ?",
+            (source_url,)).fetchone()
+        return self.abspath(row["relpath"]) if row else None
 
     def _record(self, meta, sha, relpath, dest, original_name, source_url, query, source, findings):
         conn = self.conn
@@ -705,6 +727,8 @@ class Library:
                     conn.execute(f"DELETE FROM file_aliases WHERE file_id IN ({q})", list(ids))
                 else:
                     aliases = []
+                if db.has_table(conn, "file_sources"):
+                    conn.execute(f"DELETE FROM file_sources WHERE file_id IN ({q})", list(ids))
                 conn.execute(f"DELETE FROM files WHERE id IN ({q})", list(ids))
                 for oid in obs_ids:
                     obs = conn.execute("SELECT dataset_id, current_file_id FROM observations WHERE id = ?",
