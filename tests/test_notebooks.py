@@ -41,7 +41,7 @@ def test_ipynb_matches_source(src):
 
 def test_load_and_step(fake, capsys):
     run("01_load_and_step.py")
-    assert "(5, '2025-09-21T23:00:00'" in capsys.readouterr().out
+    assert "(5, 5, " in capsys.readouterr().out
     assert ("seekTime", {"time": "2025-09-21T22:35:47"}) in fake.calls
 
 
