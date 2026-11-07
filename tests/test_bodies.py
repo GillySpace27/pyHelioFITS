@@ -5,8 +5,8 @@ import json
 import pytest
 from conftest import punch_header, write_fits
 
-from heliofits.core import bodies, db
-from heliofits.core.cli import main
+from pyheliofits.core import bodies, db
+from pyheliofits.core.cli import main
 
 pytest.importorskip("sunpy.coordinates", reason="the bodies tag needs sunpy")
 
@@ -29,7 +29,7 @@ def _frame(path, centre_deg, date=WHEN, observer=True):
 
 
 def test_tag_matches_an_independent_elongation(tmp_path):
-    from heliofits.core import fitsmeta
+    from pyheliofits.core import fitsmeta
     header, _, _ = fitsmeta.read_headers(_frame(tmp_path / "a.fits", 0.0))
     placed = {p.body: p for p in bodies.tag(header)}
     assert "earth" not in placed  # the observer is at Earth
@@ -42,7 +42,7 @@ def test_tag_matches_an_independent_elongation(tmp_path):
 
 
 def test_the_field_edge_is_the_pixel_grid(tmp_path):
-    from heliofits.core import fitsmeta
+    from pyheliofits.core import fitsmeta
     def moon(centre, name):
         header, _, _ = fitsmeta.read_headers(_frame(tmp_path / name, centre))
         return next(p for p in bodies.tag(header) if p.body == "moon")

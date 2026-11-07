@@ -6,9 +6,9 @@ import json
 
 import pytest
 
-from heliofits.core import rpc, sources
-from heliofits.core.library import Library
-from heliofits.core.rpc import Server
+from pyheliofits.core import rpc, sources
+from pyheliofits.core.library import Library
+from pyheliofits.core.rpc import Server
 from tests.conftest import aia_header, write_fits
 
 
@@ -72,7 +72,7 @@ def test_an_archive_that_cannot_be_asked_is_archive(call, monkeypatch):
 
 
 def test_jsoc_without_an_email_is_archive():
-    from heliofits.core.sources import jsoc
+    from pyheliofits.core.sources import jsoc
     with pytest.raises(sources.ArchiveError):
         jsoc._client({})
 

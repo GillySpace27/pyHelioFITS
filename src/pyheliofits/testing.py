@@ -210,7 +210,7 @@ def _npy(a: np.ndarray) -> bytes:
 
 
 def main() -> None:
-    """`python -m heliofits.testing`: run a fake Studio and print how to point notebooks at it."""
+    """`python -m pyheliofits.testing`: run a fake Studio and print how to point notebooks at it."""
     import tempfile
     import time
     with FakeStudio() as f:

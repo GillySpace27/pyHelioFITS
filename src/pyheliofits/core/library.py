@@ -147,8 +147,9 @@ class ReadOnlyLibrary(RuntimeError):
 
 class _RootLock:
     def __init__(self, root: Path):
-        # The name is kept through the rename to HelioFITS Core: a core from before it and one
-        # from after must take the same lock, or both could write the library at once.
+        # Kept under the pre-rename name on purpose: the core HelioFITS Studio bundles and this one
+        # must take the same lock on a shared library, or both could write it at once. Rename to
+        # .hfcore.lock together with .hfcore.endpoint once Studio bundles a pyheliofits core.
         self.path = root / ".heliad.lock"
         self._fh = None
 
@@ -593,7 +594,7 @@ class Library:
 
     def tag_bodies(self, *, dataset_key: str | None = None, start: str | None = None,
                    end: str | None = None, redo: bool = False, progress=None) -> dict:
-        """Tag the current file of every observation with the bodies in its field (heliofits.core.bodies).
+        """Tag the current file of every observation with the bodies in its field (pyheliofits.core.bodies).
 
         Files already tagged by the current method are skipped unless redo. Needs sunpy; without
         it, raises ValueError saying so. Returns counts: tagged, no_wcs (nothing to say about the

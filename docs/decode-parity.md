@@ -5,7 +5,7 @@ time and pixel-to-sky mapping equal what `sunpy.map.Map` gives, plus exactly the
 below. It is not "equal to raw sunpy": Studio makes a few deliberate changes, and a difference that
 is not one of them is a finding.
 
-Status (2026-11-02): the Python side (`heliofits.core.parity`), the dump format and the Studio-side
+Status (2026-11-02): the Python side (`pyheliofits.core.parity`), the dump format and the Studio-side
 dump tool are written and tested on **synthetic** files only. No real file has been compared yet:
 the cloud session has no route to the archives, so the real run needs Gilly's Mac (see "Running it").
 
@@ -101,7 +101,7 @@ Cloud or any machine, on synthetic files: `pip install -e ".[parity,test]" && py
 
 Real files (needs the Mac, the library and Studio's `bin/`):
 
-1. Pick fixtures: `python tools/parity_sample.py --library ~/HeliadLibrary --out parity-picks.json`
+1. Pick fixtures: `python tools/parity_sample.py --library ~/HelioFITSLibrary --out parity-picks.json`
    (one file per instrument; LASCO one per detector; it lists any instrument the library lacks).
 2. Dump each with Studio's decoder: copy `tools/studio/DecodeParityDump.java` to
    `src/org/helioviewer/jhv/view/uri/` in HelioFITS Studio (it must sit in `view.uri`, because
@@ -109,7 +109,7 @@ Real files (needs the Mac, the library and Studio's `bin/`):
    `java -Djava.awt.headless=true -cp "bin:resources:$(find lib -name '*.jar' | tr '\n' ':')" org.helioviewer.jhv.view.uri.DecodeParityDump OUT FILE.fits [--plane N] [--subtract-background]`.
    Use `--plane 0..2` on a PUNCH PTM, and `--subtract-background` on a LASCO frame (needs the network).
 3. Compare: `HFPARITY_DIR=OUT HFPARITY_SOURCES=<library root> pytest tests/test_parity_real.py`, or one file:
-   `python -m heliofits.core.parity compare OUT/NAME.p0.hfdump.json --source FILE.fits`.
+   `python -m pyheliofits.core.parity compare OUT/NAME.p0.hfdump.json --source FILE.fits`.
 
 `tools/studio/DecodeParityDump.java` was compile-checked against Studio's sources on 2026-11-02 with a JDK 21
 (Studio builds with release 25, so unrelated files failed; none of the errors were in this file). It has

@@ -1,6 +1,6 @@
 # Licences of the Python packages HelioFITS Core installs
 
-What `pip install heliad[archives]` (the package now named heliofits) brought into a clean virtual environment on 2026-10-18
+What `pip install pyheliofits[archives]` brought into a clean virtual environment on 2026-10-18
 (Python 3, Linux), as reported by pip-licenses from each package's metadata. This is an
 inventory for deciding what the Mac app can bundle, not legal advice.
 
@@ -58,4 +58,4 @@ Not in this list: Python itself (PSF licence) and the SQLite library it links
 Regenerate with:
 
     python -m venv /tmp/lic && /tmp/lic/bin/pip install -e '.[archives]' pip-licenses
-    /tmp/lic/bin/pip-licenses --from=mixed --ignore-packages pip-licenses prettytable wcwidth heliad pip setuptools
+    /tmp/lic/bin/pip-licenses --from=mixed --ignore-packages pip-licenses prettytable wcwidth pyheliofits pip setuptools

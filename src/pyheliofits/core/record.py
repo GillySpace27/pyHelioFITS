@@ -845,6 +845,7 @@ def display(record: dict) -> dict:
         "citations": [c for c in record.get("citations") or [] if isinstance(c, str)],
         "acknowledgements": acknowledgements,
         "provenance": _pairs(record.get("provenance")),
+        # hfrecord-1 field, named by Studio's schema (docs/spec/hfrecord-1.schema.json in HelioFITS-Studio)
         "heliad_view": record.get("heliad_view") if isinstance(record.get("heliad_view"), dict) else None,
         "snapshot": _pairs(record.get("snapshot")),
         "not_guaranteed_to_rebuild": rebuild,
@@ -931,7 +932,7 @@ def resolve(conn: sqlite3.Connection, record: dict) -> dict:
                 row["status"] = "missing"
                 if lib_ds is not None:
                     row["dataset_key"] = lib_ds["dataset_key"]
-                obs_key = src.get("heliad_obs_key")
+                obs_key = src.get("heliad_obs_key")  # hfrecord-1 field name, from Studio's schema
                 if isinstance(obs_key, str):  # the same observation, kept as another version
                     other = conn.execute(
                         "SELECT o.id, f.relpath, f.version FROM observations o "

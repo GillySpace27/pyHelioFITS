@@ -1,36 +1,24 @@
 # pyHelioFITS
 
-The Python side of the HelioFITS Suite, one package, imported as `heliofits`: `pip install heliofits`.
+The Python side of the HelioFITS Suite, one package: `pip install pyheliofits`, then `import pyheliofits as hf`.
 
-    from heliofits import core, studio, cache
+    from pyheliofits import core, studio, cache
 
-- **HelioFITS Core** (`heliofits.core`, command `hfcore`): find solar data, download it and keep it
+- **HelioFITS Core** (`pyheliofits.core`, command `hfcore`): find solar data, download it and keep it
   in one library. The "find it and keep it" half of the HelioFITS Suite; HelioFITS Peek and HelioFITS
   Studio look at what it keeps. Most of this file is about it.
-- **`heliofits.studio`**: a client for a running HelioFITS Studio, and **`heliofits.cache`**: the
+- **`pyheliofits.studio`**: a client for a running HelioFITS Studio, and **`pyheliofits.cache`**: the
   library's cache verbs from a script. Both for notebooks, with `heliofits-mcp` wrapping them for an
-  LLM client (docs/mcp.md).
+  LLM client ([docs/mcp.md](https://github.com/GillySpace27/pyHelioFITS/blob/main/docs/mcp.md)).
 
-The engine was the `heliofits_core` package until 2026-11-02; that import name and `python -m
-heliofits_core` keep working.
+What this package is not: HelioFITS Studio (the desktop viewer) and HelioFITS Peek (the macOS
+Quick Look plugin) are separate downloads at <https://gilly.space>. This package is what a script,
+notebook or LLM client uses to work with the same library those two read.
 
-HelioFITS Core and its Mac app, HelioFITS Cache Manager, were called Heliad until
-2026-10-25. Everything made under the old name keeps working, and nothing new is made
-with it:
-
-| New | Old, still read |
-| --- | --- |
-| package `heliofits.core` (was `heliofits_core`), command `hfcore` | `import heliad`, `python -m heliad`, the `heliad` command |
-| `HFCORE_HOME`, `HFCORE_LIBRARY`, `HFCORE_JSOC_EMAIL` (and the apps' `HFCORE_CORE`) | the same with `HELIAD_` |
-| config folder `HelioFITS Core` (`hfcore` on Linux) | `Heliad` (`heliad`), used while the new one has no config |
-| new libraries at `~/HelioFITSLibrary`, index `hfcore.sqlite` | `~/HeliadLibrary`, `heliad.sqlite` |
-| `hfcore://` links, `core.hello` | `heliad://` links, `heliad.hello` |
-| view marker `.hfcore-view` | `.heliad-view` |
-
-Kept as they are, on purpose: the library's `.heliad.lock` and `.heliad.endpoint` (a core
-from before the rename and one from after must find the same lock), the processing record's
-`heliad_*` keys (a published format, append-only), and the Mac app's bundle id
-`io.github.gillyspace27.heliad`.
+Three names from before HelioFITS Core was renamed are kept on purpose, and only these: the
+library's `.heliad.lock` and `.heliad.endpoint` files (the core HelioFITS Studio bundles and this
+one must find the same lock), the `heliad_*` keys of the processing record (a published format,
+append-only), and the Cache Manager app's bundle id.
 
 Status: core library, CONNECT import validated on real files; Fido downloads (AIA 193
 through VSO) run against the real archives; the JSOC export route written but not yet run.
@@ -89,7 +77,7 @@ through VSO) run against the real archives; the JSOC export route written but no
     hfcore api          # the methods serve answers
     hfcore --json stats # any command: the JSON-RPC result instead of a table
 
-Every time a command, a query or an archive hands the core is read by `heliofits.core.times` (ISO 8601
+Every time a command, a query or an archive hands the core is read by `pyheliofits.core.times` (ISO 8601
 with T or a space, with or without Z or an offset, JSOC's `_TAI` form) and written in the index's
 own form, `2025-09-21T16:00:00.000` UTC.
 
@@ -99,8 +87,8 @@ Programs (the HelioFITS Cache Manager app, HelioFITS Studio, your scripts) chang
 `hfcore serve`, which speaks JSON-RPC 2.0 over stdin and stdout. `hfcore api` lists every
 method and notification with its params; `hfcore api METHOD` shows one. The full reference,
 with examples, error codes and how several clients share one library, is
-[docs/api.md](docs/api.md). To only read a library, open its index as
-[docs/reader-contract.md](docs/reader-contract.md) describes.
+[docs/api.md](https://github.com/GillySpace27/pyHelioFITS/blob/main/docs/api.md). To only read a library, open its index as
+[docs/reader-contract.md](https://github.com/GillySpace27/pyHelioFITS/blob/main/docs/reader-contract.md) describes.
 
 ## Tests
 

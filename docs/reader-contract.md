@@ -1,8 +1,7 @@
 # Reading a HelioFITS Core library from another program
 
 This is what HelioFITS Studio (and any script) may rely on. HelioFITS Core is the
-only writer; everything else follows these rules and only reads. (HelioFITS Core was
-called Heliad until 2026-10-25; every name it had then is still read, as below.)
+only writer; everything else follows these rules and only reads.
 
 ## Find the library
 
@@ -10,14 +9,10 @@ called Heliad until 2026-10-25; every name it had then is still read, as below.)
    - macOS: `~/Library/Application Support/HelioFITS Core/config.json`
    - Linux: `$XDG_CONFIG_HOME/hfcore/config.json` (default `~/.config/hfcore/`)
    - Windows: `%APPDATA%\HelioFITS Core\config.json`
-   - `HFCORE_HOME` (or `HELIAD_HOME`, its old name), when set, replaces the folder on every
+   - `HFCORE_HOME`, when set, replaces the folder on every
      platform.
-   - When that folder has no `config.json` but the folder from before the rename has a
-     `config.json` or `settings.json` (`Heliad` on macOS and Windows, `heliad` on Linux),
-     use the old folder: a computer set up before the rename keeps its config there.
 2. It holds `library_root` and `db_path`. Only `hfcore init` (or the first run on a
    machine with no config) writes it, so a one-off `hfcore --library` never moves it.
-   A library made before the rename has its index at `heliad.sqlite`; `db_path` names it.
 3. No config file, or no file at `db_path`: there is no library. Show nothing from
    HelioFITS Core; do not create anything.
 
@@ -95,12 +90,11 @@ left unable to get data.
    library" tab read from `current_files` (grouped by `dataset_key`, shown by `label`,
    counted against the master time range). Studio's existing download buttons are
    unchanged. With no library, the dialog is exactly as it is today. Studio's reader is
-   `org.helioviewer.jhv.io.FitsLibrary`, checked by `extra/test/FitsLibraryCheck.java`
-   (first built as `HeliadLibrary` on branch `claude/heliad-library-tab` in HelioFITS-Studio).
+   `org.helioviewer.jhv.io.FitsLibrary`, checked by `extra/test/FitsLibraryCheck.java`.
 2. **When the HelioFITS Cache Manager app ships:** the dialog shows "Open in HelioFITS Cache Manager" only when the
    app is installed. The app's bundle id is `io.github.gillyspace27.heliad` (kept through the
    rename: a bundle id is never changed), and it handles `hfcore://search?...` and
-   `hfcore://get?...` links (and `heliad://`, the old scheme) whose parameters are the query's
+   `hfcore://get?...` links whose parameters are the query's
    fields (`start`, `end`, `instrument`, `wavelength`, `sample_s`, ...; see
    `Query.to_url`). Studio opens such a link to hand a search to the app; a `get` link
    shows the search with a Download button rather than downloading unasked.

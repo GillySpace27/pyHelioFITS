@@ -123,8 +123,7 @@ that the core is new enough.
     {"name": "heliofits-core", "version": "0.1.0", "schema_version": 5, "reader_compat": 1, "rules_version": 4,
      "reindex_due": false, "readonly": false, "library_root": ".../library",
      "db_path": ".../library/hfcore.sqlite", "methods": ["archive.search", "dataset.cadences", ...],
-     "aliases": {"search": "archive.search", "query.from_url": "link.parse", "dataset.from_url": "link.parse",
-                 "heliad.hello": "core.hello"}}
+     "aliases": {"search": "archive.search", "query.from_url": "link.parse", "dataset.from_url": "link.parse"}}
 
 `aliases` maps each old method name this core still answers to the method it stands for.
 
@@ -675,14 +674,9 @@ Params: `url`. The old name of [`link.parse`](#linkparse); answers the same.
 Params: `url`. The old name of [`link.parse`](#linkparse); answers the same (a dataset link's
 result has gained `"action": "dataset"`).
 
-### `heliad.hello`
-
-Params: none. The old name of [`core.hello`](#corehello), from before HelioFITS Core was renamed
-(it was Heliad); answers the same.
-
 ## Processing record methods
 
-A processing record (format `hfrecord` 1.x, schema in `src/heliofits/core/schemas/hfrecord-1.schema.json`)
+A processing record (format `hfrecord` 1.x, schema in `src/pyheliofits/core/schemas/hfrecord-1.schema.json`)
 says what made an exported image or movie: each layer's dataset, its source files by SHA-256, and
 the steps applied to them in order. HelioFITS Studio writes it beside the export
 (`<export file name>.hfrec`, the complete copy; the older `.hfrec.json` name is read too) and inside it where the container takes one. These

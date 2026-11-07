@@ -1,5 +1,5 @@
 // swift-tools-version:5.10
-// HelioFITS Cache Manager, the Mac app (it was Heliad). CacheManagerKit talks to HelioFITS
+// HelioFITS Cache Manager, the Mac app. CacheManagerKit talks to HelioFITS
 // Core, the Python core (hfcore serve), and holds the models; CacheManager is the SwiftUI app.
 // Build with `swift build`, test with `swift test`; tools/make_app.sh wraps the binary as
 // HelioFITS Cache Manager.app.

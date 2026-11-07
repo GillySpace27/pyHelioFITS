@@ -1,6 +1,6 @@
 import Foundation
 
-/// core.hello (heliad.hello before the rename): who the core is and which library it opened.
+/// core.hello: who the core is and which library it opened.
 public struct Hello: Decodable, Sendable, Equatable {
     public let name: String
     public let version: String

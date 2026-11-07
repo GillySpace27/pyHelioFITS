@@ -16,8 +16,6 @@ csv.field_size_limit(10_000_000)
 
 def main(manifest: str, library: str) -> int:
     index = Path(library) / "hfcore.sqlite"
-    if not index.exists():
-        index = Path(library) / "heliad.sqlite"  # a library made before the rename
     db = sqlite3.connect(f"file:{index}?mode=ro", uri=True)
     known = {row[0] for row in db.execute("SELECT sha256 FROM files")}
     rows = list(csv.DictReader(open(manifest, newline="")))

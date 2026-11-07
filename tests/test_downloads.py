@@ -6,8 +6,8 @@ import sqlite3
 
 import pytest
 
-from heliofits.core import db, jobs
-from heliofits.core.sources import fido
+from pyheliofits.core import db, jobs
+from pyheliofits.core.sources import fido
 from conftest import aia_header, write_fits
 from test_blockers import QUERY, FakeSource
 

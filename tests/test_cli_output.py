@@ -5,8 +5,8 @@ import json
 
 import pytest
 
-from heliofits.core import cli, config
-from heliofits.core.library import Library
+from pyheliofits.core import cli, config
+from pyheliofits.core.library import Library
 from tests.conftest import aia_header, write_fits
 
 
@@ -89,7 +89,7 @@ def test_settings_print_as_lines_and_as_json(tmp_path, monkeypatch, capsys):
 
 
 def test_version_is_the_installed_one(capsys):
-    from heliofits.core import __version__
+    from pyheliofits.core import __version__
     with pytest.raises(SystemExit) as exit_:
         cli.main(["--version"])
     assert exit_.value.code == 0

@@ -116,9 +116,6 @@ final class AppModel: ObservableObject {
             let hello: Hello
             do {
                 hello = try await core.call("core.hello", as: Hello.self)
-            } catch let error as RPCError where error.code == -32601 {
-                // A core from before the rename to HelioFITS Core answers only its old name.
-                hello = try await core.call("heliad.hello", as: Hello.self)
             }
             self.hello = hello
             coreState = .ready

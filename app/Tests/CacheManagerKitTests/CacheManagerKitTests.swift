@@ -168,7 +168,7 @@ final class IndexTimeTests: XCTestCase {
 }
 
 final class WavelengthTests: XCTestCase {
-    /// Same rule as `_wavelength_text` in src/heliofits_core/fitsmeta.py.
+    /// Same rule as `_wavelength_text` in src/pyheliofits/core/fitsmeta.py.
     func testVisibleBandsReadInNanometres() {
         XCTAssertEqual(Wavelength.text(193), "193 Å")
         XCTAssertEqual(Wavelength.text(171.5), "171.5 Å")
@@ -276,16 +276,10 @@ final class CoreLocatorTests: XCTestCase {
     func testOrderAndArguments() throws {
         let everything: (String) -> Bool = { _ in true }
         var launch = try CoreLocator.launch(library: "~/Lib", corePath: nil, bundle: Bundle(for: Self.self),
-                                            environment: ["HFCORE_CORE": "/opt/py/bin/python3", "HELIAD_CORE": "/old/bin/python3"],
+                                            environment: ["HFCORE_CORE": "/opt/py/bin/python3"],
                                             home: home, exists: everything)
         XCTAssertEqual(launch.executable.path, "/opt/py/bin/python3")
-        XCTAssertEqual(launch.arguments, ["-s", "-P", "-m", "heliofits.core", "--library", "/Users/someone/Lib", "serve"])  // isolated, as bundled
-        // The variable's old name still works, and runs the module under its old name, which
-        // cores from before the rename to HelioFITS Core also have.
-        launch = try CoreLocator.launch(library: nil, corePath: nil, bundle: Bundle(for: Self.self),
-                                        environment: ["HELIAD_CORE": "/old/bin/python3"], home: home, exists: everything)
-        XCTAssertEqual(launch.executable.path, "/old/bin/python3")
-        XCTAssertEqual(launch.arguments, ["-s", "-P", "-m", "heliad", "serve"])
+        XCTAssertEqual(launch.arguments, ["-s", "-P", "-m", "pyheliofits.core", "--library", "/Users/someone/Lib", "serve"])  // isolated, as bundled
         launch = try CoreLocator.launch(library: nil, corePath: nil, bundle: Bundle(for: Self.self),
                                         environment: [:], home: home,
                                         exists: { $0.hasSuffix(CoreLocator.devCheckout) })
@@ -359,7 +353,7 @@ final class CoreClientTests: XCTestCase {
             exited.fulfill()
         }
         try client.start(.init(executable: URL(fileURLWithPath: "/bin/sh"),
-                               arguments: ["-c", "echo 'heliofits.core.library.LibraryLocked: another HelioFITS Core process' >&2; exit 3"]))
+                               arguments: ["-c", "echo 'pyheliofits.core.library.LibraryLocked: another HelioFITS Core process' >&2; exit 3"]))
         await fulfillment(of: [exited], timeout: 5)
     }
 

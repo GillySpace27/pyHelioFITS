@@ -1,6 +1,6 @@
 import Foundation
 
-/// The search form: a Query (heliofits.core.query.Query in the core) as editable text.
+/// The search form: a Query (pyheliofits.core.query.Query in the core) as editable text.
 public struct QueryFields: Equatable, Sendable {
     public var start = ""
     public var end = ""

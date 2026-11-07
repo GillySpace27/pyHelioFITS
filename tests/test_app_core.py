@@ -9,9 +9,9 @@ import numpy as np
 import pytest
 from astropy.io import fits
 
-from heliofits.core import thumbs
-from heliofits.core.query import Query
-from heliofits.core.rpc import Server
+from pyheliofits.core import thumbs
+from pyheliofits.core.query import Query
+from pyheliofits.core.rpc import Server
 from conftest import aia_header, write_fits
 
 
@@ -141,5 +141,5 @@ def test_python_dash_m_runs_the_cli(tmp_path, monkeypatch):
     import sys
 
     monkeypatch.setenv("HFCORE_HOME", str(tmp_path / "home"))
-    out = subprocess.run([sys.executable, "-m", "heliofits.core", "--json", "settings"], capture_output=True, text=True)
+    out = subprocess.run([sys.executable, "-m", "pyheliofits.core", "--json", "settings"], capture_output=True, text=True)
     assert out.returncode == 0 and out.stdout.strip().startswith("{")

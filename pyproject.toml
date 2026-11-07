@@ -3,17 +3,34 @@ requires = ["setuptools>=77"]  # SPDX license expression
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "heliofits"
+name = "pyheliofits"
 version = "0.1.0"
-description = "The Python side of the HelioFITS Suite: its data cache (HelioFITS Core), a client for HelioFITS Studio, and an MCP server over both."
+description = "Python side of the HelioFITS Suite: the hfcore solar-data library, a client for HelioFITS Studio, and an MCP server over both (Studio and Peek are separate downloads)"
 readme = "README.md"
+authors = [{ name = "C. R. Gilly", email = "gilly@nwra.com" }]
+keywords = ["solar", "heliophysics", "FITS", "SDO", "AIA", "PUNCH", "JSOC", "VSO", "sunpy", "astropy", "MCP", "HelioFITS"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Astronomy",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
 license = "MPL-2.0"
 license-files = ["LICENSE"]
 requires-python = ">=3.10"
 dependencies = ["astropy>=6", "numpy", "jsonschema"]
 
 [project.urls]
+Homepage = "https://gilly.space"
 Repository = "https://github.com/GillySpace27/pyHelioFITS"
+Documentation = "https://github.com/GillySpace27/pyHelioFITS/tree/main/docs"
+Issues = "https://github.com/GillySpace27/pyHelioFITS/issues"
 
 [project.optional-dependencies]
 archives = ["sunpy[net]>=6", "drms"]
@@ -22,15 +39,14 @@ parity = ["sunpy[map]>=6"]
 test = ["pytest", "jsonschema"]
 
 [project.scripts]
-hfcore = "heliofits.core.cli:main"
-heliad = "heliofits.core.cli:main"  # the old command name, kept
-heliofits-mcp = "heliofits.mcp:main"
+hfcore = "pyheliofits.core.cli:main"
+heliofits-mcp = "pyheliofits.mcp:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-heliofits = ["data/*.json", "core/schemas/*.json"]
+pyheliofits = ["data/*.json", "core/schemas/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

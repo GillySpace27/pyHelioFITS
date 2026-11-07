@@ -4,10 +4,10 @@ import stat
 
 import pytest
 
-from heliofits.core import checks, db, fitsmeta, views
-from heliofits.core.library import Library, LibraryLocked
-from heliofits.core.query import Query
-from heliofits.core.rpc import Server
+from pyheliofits.core import checks, db, fitsmeta, views
+from pyheliofits.core.library import Library, LibraryLocked
+from pyheliofits.core.query import Query
+from pyheliofits.core.rpc import Server
 from conftest import aia_header, punch_header, write_fits
 
 
@@ -126,7 +126,7 @@ def test_verify_reports_altered_and_missing(lib, src):
 
 
 def test_config_file_names_the_library(lib):
-    from heliofits.core import config
+    from pyheliofits.core import config
     data = json.loads(config.config_path().read_text())
     assert data["library_root"] == str(lib.root) and data["schema_version"] == db.SCHEMA_VERSION
 

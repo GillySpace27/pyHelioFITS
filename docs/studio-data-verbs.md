@@ -4,10 +4,10 @@ Studio registers the data commands a script needs (`DataCommands` in HelioFITS S
 its `docs/commands.md` and carried by `docs/commands.json`): `layerAdd`, `layerList`,
 `layerRemove`, `layerReload`, `filterSet`, `viewSet`, `viewGet`, `frameGet`, `previewRender`,
 `exportStill` and `exportMovie`. Studio is the source of their ids and schemas; this package ships
-a copy of that file (`src/heliofits/data/studio-commands.json`) for offline use, docs and tests,
+a copy of that file (`src/pyheliofits/data/studio-commands.json`) for offline use, docs and tests,
 and a running Studio's own list wins. Nothing is added on the Python side.
 
-`heliofits.testing.FakeStudio` answers the same commands over synthetic frames (a smooth disc plus
+`pyheliofits.testing.FakeStudio` answers the same commands over synthetic frames (a smooth disc plus
 a bright blob that moves outward with the frame number), with answers of the shape Studio's have,
 so the notebooks and `tests/test_notebooks.py` run without Studio. Nothing it returns is data.
 

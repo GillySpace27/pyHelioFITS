@@ -20,11 +20,10 @@ from . import db
 from .library import Library, now, protect, time_bound
 
 MARKER = ".hfcore-view"
-LEGACY_MARKER = ".heliad-view"  # folders built before the rename carry this one
 
 
 def _built_here(folder: Path) -> bool:
-    return (folder / MARKER).exists() or (folder / LEGACY_MARKER).exists()
+    return (folder / MARKER).exists()
 LINK_MODES = ("symlink", "hardlink", "copy")
 
 
@@ -161,7 +160,7 @@ def materialize(lib: Library, name: str, *, modes: tuple[str, ...] = LINK_MODES)
     """Write views/<name>/ : manifest.csv plus one folder of links per dataset.
 
     Built in a temporary folder and swapped in, so a reader never sees half a view.
-    Only folders HelioFITS Core made (marked with .hfcore-view, or .heliad-view from before the rename) are ever replaced.
+    Only folders HelioFITS Core made (marked with .hfcore-view) are ever replaced.
     """
     rows = members(lib, name)
     final = lib.cfg.views_dir / slug(name)

@@ -1,4 +1,4 @@
-"""Tests of the decode-parity machinery (src/heliofits/core/parity.py).
+"""Tests of the decode-parity machinery (src/pyheliofits/core/parity.py).
 
 Everything here runs on SYNTHETIC files: small arrays with headers shaped like each instrument's
 (the keyword sets follow the ones Studio's decoder reads; the values are made up). They prove that
@@ -13,7 +13,7 @@ from astropy.io import fits
 
 pytest.importorskip("sunpy.map", reason="decode parity needs sunpy: pip install 'heliofits-core[parity]'")
 
-from heliofits.core import parity  # noqa: E402
+from pyheliofits.core import parity  # noqa: E402
 
 NY, NX = 12, 16
 

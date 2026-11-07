@@ -57,7 +57,7 @@ CREATE INDEX observations_dataset_time ON observations(dataset_id, date_obs);
 CREATE TABLE queries (
     id          INTEGER PRIMARY KEY,
     source      TEXT NOT NULL,      -- e.g. "fido", "local"
-    query_json  TEXT NOT NULL,      -- canonical JSON, see heliofits.core.query
+    query_json  TEXT NOT NULL,      -- canonical JSON, see pyheliofits.core.query
     created_at  TEXT NOT NULL
 );
 
@@ -257,7 +257,7 @@ INSERT OR IGNORE INTO file_sources(url, file_id, recorded_at)
     SELECT source_url, id, ingested_at FROM files WHERE source_url IS NOT NULL AND source_url != '';
 """
 
-# Version 7: the per-frame bodies tag (heliofits.core.bodies): which solar-system bodies each
+# Version 7: the per-frame bodies tag (pyheliofits.core.bodies): which solar-system bodies each
 # file's own WCS puts in its field, so "a date without the Moon" is a query. A file without a row
 # is untagged, not body-free. Additive: reader_compat stays 1.
 SCHEMA_V7 = """
@@ -349,7 +349,7 @@ def migrate(conn: sqlite3.Connection, backup_to: Path | None = None) -> None:
         return
     if current > 0 and backup_to is not None:
         # The index as it was before this HelioFITS Core changed it, so a migration that goes
-        # wrong costs nothing: heliad.sqlite.schema4.bak, say. An older backup is kept.
+        # wrong costs nothing: hfcore.sqlite.schema4.bak, say. An older backup is kept.
         target = backup_to.with_name(f"{backup_to.name}.schema{current}.bak")
         if not target.exists():
             copy = sqlite3.connect(target)

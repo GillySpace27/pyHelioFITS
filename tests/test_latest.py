@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from heliofits.core import cli, jobs, latest, rpc, sources, upgrade
-from heliofits.core.library import Library
-from heliofits.core.rpc import Server
+from pyheliofits.core import cli, jobs, latest, rpc, sources, upgrade
+from pyheliofits.core.library import Library
+from pyheliofits.core.rpc import Server
 from tests.conftest import aia_header, write_fits
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
@@ -226,7 +226,7 @@ def test_cli_rejects_a_duration_it_cannot_read(released, capsys):
 
 
 def _session(tmp_path, root) -> Path:
-    text = (FIXTURES / "studio-session-heliad-and-helioviewer.jhv").read_text(encoding="utf-8")
+    text = (FIXTURES / "studio-session-library-and-helioviewer.jhv").read_text(encoding="utf-8")
     path = tmp_path / "session.jhv"
     path.write_text(text.replace("@LIBRARY@", Path(root).resolve().as_posix()), encoding="utf-8")
     return path
@@ -237,9 +237,9 @@ def test_template_refresh_reads_a_studio_session(released, tmp_path, capsys):
     session = _session(tmp_path, root)
     code, out, _ = run(capsys, "--library", str(root), "--json", "template", "refresh", str(session), "--dry-run")
     assert code == 0
-    heliad_layer, helioviewer_layer = json.loads(out)
-    assert heliad_layer["layer"] == "SDO AIA 193" and heliad_layer["dataset_key"] == AIA
-    assert heliad_layer["status"] == "would_queue" and heliad_layer["newest_remote"] == NEWEST
+    library_layer, helioviewer_layer = json.loads(out)
+    assert library_layer["layer"] == "SDO AIA 193" and library_layer["dataset_key"] == AIA
+    assert library_layer["status"] == "would_queue" and library_layer["newest_remote"] == NEWEST
     assert helioviewer_layer == {"layer": "AIA 171 (Helioviewer)", "status": "skipped",
                                  "reason": "not a library dataset"}
     code, out, _ = run(capsys, "--library", str(root), "template", "refresh", str(session), "--dry-run")
@@ -271,8 +271,8 @@ def test_template_refresh_method_takes_the_session_document(server, lib, src, tm
     _fill(lib, src)
     server.jobs._modules["fido"] = Archive(ARCHIVE_TIMES)
     document = json.loads(_session(tmp_path, lib.root).read_text(encoding="utf-8"))
-    heliad_layer, helioviewer_layer = server.methods["template.refresh"](session=document, dry_run=True)
-    assert heliad_layer["layer"] == "SDO AIA 193" and heliad_layer["status"] == "would_queue"
+    library_layer, helioviewer_layer = server.methods["template.refresh"](session=document, dry_run=True)
+    assert library_layer["layer"] == "SDO AIA 193" and library_layer["status"] == "would_queue"
     assert helioviewer_layer["status"] == "skipped"
     assert "template.refresh" in rpc.describe()
 

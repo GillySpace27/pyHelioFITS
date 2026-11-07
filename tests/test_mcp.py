@@ -5,9 +5,9 @@ import anyio
 import pytest
 from mcp.client import Client
 
-from heliofits import mcp as hmcp
-from heliofits.studio import Studio
-from heliofits.testing import FakeStudio
+from pyheliofits import mcp as hmcp
+from pyheliofits.studio import Studio
+from pyheliofits.testing import FakeStudio
 
 
 @pytest.fixture
@@ -16,7 +16,7 @@ def fake(tmp_path, monkeypatch):
         monkeypatch.setenv("HFSTUDIO_API", str(f.endpoint_file(tmp_path / "api.json")))
         monkeypatch.setenv("HFCORE_HOME", str(tmp_path / "home"))
         monkeypatch.setenv("HFCORE_LIBRARY", str(tmp_path / "lib"))
-        from heliofits.core.library import Library
+        from pyheliofits.core.library import Library
         Library.open(tmp_path / "lib").close()
         yield f
 
@@ -31,7 +31,7 @@ def test_tools_listed_and_flagged(fake):
     assert tools["studio_newSession"].annotations.destructive_hint
     assert tools["cache_library_delete"].annotations.destructive_hint
     assert tools["cache_library_stats"].annotations.read_only_hint
-    assert "cache_heliad_hello" not in tools
+    assert "cache_search" not in tools  # RPC aliases are not tools
 
 
 def test_call_studio_and_cache(fake):

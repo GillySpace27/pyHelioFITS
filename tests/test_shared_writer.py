@@ -19,9 +19,9 @@ import pytest
 from conftest import aia_header, write_fits
 from test_blockers import QUERY, FakeSource
 
-from heliofits.core import share
-from heliofits.core.library import Library
-from heliofits.core.rpc import Server
+from pyheliofits.core import share
+from pyheliofits.core.library import Library
+from pyheliofits.core.rpc import Server
 
 SRC = Path(__file__).resolve().parents[1] / "src"
 
@@ -33,7 +33,7 @@ class Core:
         env = {**os.environ, "HFCORE_HOME": str(home),
                "PYTHONPATH": os.pathsep.join([str(SRC), os.environ.get("PYTHONPATH", "")])}
         self.proc = subprocess.Popen(
-            [sys.executable, "-m", "heliofits.core", "--library", str(root), "serve"],
+            [sys.executable, "-m", "pyheliofits.core", "--library", str(root), "serve"],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
         self.lines: queue.Queue = queue.Queue()
         threading.Thread(target=self._read, daemon=True).start()
