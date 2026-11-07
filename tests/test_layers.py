@@ -7,9 +7,9 @@ import json
 
 import pytest
 
-from heliofits.core import cli, jobs, layers
-from heliofits.core.library import Library
-from heliofits.core.rpc import Server
+from pyheliofits.core import cli, jobs, layers
+from pyheliofits.core.library import Library
+from pyheliofits.core.rpc import Server
 from conftest import aia_header, write_fits
 from test_upgrade import Archive
 

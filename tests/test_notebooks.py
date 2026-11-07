@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from heliofits import cache, studio
-from heliofits.testing import FakeStudio
+from pyheliofits import cache, studio
+from pyheliofits.testing import FakeStudio
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))

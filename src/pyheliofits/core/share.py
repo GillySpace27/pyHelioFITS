@@ -32,7 +32,7 @@ from typing import TextIO
 
 from .rpc import encode
 
-ENDPOINT = ".heliad.endpoint"  # name kept through the rename: cores before and after it must find one another
+ENDPOINT = ".heliad.endpoint"  # pre-rename name kept on purpose, with .heliad.lock: see library._RootLock
 WAIT_FOR_WRITER = 5.0  # seconds a relay waits for a writer that has the lock but no endpoint yet
 
 

@@ -1,4 +1,4 @@
-"""The hfcore command (heliad, its old name, runs it too).
+"""The hfcore command.
 
     hfcore [--library DIR] [--json] COMMAND ...
 

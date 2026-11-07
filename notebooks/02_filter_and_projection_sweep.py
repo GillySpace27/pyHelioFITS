@@ -7,7 +7,7 @@
 # %%
 from pathlib import Path
 
-from heliofits import studio
+from pyheliofits import studio
 
 OUT = Path("hfs-out/sweep")
 OUT.mkdir(parents=True, exist_ok=True)

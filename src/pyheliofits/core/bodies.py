@@ -23,7 +23,7 @@ from dataclasses import dataclass
 BODIES = ("moon", "mercury", "venus", "earth", "mars", "jupiter", "saturn", "uranus", "neptune")
 NEAR_EARTH_KM = 1.0e6  # an observer within this of Earth's centre does not see Earth as a body
 METHOD = "wcs-footprint-1"  # bump when the rule changes, so stale tags can be found
-NEEDS_SUNPY = "the per-frame bodies tag needs sunpy (pip install 'heliofits[archives]')"
+NEEDS_SUNPY = "the per-frame bodies tag needs sunpy (pip install 'pyheliofits[archives]')"
 
 
 class Unavailable(RuntimeError):

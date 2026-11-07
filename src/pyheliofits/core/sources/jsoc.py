@@ -4,7 +4,7 @@ Fido reaches JSOC too; this route exists for what Fido does not expose well:
 an explicit record set (any series, prime keys, cadence) exported as FITS
 with headers attached. JSOC requires an email address registered at
 http://jsoc.stanford.edu/ajax/register_email.html, taken from the jsoc_email
-setting or HFCORE_JSOC_EMAIL (HELIAD_JSOC_EMAIL, its old name, still works).
+setting or HFCORE_JSOC_EMAIL.
 
 Written against drms 0.9 (Client(email=), Client.export, ExportRequest.wait
 and .download); not run against JSOC from the build container, which cannot

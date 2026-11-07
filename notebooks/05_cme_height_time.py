@@ -16,8 +16,8 @@ from pathlib import Path
 
 import numpy as np
 
-from heliofits import studio
-from heliofits.frames import load_dump
+from pyheliofits import studio
+from pyheliofits.frames import load_dump
 
 OUT = Path("hfs-out/cme")
 OUT.mkdir(parents=True, exist_ok=True)

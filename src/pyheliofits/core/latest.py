@@ -47,7 +47,7 @@ DEFAULT_SPAN_S = 7200            # 2 hours
 DEFAULT_LOOKBACK_S = 3 * 86400   # 3 days
 
 STATE_KEY = "org.helioviewer.jhv.state"
-NOT_HELIAD = "not a library dataset"
+NOT_LIBRARY = "not a library dataset"
 
 # What an entry's status is; "would_queue" is a dry run's "queued".
 STATUSES = ("queued", "would_queue", "up_to_date", "no_query", "archive_error", "not_found")
@@ -236,6 +236,6 @@ def refresh(lib: Library, resolve, runner, document, *, span_s=DEFAULT_SPAN_S,
     for layer, uids in found:
         name = layer.get("name")
         if not uids:
-            out.append({"layer": name, "status": "skipped", "reason": NOT_HELIAD})
+            out.append({"layer": name, "status": "skipped", "reason": NOT_LIBRARY})
         out += [{"layer": name, **entries[uid]} for uid in uids]
     return out

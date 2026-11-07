@@ -10,9 +10,9 @@ import sys
 import pytest
 from conftest import aia_header, write_fits
 
-from heliofits.core import cli, library, views
-from heliofits.core.library import Library, clone_or_copy, fits_name
-from heliofits.core.rpc import Server
+from pyheliofits.core import cli, library, views
+from pyheliofits.core.library import Library, clone_or_copy, fits_name
+from pyheliofits.core.rpc import Server
 
 
 def _bare(src, name, wave, gz=False):
@@ -46,7 +46,7 @@ def test_ingest_stores_a_bare_digest_with_a_suffix(lib, src):
 
 @pytest.fixture
 def legacy(lib, src, monkeypatch):
-    """A library stored the way HelioFITS Core (then Heliad) did before: bare names kept bare."""
+    """A library stored the way HelioFITS Core did before: bare names kept bare."""
     monkeypatch.setattr(library, "fits_name", lambda name, path: name)
     rows = [lib.ingest(_bare(src, "0123abcd", 171, gz=True)), lib.ingest(_bare(src, "4567ef01", 193))]
     monkeypatch.undo()

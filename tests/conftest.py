@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 from astropy.io import fits
 
-from heliofits.core.library import Library
+from pyheliofits.core.library import Library
 
 
 def write_fits(path, header: dict, compressed: bool = False):
@@ -55,14 +55,14 @@ def _no_real_config(tmp_path, monkeypatch):
     """Every test's config folder is its own temp folder. A test that opened a Library with no
     HFCORE_HOME once wrote the machine's real config.json, pointing it at a pytest library
     (Gilly's Mac, 2026-10-25); a test that wants another folder sets HFCORE_HOME itself."""
-    for name in ("HELIAD_HOME", "HELIAD_LIBRARY", "HELIAD_JSOC_EMAIL", "HFCORE_LIBRARY", "HFCORE_JSOC_EMAIL"):
+    for name in ("HFCORE_LIBRARY", "HFCORE_JSOC_EMAIL"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("HFCORE_HOME", str(tmp_path / "appsupport"))
 
 
 @pytest.fixture
 def lib(tmp_path, monkeypatch):
-    for name in ("HELIAD_HOME", "HELIAD_LIBRARY", "HELIAD_JSOC_EMAIL", "HFCORE_LIBRARY"):
+    for name in ("HFCORE_LIBRARY",):
         monkeypatch.delenv(name, raising=False)  # nothing from the machine running the tests
     monkeypatch.setenv("HFCORE_HOME", str(tmp_path / "appsupport"))
     with Library.open(tmp_path / "library") as library:

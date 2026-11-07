@@ -1,6 +1,6 @@
 # HelioFITS Cache Manager
 
-The Mac app for HelioFITS Core (both were called Heliad until 2026-10-25): browse the library, search the archives, download, delete. It runs the
+The Mac app for HelioFITS Core: browse the library, search the archives, download, delete. It runs the
 Python core (`hfcore serve`) as a child process and talks JSON-RPC to it over pipes; the
 core is the only thing that writes to the library.
 
@@ -31,10 +31,10 @@ What it shows:
     swift test                  # CacheManagerKit tests; set HFCORE_CORE and HFCORE_TEST_LIBRARY
                                 # to also run against a real core
     swift run CacheManager      # run without a bundle
-    tools/make_app.sh           # build/HelioFITS Cache Manager.app, signed ad hoc, with the hfcore:// and heliad:// schemes
+    tools/make_app.sh           # build/HelioFITS Cache Manager.app, signed ad hoc, with the hfcore:// scheme
 
-Which core it runs: `HFCORE_CORE` (or `HELIAD_CORE`, its old name), then the `corePath` setting, then a Python bundled in
-the app, then `~/Documents/NWRA/heliad/.venv/bin/heliad`. Which library: the core's
+Which core it runs: `HFCORE_CORE`, then the `corePath` setting, then a Python bundled in
+the app, then `~/Documents/NWRA/pyHelioFITS/.venv/bin/hfcore`. Which library: the core's
 default (its config.json) unless the `libraryPath` setting names one. Both settings can
 be given on the command line for one run: `CacheManager -corePath PATH -libraryPath DIR`.
 
@@ -45,7 +45,7 @@ command line it holds for that run only and is not saved.
 
 ## Packaging
 
-    tools/bundle_python.sh      # build/python: a standalone CPython 3.12 with heliofits[archives]
+    tools/bundle_python.sh      # build/python: a standalone CPython 3.12 with pyheliofits[archives]
     PYTHON_DIR=build/python SIGN_IDENTITY="Developer ID Application: ..." tools/make_app.sh
 
 The first run on Gilly's Mac (2026-10-18) gave a 213 MB app (68 MB zipped) with 116

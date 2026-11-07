@@ -61,7 +61,6 @@ ALIASES: dict[str, str] = {
     "search": "archive.search",
     "query.from_url": "link.parse",
     "dataset.from_url": "link.parse",
-    "heliad.hello": "core.hello",  # the name from before the rename
 }
 
 
@@ -116,7 +115,7 @@ API: dict[str, tuple[str, str]] = {
     "download.cancel": ("job_id", "Cancel a queued or running job."),
     "download.retry": ("job_id", "Queue a partial or failed job again; it fetches only what is missing."),
     "archive.search": ("query, source='fido', bins=240", "Ask an archive what it holds for a query; downloads nothing."),
-    "link.parse": ("url", "What an hfcore:// (or older heliad://) link asks for: an action and a query, or a dataset and a range."),
+    "link.parse": ("url", "What an hfcore:// link asks for: an action and a query, or a dataset and a range."),
     "view.create": ("name, description=None, dataset_keys=None, start=None, end=None, observation_ids=None",
                     "Create a named view (an event, say) or add observations to one."),
     "view.materialize": ("name", "Build a view's folder of links and its manifest.csv."),
@@ -131,7 +130,6 @@ API: dict[str, tuple[str, str]] = {
     "search": ("query, source='fido', bins=240", "Old name of archive.search; answers the same."),
     "query.from_url": ("url", "Old name of link.parse; answers the same."),
     "dataset.from_url": ("url", "Old name of link.parse; answers the same."),
-    "heliad.hello": ("", "Old name of core.hello, from before HelioFITS Core was renamed; answers the same."),
 }
 
 # Sent without an id, to every client of the core.
@@ -426,7 +424,7 @@ class Server:
             raise RpcError(INVALID_PARAMS, str(exc))
 
     def link_parse(self, url: str) -> dict:
-        """link.parse: an hfcore://search or hfcore://get link (or heliad://, the old scheme) gives {"action", "query"};
+        """link.parse: an hfcore://search or hfcore://get link gives {"action", "query"};
         an hfcore://dataset/<uid> link gives {"action": "dataset", "dataset_uid", "start",
         "end", "dataset"} (dataset null when this library has no such uid)."""
         try:

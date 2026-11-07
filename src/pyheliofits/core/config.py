@@ -16,49 +16,34 @@ from pathlib import Path
 CONFIG_NAME = "config.json"
 SETTINGS_NAME = "settings.json"
 DB_NAME = "hfcore.sqlite"
-# Names from before HelioFITS Core was renamed (it was HelioFITS Core). They are still read, never
-# written for something new, so a library, config or script made under the old name keeps working.
-LEGACY_DB_NAME = "heliad.sqlite"
-LEGACY_LIBRARY_NAME = "HeliadLibrary"
 
 
 def env(name: str) -> str | None:
-    """HFCORE_<name>, or the old HELIAD_<name> when that is the one set."""
-    return os.environ.get(f"HFCORE_{name}") or os.environ.get(f"HELIAD_{name}") or None
+    """HFCORE_<name> when it is set."""
+    return os.environ.get(f"HFCORE_{name}") or None
 
 
-def _support_dirs() -> tuple[Path, Path]:
-    """(this platform's per-user settings folder for HelioFITS Core, the one Heliad used)."""
+def _support_dir() -> Path:
+    """This platform's per-user settings folder for HelioFITS Core."""
     home = Path.home()
     if sys.platform == "darwin":
-        base = home / "Library" / "Application Support"
-        return base / "HelioFITS Core", base / "Heliad"
+        return home / "Library" / "Application Support" / "HelioFITS Core"
     if sys.platform == "win32":
-        base = Path(os.environ.get("APPDATA", home / "AppData" / "Roaming"))
-        return base / "HelioFITS Core", base / "Heliad"
-    base = Path(os.environ.get("XDG_CONFIG_HOME", home / ".config"))
-    return base / "hfcore", base / "heliad"
+        return Path(os.environ.get("APPDATA", home / "AppData" / "Roaming")) / "HelioFITS Core"
+    return Path(os.environ.get("XDG_CONFIG_HOME", home / ".config")) / "hfcore"
 
 
 def app_support_dir() -> Path:
-    """Per-user directory for the config and settings: HFCORE_HOME (or HELIAD_HOME) when set,
-    else the platform's folder. A computer set up before the rename keeps its old folder until
-    the new one has a config, so its library and every older reader stay where they were."""
+    """Per-user directory for the config and settings: HFCORE_HOME when set, else the platform's folder."""
     override = env("HOME")
     if override:
         return Path(override).expanduser()
-    new, old = _support_dirs()
-    if not (new / CONFIG_NAME).exists() and ((old / CONFIG_NAME).exists() or (old / SETTINGS_NAME).exists()):
-        return old
-    return new
+    return _support_dir()
 
 
 def default_library_root() -> Path:
-    """~/HelioFITSLibrary, or ~/HeliadLibrary where a library made before the rename is."""
-    new, old = Path.home() / "HelioFITSLibrary", Path.home() / LEGACY_LIBRARY_NAME
-    if not new.exists() and (old / LEGACY_DB_NAME).exists():
-        return old
-    return new
+    """~/HelioFITSLibrary."""
+    return Path.home() / "HelioFITSLibrary"
 
 
 @dataclass
@@ -79,10 +64,7 @@ class Config:
 
     @property
     def db_path(self) -> Path:
-        """The index: hfcore.sqlite, or heliad.sqlite in a library made before the rename."""
-        legacy = self.library_root / LEGACY_DB_NAME
-        if not (self.library_root / DB_NAME).exists() and legacy.exists():
-            return legacy
+        """The index, hfcore.sqlite."""
         return self.library_root / DB_NAME
 
     def to_json(self, schema_version: int) -> dict:
@@ -98,7 +80,7 @@ def config_path() -> Path:
 
 
 def load(library_root: str | os.PathLike | None = None) -> Config:
-    """Explicit root wins, then HFCORE_LIBRARY (or HELIAD_LIBRARY), then the config file, then the default."""
+    """Explicit root wins, then HFCORE_LIBRARY, then the config file, then the default."""
     if library_root is not None:
         return Config(Path(library_root).expanduser().resolve())
     named = env("LIBRARY")
@@ -130,7 +112,7 @@ def write(cfg: Config, schema_version: int) -> Path:
 # Per-user preferences that are not part of the reader handshake, such as the
 # email address JSOC requires for exports. Environment variables win.
 
-SETTING_ENV = {"jsoc_email": "JSOC_EMAIL"}  # HFCORE_JSOC_EMAIL, or HELIAD_JSOC_EMAIL
+SETTING_ENV = {"jsoc_email": "JSOC_EMAIL"}  # HFCORE_JSOC_EMAIL
 
 
 def settings_path() -> Path:

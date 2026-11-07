@@ -5,7 +5,7 @@
 # downloads from the archive, so the dry-run steps come first.
 
 # %%
-from heliofits import cache, studio
+from pyheliofits import cache, studio
 
 # Pick a dataset from the cache (the first one here; choose yours).
 datasets = cache.library_datasets()

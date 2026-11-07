@@ -1,6 +1,6 @@
 #!/bin/bash
 # Build HelioFITS Cache Manager.app from this Swift package: a release build of the
-# CacheManager binary, wrapped with an Info.plist (bundle id, the hfcore:// and heliad:// URL
+# CacheManager binary, wrapped with an Info.plist (bundle id, the hfcore:// URL
 # schemes) and signed.
 #
 #   app/tools/make_app.sh                      # ad hoc signature, for this Mac
@@ -61,7 +61,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <array>
         <dict>
             <key>CFBundleURLName</key><string>${BUNDLE_ID}</string>
-            <key>CFBundleURLSchemes</key><array><string>hfcore</string><string>heliad</string></array>
+            <key>CFBundleURLSchemes</key><array><string>hfcore</string></array>
         </dict>
     </array>
 </dict>
@@ -70,7 +70,7 @@ PLIST
 
 if [ -n "${PYTHON_DIR:-}" ]; then
     # A relocatable Python (python-build-standalone) with HelioFITS Core and its dependencies
-    # installed; the app runs it as Contents/Resources/python/bin/python3 -m heliofits.core.
+    # installed; the app runs it as Contents/Resources/python/bin/python3 -m pyheliofits.core.
     cp -R "$PYTHON_DIR" "$APP/Contents/Resources/python"
     find "$APP/Contents/Resources/python" -name __pycache__ -type d -prune -exec rm -rf {} +
 fi

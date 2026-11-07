@@ -8,11 +8,11 @@ import time
 
 import pytest
 
-from heliofits.core import config, db, fitsmeta, jobs, library, rpc, views
-from heliofits.core.library import Library, ReadOnlyLibrary
-from heliofits.core.query import Query
-from heliofits.core.rpc import Server
-from heliofits.core.sources import jsoc
+from pyheliofits.core import config, db, fitsmeta, jobs, library, rpc, views
+from pyheliofits.core.library import Library, ReadOnlyLibrary
+from pyheliofits.core.query import Query
+from pyheliofits.core.rpc import Server
+from pyheliofits.core.sources import jsoc
 from conftest import aia_header, punch_header, write_fits
 
 ASPIICS = {"OBSRVTRY": "Proba-3", "INSTRUME": "ASPIICS", "LEVEL": "L3", "WAVEUNIT": "Angstrom",
@@ -53,7 +53,7 @@ def test_library_flag_does_not_redirect_the_default(tmp_path, monkeypatch):
 
 
 def test_cli_read_commands_run_beside_a_writer(lib, src, capsys):
-    from heliofits.core import cli
+    from pyheliofits.core import cli
     lib.ingest(write_fits(src / "a.fits", aia_header()))
     assert cli.main(["--library", str(lib.root), "--json", "stats"]) == 0
     assert json.loads(capsys.readouterr().out)["files"] == 1

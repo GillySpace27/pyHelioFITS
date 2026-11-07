@@ -3,20 +3,17 @@ import Foundation
 /// Where the app finds the Python core, first match wins:
 ///
 /// 1. `HFCORE_CORE` in the environment: the `hfcore` command, or a Python that has HelioFITS Core
-///    installed. `HELIAD_CORE`, its name from before the rename, is read when it is not set, and a
-///    Python named there is run as `-m heliad`, which cores from before the rename understand too.
+///    installed.
 /// 2. The `corePath` default (Settings, or `-corePath PATH` on the command line), the same two kinds.
 /// 3. The Python bundled in the app (`Contents/Resources/python/bin/python3`).
-/// 4. A development checkout's virtual environment, `~/Documents/NWRA/heliad/.venv/bin/heliad`
-///    (Gilly's checkout keeps the folder name the repository was cloned under).
+/// 4. A development checkout's virtual environment, `~/Documents/NWRA/pyHelioFITS/.venv/bin/hfcore`.
 ///
 /// The library is the core's default (its config.json) unless `libraryPath` is set
 /// (Settings, or `-libraryPath PATH` on the command line).
 public enum CoreLocator {
-    public static let devCheckout = "Documents/NWRA/heliad/.venv/bin/heliad"
-    /// The core's Python package, and its name from before the rename (still importable).
-    public static let module = "heliofits.core"
-    public static let legacyModule = "heliad"
+    public static let devCheckout = "Documents/NWRA/pyHelioFITS/.venv/bin/hfcore"
+    /// The core's Python package.
+    public static let module = "pyheliofits.core"
 
     public static func launch(library: String?,
                               corePath: String?,
@@ -29,8 +26,6 @@ public enum CoreLocator {
         var candidates: [(String, Bool, String)] = []  // path, bundled, the module a Python runs
         if let env = environment["HFCORE_CORE"], !env.isEmpty {
             candidates.append((expand(env, home), false, module))
-        } else if let env = environment["HELIAD_CORE"], !env.isEmpty {
-            candidates.append((expand(env, home), false, legacyModule))
         }
         if let corePath, !corePath.isEmpty { candidates.append((expand(corePath, home), false, module)) }
         if let resources = bundle.resourceURL {

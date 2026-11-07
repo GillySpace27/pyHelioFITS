@@ -31,8 +31,8 @@ class ArchiveError(RuntimeError):
 
 
 SOURCES = {
-    "fido": "heliofits.core.sources.fido",  # VSO, JSOC and every client sunpy registers
-    "jsoc": "heliofits.core.sources.jsoc",  # JSOC export by record set, through drms
+    "fido": "pyheliofits.core.sources.fido",  # VSO, JSOC and every client sunpy registers
+    "jsoc": "pyheliofits.core.sources.jsoc",  # JSOC export by record set, through drms
 }
 
 

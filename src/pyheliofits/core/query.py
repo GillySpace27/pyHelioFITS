@@ -12,7 +12,7 @@ from dataclasses import asdict, dataclass, field, fields
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
 URL_SCHEME = "hfcore"
-URL_SCHEMES = (URL_SCHEME, "heliad")  # heliad:// is the scheme from before the rename, still read
+URL_SCHEMES = (URL_SCHEME,)
 URL_ACTIONS = ("search", "get")  # open the app's search filled in, or also start the download
 _NUMBERS = {"wavelength", "wavelength_max", "sample_s"}
 

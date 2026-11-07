@@ -1,8 +1,8 @@
 import pytest
 
-from heliofits import CommandError, StudioNotRunning
-from heliofits.studio import Studio, snake
-from heliofits.testing import FakeStudio
+from pyheliofits import CommandError, StudioNotRunning
+from pyheliofits.studio import Studio, snake
+from pyheliofits.testing import FakeStudio
 
 
 @pytest.fixture
@@ -50,10 +50,10 @@ def test_not_running(tmp_path, monkeypatch):
 
 
 def test_cache_stats(tmp_path, monkeypatch):
-    from heliofits import cache
+    from pyheliofits import cache
     monkeypatch.setenv("HFCORE_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("HFCORE_LIBRARY", str(tmp_path / "lib"))
-    from heliofits.core.library import Library
+    from pyheliofits.core.library import Library
     Library.open(tmp_path / "lib").close()
     assert cache.library_stats()["files"] == 0
     with pytest.raises(CommandError):
@@ -61,9 +61,9 @@ def test_cache_stats(tmp_path, monkeypatch):
 
 
 def test_cache_runs_a_queued_job_to_the_end(tmp_path, monkeypatch):
-    from heliofits import cache
-    from heliofits.core import jobs
-    from heliofits.core.library import Library
+    from pyheliofits import cache
+    from pyheliofits.core import jobs
+    from pyheliofits.core.library import Library
     monkeypatch.setenv("HFCORE_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("HFCORE_LIBRARY", str(tmp_path / "lib"))
     Library.open(tmp_path / "lib").close()

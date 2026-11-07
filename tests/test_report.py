@@ -3,8 +3,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from heliofits.core import record as hfrecord
-from heliofits.core import report
+from pyheliofits.core import record as hfrecord
+from pyheliofits.core import report
 
 FIXTURE = Path(__file__).parent / "fixtures" / "example-studio-connect-still.hfrec.json"
 SRC = Path(__file__).resolve().parents[1] / "src"
@@ -68,7 +68,7 @@ def test_read_gives_the_view_a_report_block(tmp_path):
 def test_cli_record_show(tmp_path):
     side = tmp_path / "x.hfrec.json"
     side.write_text(FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
-    run = lambda *a: subprocess.run([sys.executable, "-m", "heliofits.core", "record", "show", str(side), *a],  # noqa: E731
+    run = lambda *a: subprocess.run([sys.executable, "-m", "pyheliofits.core", "record", "show", str(side), *a],  # noqa: E731
                                     capture_output=True, text=True, env={"PYTHONPATH": str(SRC), "PATH": "",
                                          "HOME": str(tmp_path), "USERPROFILE": str(tmp_path)})
     for fmt, needle in (("text", "LAYERS"), ("methods", "processed with"), ("tex", "itemize"), ("python", "sunpy")):

@@ -2,11 +2,11 @@
 # # 1. Load a dataset and step through time
 #
 # Needs a running HelioFITS Studio with its scripting API on (Settings > General > Local API), or the
-# fake one: `python -m heliofits.testing` and `export HFSTUDIO_API=...` as it prints.
+# fake one: `python -m pyheliofits.testing` and `export HFSTUDIO_API=...` as it prints.
 # The `sdo` times below are examples; change them.
 
 # %%
-from heliofits import studio
+from pyheliofits import studio
 
 START, END = "2025-09-21T22:00", "2025-09-21T23:00"
 

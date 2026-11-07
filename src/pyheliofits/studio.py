@@ -33,7 +33,7 @@ def bundled_commands() -> list[dict]:
     """The command list shipped with this package: a copy of Studio's docs/commands.json, the
     registry's own manifest. A running Studio's own list wins; this is for offline use, docs and
     tests. Studio is the source of the verbs; nothing is added here."""
-    text = resources.files("heliofits").joinpath("data/studio-commands.json").read_text("utf-8")
+    text = resources.files("pyheliofits").joinpath("data/studio-commands.json").read_text("utf-8")
     return json.loads(text)["tools"]
 
 

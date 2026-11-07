@@ -4,8 +4,8 @@ import json
 import shutil
 import sqlite3
 
-from heliofits.core import db
-from heliofits.core.rpc import Server
+from pyheliofits.core import db
+from pyheliofits.core.rpc import Server
 from conftest import aia_header, write_fits
 
 

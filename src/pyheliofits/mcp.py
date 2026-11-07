@@ -22,7 +22,7 @@ from mcp import types
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 
-from heliofits.core import rpc
+from pyheliofits.core import rpc
 
 from . import cache
 from .errors import CommandError, StudioNotRunning
@@ -110,7 +110,7 @@ def build(studio: Studio | None = None, read_only: bool = False, include_ui: boo
         return types.CallToolResult(content=[types.TextContent(type="text", text=json.dumps(result, default=str))],
                                     structured_content=result if isinstance(result, dict) else {"result": result})
 
-    return Server("heliofits", version="0.1.0", on_list_tools=list_tools, on_call_tool=call_tool)
+    return Server("pyheliofits", version="0.1.0", on_list_tools=list_tools, on_call_tool=call_tool)
 
 
 def _fail(text: str) -> types.CallToolResult:

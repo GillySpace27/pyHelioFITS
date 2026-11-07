@@ -1,8 +1,8 @@
-# heliofits: Python client and MCP server
+# pyheliofits: Python client and MCP server
 
-`pip install "heliofits[mcp]"` gives one package with three front ends over the same code:
+`pip install "pyheliofits[mcp]"` gives one package with three front ends over the same code:
 
-    from heliofits import studio, cache
+    from pyheliofits import studio, cache
     studio.seek_time(time="2024-05-10T12:00")   # same as studio.seekTime(...)
     cache.library_stats()                        # runs Core's library.stats in process
 
@@ -15,10 +15,10 @@ alone) when Settings > General > Local API is on; `HFSTUDIO_API` names another f
 `127.0.0.1:<port>` with `Authorization: Bearer <token>`, methods `commands.list` and
 `commands.invoke {id, args}`. Errors carry `data.kind`: unknown-command, invalid-arguments,
 disabled, failed, declined. Destructive commands show a confirmation dialog in Studio.
-Studio's side is `LocalApi` (its docs/local-api.md); `heliofits.testing.FakeStudio` implements the
+Studio's side is `LocalApi` (its docs/local-api.md); `pyheliofits.testing.FakeStudio` implements the
 same protocol for tests and for trying notebooks without Studio.
 
-`heliofits/data/studio-commands.json` is a copy of Studio's `docs/commands.json`, used when Studio
+`pyheliofits/data/studio-commands.json` is a copy of Studio's `docs/commands.json`, used when Studio
 is not running. The client uses a running Studio's own list when there is one.
 
 ## MCP tools
@@ -27,7 +27,7 @@ is not running. The client uses a running Studio's own list when there is one.
 underscores: `cache_library_stats`). Hints: read-only, destructive. Options: `--read-only` hides every
 tool that changes anything; `--include-ui` adds Studio's menu and dialog commands.
 
-Client config example: `{"mcpServers": {"heliofits": {"command": "heliofits-mcp"}}}`.
+Client config example: `{"mcpServers": {"pyheliofits": {"command": "heliofits-mcp"}}}`.
 
 ## Notebooks
 
@@ -40,7 +40,7 @@ Client config example: `{"mcpServers": {"heliofits": {"command": "heliofits-mcp"
 5. beyond the GUI: a height-time curve for each event in a list
 
 They use Studio's data commands (docs/studio-data-verbs.md), which need Studio with Settings >
-General > Local API switched on. Without Studio, try them on the fake: `python -m heliofits.testing`,
+General > Local API switched on. Without Studio, try them on the fake: `python -m pyheliofits.testing`,
 then `export HFSTUDIO_API=<the file it prints>`. The fake's frames are synthetic.
 `tests/test_notebooks.py` runs every notebook against it.
 
