@@ -68,7 +68,7 @@ from .query import Query
 from .sources import ArchiveError
 
 READ_ONLY = {"stats", "datasets", "files", "verify", "collisions", "versions", "jobs", "thumb",
-             "checks", "coverage", "rejected", "cadences"}
+             "checks", "coverage", "rejected", "cadences", "bodies"}
 NO_LIBRARY = {"search", "settings", "api", "record"}
 
 OK, PROBLEM, USAGE, LOCKED = 0, 1, 2, 3
@@ -166,6 +166,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("observation_ids", type=int, nargs="+", metavar="OBSERVATION_ID")
     p = sub.add_parser("rejected", help="rejected observations with their reason")
     p.add_argument("--dataset")
+    p = sub.add_parser("bodies", help="the bodies (Moon, planets) in each frame's field, from the bodies tag")
+    p.add_argument("--dataset")
+    p.add_argument("--start")
+    p.add_argument("--end")
+    p.add_argument("--without", nargs="+", metavar="BODY", help="only tagged frames with none of these (moon ...)")
+    p.add_argument("--with", dest="including", nargs="+", metavar="BODY", help="only tagged frames with all of these")
+    p.add_argument("--limit", type=int)
+    p = sub.add_parser("tag-bodies", help="tag current frames with the bodies in their field (needs sunpy)")
+    p.add_argument("--dataset")
+    p.add_argument("--start")
+    p.add_argument("--end")
+    p.add_argument("--redo", action="store_true", help="tag again frames already tagged")
     p = sub.add_parser("refetch", help="ask the archive again for one observation's frame")
     p.add_argument("observation_id", type=int)
     p = sub.add_parser("cadences", help="compare a dataset's cadence with the archive's")
@@ -349,6 +361,17 @@ def _run(lib: Library, ns, out: "Output") -> int:
         out.show(lib.unreject(ns.observation_ids), _reject_text)
     elif ns.cmd == "rejected":
         out.show(lib.rejected(ns.dataset), _rejected_text)
+    elif ns.cmd == "bodies":
+        out.show(lib.bodies(dataset_key=ns.dataset, start=ns.start, end=ns.end, without=ns.without,
+                            including=ns.including, limit=ns.limit), _bodies_text)
+    elif ns.cmd == "tag-bodies":
+        def progress(i, n):
+            if i == n or i % 100 == 0:
+                print(f"  {i}/{n}", file=sys.stderr)
+        result = lib.tag_bodies(dataset_key=ns.dataset, start=ns.start, end=ns.end, redo=ns.redo, progress=progress)
+        out.show(result, _tag_bodies_text)
+        if result["failed"]:
+            return PROBLEM
     elif ns.cmd == "refetch":
         runner = _runner(lib)
         job = upgrade.refetch(lib, runner, ns.observation_id)
@@ -591,6 +614,21 @@ def _reject_text(r: dict) -> str:
     if r.get("views_rebuilt"):
         line += "\nViews rebuilt: " + ", ".join(r["views_rebuilt"])
     return line
+
+
+def _bodies_text(rows: list[dict]) -> str:
+    if not rows:
+        return "No frames."
+    shown = [{**r, "bodies": ("none" if r["bodies"] == [] else ", ".join(r["bodies"])) if r["bodies"] is not None
+              else ("no solar WCS" if r["tagged"] else "untagged (hfcore tag-bodies)")} for r in rows]
+    return _table(shown, [("observation_id", "Observation"), ("date_obs", "Observed (UTC)"),
+                          ("dataset_key", "Dataset"), ("bodies", "Bodies in field")], right={"observation_id"})
+
+
+def _tag_bodies_text(r: dict) -> str:
+    lines = [f"Tagged {r['tagged']}, no solar WCS {r['no_wcs']}, already tagged {r['skipped']}, failed {r['failed']}."]
+    lines += [f"  file {f['file_id']}: {f['error']}" for f in r["failures"]]
+    return "\n".join(lines)
 
 
 def _rejected_text(rows: list[dict]) -> str:

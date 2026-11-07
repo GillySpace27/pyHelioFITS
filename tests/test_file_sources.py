@@ -71,6 +71,6 @@ def test_schema_5_index_gains_file_sources_from_source_url(tmp_path):
                  "ingested_at, header_json) VALUES ('s', 'store/a.fits', 1, 1, 'a.fits', 'https://a/x', 't', '{}')")
     conn.close()
     conn = db.connect_writer(path)
-    assert db.schema_version(conn) == 6
+    assert db.schema_version(conn) == db.SCHEMA_VERSION
     assert conn.execute("SELECT file_id FROM file_sources WHERE url = 'https://a/x'").fetchone()[0] == 1
     assert db.meta_value(conn, "reader_compat") == "1"
