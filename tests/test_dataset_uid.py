@@ -35,7 +35,7 @@ def test_schema_4_migrates_to_5_minting_a_uid_for_every_row(tmp_path):
     path = tmp_path / "hfcore.sqlite"
     _schema_4(path)
     conn = db.connect_writer(path)
-    assert db.schema_version(conn) == 5 and db.meta_value(conn, "reader_compat") == "1"
+    assert db.schema_version(conn) == db.SCHEMA_VERSION and db.meta_value(conn, "reader_compat") == "1"
     uids = [r[0] for r in conn.execute("SELECT dataset_uid FROM datasets ORDER BY id")]
     assert len(set(uids)) == 2 and all(uuid.UUID(u).version == 4 for u in uids)
     (view_uid,) = conn.execute("SELECT view_uid FROM views").fetchone()

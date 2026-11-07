@@ -70,6 +70,12 @@ to a dataset take the form `hfcore://dataset/<dataset_uid>?start=<iso>&end=<iso>
 Check for these columns and tables before using them: a library not yet opened by
 a HelioFITS Core with schema 5 does not have them.
 
+Schema 6 (still reader_compat 1) adds `file_sources(url, file_id, recorded_at)`: every URL a stored
+file arrived from, a duplicate download's included. A URL that later delivered other bytes points at
+the newer file. A program that downloads by URL finds what it already has with
+`SELECT f.relpath FROM file_sources s JOIN files f ON f.id = s.file_id WHERE s.url = ?`, so it need
+not keep a copy of its own (Studio, with `ingest.path`'s `consume`). Check for the table first.
+
 Files under `store/` are read-only and never rewritten in place. A new version is
 a new file, and `current_files` points at it once its row is committed.
 

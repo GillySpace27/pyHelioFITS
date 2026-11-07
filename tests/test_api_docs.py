@@ -105,7 +105,7 @@ def test_hfcore_api_prints_every_method():
         assert f"  {name}(" in listing.stdout
     assert "docs/api.md" in listing.stdout
     one = run("ingest.path")
-    assert one.returncode == 0 and one.stdout.startswith("ingest.path(path, source_url=None, query=None)")
+    assert one.returncode == 0 and one.stdout.startswith("ingest.path(path, source_url=None, query=None, consume=False)")
     unknown = run("ingest.nothing")
     assert unknown.returncode == 2 and "hfcore api lists them" in unknown.stderr
 
