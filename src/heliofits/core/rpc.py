@@ -85,6 +85,10 @@ API: dict[str, tuple[str, str]] = {
     "library.unreject": ("observation_ids", "Serve rejected observations to readers again."),
     "library.rejected": ("dataset_key=None", "Rejected observations with their reason and current file."),
     "library.refetch": ("observation_id", "Queue a job asking the archive again for one observation's frame."),
+    "library.tag_bodies": ("dataset_key=None, start=None, end=None, redo=False",
+                           "Tag current frames with the solar-system bodies their WCS puts in the field (needs sunpy)."),
+    "library.bodies": ("dataset_key=None, start=None, end=None, without=None, including=None, limit=None",
+                       "Current frames with their bodies tag; filter by bodies absent (without) or present (including)."),
     "dataset.get": ("dataset_uid=None, dataset_key=None",
                     "One dataset by its stable uid or by key (an old key a reindex renamed resolves too), or null."),
     "dataset.resolve": ("key", "{dataset_uid, dataset_key, resolved_by} for a uid, a key or an old key; or null."),
@@ -199,6 +203,11 @@ class Server:
             "library.unreject": lambda observation_ids: lib.unreject(observation_ids),
             "library.rejected": lambda dataset_key=None: lib.rejected(dataset_key),
             "library.refetch": lambda observation_id: upgrade.refetch(lib, self._jobs(), observation_id),
+            "library.tag_bodies": lambda dataset_key=None, start=None, end=None, redo=False: lib.tag_bodies(
+                dataset_key=dataset_key, start=start, end=end, redo=redo),
+            "library.bodies": lambda dataset_key=None, start=None, end=None, without=None, including=None, limit=None:
+                lib.bodies(dataset_key=dataset_key, start=start, end=end, without=without, including=including,
+                           limit=limit),
             "dataset.get": self.dataset_get,
             "dataset.resolve": lambda key: lib.resolve_dataset(key),
             "dataset.query": lambda dataset_key: upgrade.dataset_query(lib, dataset_key),

@@ -19,7 +19,7 @@ import uuid
 from pathlib import Path
 from typing import Callable
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 READER_COMPAT = 1  # see the module docstring
 
 SCHEMA_V1 = """
@@ -257,8 +257,22 @@ INSERT OR IGNORE INTO file_sources(url, file_id, recorded_at)
     SELECT source_url, id, ingested_at FROM files WHERE source_url IS NOT NULL AND source_url != '';
 """
 
+# Version 7: the per-frame bodies tag (heliofits.core.bodies): which solar-system bodies each
+# file's own WCS puts in its field, so "a date without the Moon" is a query. A file without a row
+# is untagged, not body-free. Additive: reader_compat stays 1.
+SCHEMA_V7 = """
+CREATE TABLE file_bodies (
+    file_id      INTEGER PRIMARY KEY REFERENCES files(id),
+    bodies       TEXT,            -- JSON list of the bodies in the field; NULL: no solar sky WCS
+    detail_json  TEXT NOT NULL,   -- every body's pixel, elongation, in_field and hidden
+    method       TEXT NOT NULL,   -- bodies.METHOD when tagged
+    tagged_at    TEXT NOT NULL
+);
+"""
 
-MIGRATIONS: dict[int, str] = {1: SCHEMA_V1, 2: SCHEMA_V2, 3: SCHEMA_V3, 4: SCHEMA_V4, 5: SCHEMA_V5, 6: SCHEMA_V6}
+
+MIGRATIONS: dict[int, str] = {1: SCHEMA_V1, 2: SCHEMA_V2, 3: SCHEMA_V3, 4: SCHEMA_V4, 5: SCHEMA_V5, 6: SCHEMA_V6,
+                              7: SCHEMA_V7}
 # Steps SQL cannot express, run after a version's SQL in the same transaction.
 MIGRATION_STEPS: dict[int, Callable[[sqlite3.Connection], None]] = {5: _mint_uids}
 

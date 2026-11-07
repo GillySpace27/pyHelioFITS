@@ -79,6 +79,7 @@ through VSO) run against the real archives; the JSOC export route written but no
     hfcore coverage --start 2025-09-21T16:00 --end 2025-09-21T17:00 --bins 12
     hfcore reject 42 --reason "smeared by a flare"  # readers stop seeing it; unreject brings it back
     hfcore cadences sdo/aia/-/-/1/193               # the archive's cadence against the library's
+    hfcore tag-bodies && hfcore bodies --without moon  # frames whose field holds no Moon (needs sunpy)
     hfcore upgrade sdo/aia/-/-/1/193 --sample 12    # shows the plan; add --yes to fetch what is missing
     hfcore reindex --dry-run && hfcore reindex
     hfcore latest sdo/aia/-/-/1/193 --span 2h      # fetch the 2 h before the archive's newest frame

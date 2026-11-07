@@ -591,6 +591,74 @@ class Library:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    def tag_bodies(self, *, dataset_key: str | None = None, start: str | None = None,
+                   end: str | None = None, redo: bool = False, progress=None) -> dict:
+        """Tag the current file of every observation with the bodies in its field (heliofits.core.bodies).
+
+        Files already tagged by the current method are skipped unless redo. Needs sunpy; without
+        it, raises ValueError saying so. Returns counts: tagged, no_wcs (nothing to say about the
+        frame), skipped, failed, and the first few failures.
+        """
+        from . import bodies
+        self._require_writer()
+        try:
+            import sunpy.coordinates  # noqa: F401  (fail before reading a single file)
+        except ImportError as exc:
+            raise ValueError(bodies.NEEDS_SUNPY) from exc
+        rows = self.current_files(dataset_key=dataset_key, start=start, end=end)
+        done = set() if redo else {r[0] for r in self.reader.execute(
+            "SELECT file_id FROM file_bodies WHERE method = ?", (bodies.METHOD,))}
+        counts = {"tagged": 0, "no_wcs": 0, "skipped": 0, "failed": 0}
+        failures = []
+        for i, row in enumerate(rows, 1):
+            if row["file_id"] in done:
+                counts["skipped"] += 1
+            else:
+                try:
+                    header, _, _ = fitsmeta.read_headers(self.abspath(row["relpath"]))
+                    placed = bodies.tag(header)
+                except (OSError, ValueError, TypeError, ArithmeticError) as exc:  # one bad file must not stop the run
+                    counts["failed"] += 1
+                    if len(failures) < 20:
+                        failures.append({"file_id": row["file_id"], "error": f"{type(exc).__name__}: {exc}"})
+                else:
+                    names = None if placed is None else json.dumps(bodies.names(placed))
+                    detail = json.dumps([p.to_dict() for p in placed or []])
+                    with self._write_lock:
+                        self.conn.execute(
+                            "INSERT INTO file_bodies(file_id, bodies, detail_json, method, tagged_at) "
+                            "VALUES (?, ?, ?, ?, ?) ON CONFLICT(file_id) DO UPDATE SET bodies = excluded.bodies, "
+                            "detail_json = excluded.detail_json, method = excluded.method, "
+                            "tagged_at = excluded.tagged_at",
+                            (row["file_id"], names, detail, bodies.METHOD, now()))
+                    counts["no_wcs" if placed is None else "tagged"] += 1
+            if progress:
+                progress(i, len(rows))
+        return {**counts, "failures": failures}
+
+    def bodies(self, *, dataset_key: str | None = None, start: str | None = None, end: str | None = None,
+               without: list[str] | None = None, including: list[str] | None = None,
+               limit: int | None = None) -> list[dict]:
+        """Current files with their bodies tag: `bodies` is the list in the field, or None when the
+        file is untagged or has no solar sky WCS (`tagged` tells which). With `without` or
+        `including`, only tagged files whose list has none of `without` and all of `including`."""
+        has = db.has_table(self.reader, "file_bodies")
+        tags = {r["file_id"]: r["bodies"] for r in self.reader.execute(
+            "SELECT file_id, bodies FROM file_bodies")} if has else {}
+        drop, need = {b.lower() for b in without or []}, {b.lower() for b in including or []}
+        out = []
+        for row in self.current_files(dataset_key=dataset_key, start=start, end=end):
+            tagged = row["file_id"] in tags
+            names = json.loads(tags[row["file_id"]]) if tagged and tags[row["file_id"]] is not None else None
+            if (drop or need) and (names is None or drop & set(names) or not need <= set(names)):
+                continue
+            out.append({"observation_id": row["observation_id"], "file_id": row["file_id"],
+                        "dataset_key": row["dataset_key"], "date_obs": row["date_obs"],
+                        "tagged": tagged, "bodies": names})
+            if limit and len(out) >= limit:
+                break
+        return out
+
     def versions(self, observation_id: int) -> list[dict]:
         """Every file of one observation, newest version first, with which one is current."""
         rows = self.reader.execute(
@@ -729,6 +797,8 @@ class Library:
                     aliases = []
                 if db.has_table(conn, "file_sources"):
                     conn.execute(f"DELETE FROM file_sources WHERE file_id IN ({q})", list(ids))
+                if db.has_table(conn, "file_bodies"):
+                    conn.execute(f"DELETE FROM file_bodies WHERE file_id IN ({q})", list(ids))
                 conn.execute(f"DELETE FROM files WHERE id IN ({q})", list(ids))
                 for oid in obs_ids:
                     obs = conn.execute("SELECT dataset_id, current_file_id FROM observations WHERE id = ?",

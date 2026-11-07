@@ -400,6 +400,35 @@ FILEVRSN) that arrives becomes current; an identical file is a `duplicate`. Retu
                "start": "2025-09-21T16:00:42.840", "wavelength": 193.0},
      "result": null, "options": {"missing_only": false, "observation_id": 3}}
 
+### `library.tag_bodies`
+
+Params: `dataset_key=None`, `start=None`, `end=None`, `redo=False`. Tags the current file of every
+observation (of one dataset, in a time range) with the solar-system bodies in its field: the
+Moon, the planets, and Earth for an observer away from it. A body is in the field when the file's
+own WCS puts its centre on the pixel grid and the Sun does not hide it, seen from the header's
+observer at the header's time with light travel time (sunpy's `get_body_heliographic_stonyhurst`,
+astropy's current solar-system ephemeris). Pixel values are not read, so a body behind an occulter
+still counts. Files tagged by the current method are skipped unless `redo`. Needs sunpy (the
+`archives` extra); without it, an error says so. Returns counts and the first failures:
+
+    {"tagged": 3, "no_wcs": 0, "skipped": 0, "failed": 0, "failures": []}
+
+The tag lives in the `file_bodies` table (schema 7): `bodies` (a JSON list, or null when the
+header has no solar sky WCS or no observer), `detail_json` (every body's pixel, elongation from
+the Sun in degrees, `in_field` and `hidden`), `method` and `tagged_at`. A file with no row is
+untagged, not free of bodies.
+
+### `library.bodies`
+
+Params: `dataset_key=None`, `start=None`, `end=None`, `without=None`, `including=None`,
+`limit=None`. Current files with their tag, in time order. `bodies` is the list in the field, or
+null when the file is untagged or has no solar sky WCS (`tagged` tells which). With `without` (a
+list of body names) only tagged files holding none of them are returned, which is how to find a
+frame without the Moon; with `including`, only tagged files holding all of them.
+
+    [{"observation_id": 7, "file_id": 7, "dataset_key": "punch/wfi+nfi/-/ctm/3/-",
+      "date_obs": "2025-09-22T05:46:29", "tagged": true, "bodies": ["mercury", "venus", "mars"]}]
+
 ### `dataset.query`
 
 Params: `dataset_key`. The query that asks the archive again for a dataset, with every field (one
@@ -824,6 +853,8 @@ library does not have, or no library; 3 the library is locked by another core th
 | `hfcore reject OBSERVATION_ID... --reason TEXT` | `library.reject` |
 | `hfcore unreject OBSERVATION_ID...` | `library.unreject` |
 | `hfcore rejected [--dataset KEY]` | `library.rejected` |
+| `hfcore bodies [--dataset KEY] [--start T] [--end T] [--without BODY ...] [--with BODY ...]` | `library.bodies` |
+| `hfcore tag-bodies [--dataset KEY] [--start T] [--end T] [--redo]` | `library.tag_bodies` |
 | `hfcore refetch OBSERVATION_ID` | `library.refetch`, run to the end |
 | `hfcore cadences DATASET_KEY [--start T] [--end T]` | `dataset.cadences` |
 | `hfcore upgrade DATASET_KEY [--sample S] [--start T] [--end T] [--yes]` | `dataset.upgrade` (a dry run without `--yes`), run to the end |
