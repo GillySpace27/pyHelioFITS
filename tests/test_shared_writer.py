@@ -163,8 +163,10 @@ def test_both_clients_hear_a_download_from_either(lib, src):
         stranger.sendall(b'{"jsonrpc":"2.0","id":1,"method":"library.stats"}\n')
         try:
             assert stranger.makefile("rb").read() == b""
-        except ConnectionResetError:
-            pass  # closed with our second line unread: macOS sends RST, which is still "dropped"
+        except (ConnectionResetError, ConnectionAbortedError):
+            # Closed with our second line unread: macOS sends RST (ConnectionResetError), Windows
+            # reports it as WinError 10053 (ConnectionAbortedError). Both are still "dropped".
+            pass
 
     feed.close()
     time.sleep(0.3)
