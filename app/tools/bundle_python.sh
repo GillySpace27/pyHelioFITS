@@ -64,6 +64,7 @@ echo "Installing heliofits[archives] from $REPO_ROOT"
 # already installed and leaves them out of the bundle (seen on the first real run).
 "$PY" -s -m pip install --quiet --no-cache-dir --no-compile --disable-pip-version-check "$REPO_ROOT[archives]"
 find "$OUT" -name __pycache__ -type d -prune -exec rm -rf {} +
+/usr/bin/python3 tools/trim_python.py "$OUT"   # tests, pip, IDLE, headers: shared with Studio's bundle_core.py
 
 "$PY" -B -s -c "import heliofits.core, sunpy, sunpy.net, drms, astropy, numpy; print('heliofits_core', heliofits.core.__version__, 'sunpy', sunpy.__version__, 'numpy', numpy.__version__)"
 "$PY" -B -s -m heliofits.core --help > /dev/null
