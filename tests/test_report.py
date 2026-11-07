@@ -20,7 +20,7 @@ def test_the_text_report_covers_the_file_the_scene_and_every_layer():
     for needle in ("LAYERS (3, top layer first)", "PUNCH WFI+NFI Mosaic 530", "Proba-3 ASPIICS", "SDO AIA 193",
                    "RHEF", "PLEASE CITE", "CAVEATS", "not a calibrated radiance"):
         assert needle in out, needle
-    assert "—" not in out
+    assert "\u2014" not in out  # no em dash
 
 
 def test_every_step_of_every_layer_is_listed_with_its_parameters():
@@ -69,7 +69,8 @@ def test_cli_record_show(tmp_path):
     side = tmp_path / "x.hfrec.json"
     side.write_text(FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
     run = lambda *a: subprocess.run([sys.executable, "-m", "heliofits.core", "record", "show", str(side), *a],  # noqa: E731
-                                    capture_output=True, text=True, env={"PYTHONPATH": str(SRC), "PATH": ""})
+                                    capture_output=True, text=True, env={"PYTHONPATH": str(SRC), "PATH": "",
+                                         "HOME": str(tmp_path), "USERPROFILE": str(tmp_path)})
     for fmt, needle in (("text", "LAYERS"), ("methods", "processed with"), ("tex", "itemize"), ("python", "sunpy")):
         r = run("--format", fmt)
         assert r.returncode == 0 and needle in r.stdout, (fmt, r.stderr)
