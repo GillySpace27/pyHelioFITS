@@ -107,7 +107,7 @@ def test_compare_reports_metrics_and_needs_a_tolerance_for_equivalent(tmp_path):
     assert reproduce.compare(a, b, tolerance=m["max_abs_diff"] - 1).verdict == "different"
     text = r.text()
     assert text.startswith("Verdict: DIFFERENT") and "Differing pixels: 2 of 768" in text
-    assert "—" not in text
+    assert "\u2014" not in text
 
 
 def test_compare_refuses_to_guess_across_sizes_and_flags_same_environment(tmp_path):
