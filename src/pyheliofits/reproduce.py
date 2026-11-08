@@ -30,6 +30,7 @@ files Studio writes but slow on large frames with Average or Paeth filtering.
     python -m pyheliofits.reproduce digest FILE.png
     python -m pyheliofits.reproduce compare ORIGINAL.png REPLAY.png [--tolerance N] [--diff OUT.png]
     python -m pyheliofits.reproduce preflight FILE.hfrec
+    python -m pyheliofits.reproduce run FILE.hfrec --out DIR --launch java -Duser.home={home} -jar HFStudio.jar
 """
 
 from __future__ import annotations
@@ -562,6 +563,134 @@ def preflight(rec: dict) -> dict:
     }
 
 
+# ---- the driver -------------------------------------------------------------------------------
+
+
+STUDIO_SETTINGS = {
+    "api.enabled": "true",
+    "api.confirmDestructive": "false",  # the instance is a scratch one; nobody is there to click
+    "startup.sampHub": "false",
+}
+
+
+def isolated_home(directory: str | Path | None = None) -> Path:
+    """A scratch Studio home with the local API on, ready for ``-Duser.home``.
+
+    Studio keeps its settings in ``<home>/HFStudio/Settings/user.properties`` and writes its
+    endpoint file to ``<home>/HFStudio/api.json``. A replay loads a scene over the one on
+    screen, so it must never run in the Studio you work in: this home is the isolation.
+    """
+    import tempfile
+    home = Path(directory) if directory is not None else Path(tempfile.mkdtemp(prefix="hfs-replay-"))
+    settings = home / "HFStudio" / "Settings"
+    settings.mkdir(parents=True, exist_ok=True)
+    (settings / "user.properties").write_text(
+        "".join(f"{k}={v}\n" for k, v in STUDIO_SETTINGS.items()), encoding="utf-8")
+    return home
+
+
+def launch_studio(command: list[str], home: str | Path, *, timeout: float = 120.0):
+    """Start an isolated Studio and return ``(process, Studio client)`` once its API answers.
+
+    ``command`` is whatever starts Studio on this machine, with ``{home}`` where the scratch
+    home goes, for example ``["java", "-Duser.home={home}", "-jar", "HFStudio.jar"]``. Nothing is
+    guessed about how Studio is installed. The caller ends the process (``process.terminate()``).
+    """
+    import subprocess
+    import time
+
+    from .errors import StudioNotRunning
+    from .studio import Studio
+
+    home = isolated_home(home)
+    argv = [a.replace("{home}", str(home)) for a in command]
+    if not any(str(home) in a for a in argv):
+        raise ValueError("the launch command must carry {home}, e.g. -Duser.home={home}, so the replay "
+                         "cannot touch your own Studio")
+    endpoint = home / "HFStudio" / "api.json"
+    proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if proc.poll() is not None:
+            raise StudioNotRunning(f"Studio exited with code {proc.returncode} before its API came up")
+        if endpoint.is_file():
+            try:
+                client = Studio(json.loads(endpoint.read_text("utf-8")))
+                client.invoke("listCommands")
+                return proc, client
+            except (StudioNotRunning, ValueError, OSError, KeyError):
+                pass
+        time.sleep(0.5)
+    proc.terminate()
+    raise StudioNotRunning(f"Studio's API did not come up within {timeout:.0f} s")
+
+
+def reproduce(record_path: str | Path, out_dir: str | Path, studio, *, frames: str = "one",
+              tolerance: int | None = None, diff: bool = True) -> Comparison:
+    """Replay an export from its record in an isolated Studio, then judge the picture.
+
+    ``studio`` is a ``pyheliofits.studio.Studio`` client of an instance you can lose the session
+    of (see ``launch_studio``). The steps: preflight the record; ``sessionLoad`` the record
+    (``window="this"``, one frame of a movie unless ``frames="range"``); ``exportStill`` at the
+    recorded long side; ``verify`` the new PNG against the record. ``tolerance`` is the largest
+    difference in levels that counts as ``equivalent`` (none is assumed).
+
+    ``frames="range"`` loads every frame but cannot judge them yet: that needs a Studio verb
+    that exports a frame series, and the result says so (``cannot_check``).
+    """
+    if frames not in ("one", "range"):
+        raise ValueError('frames is "one" (the default) or "range"')
+    record_path = Path(record_path)
+    found = hfrecord.read(record_path)
+    if not found.get("found"):
+        return Comparison("cannot_check", str(record_path), "", comparable=False,
+                          reasons=[f"no processing record for {record_path}"])
+    rec = found["record"]
+    pre = preflight(rec)
+    if not pre["can_replay"]:
+        return Comparison("cannot_check", str(record_path), "", comparable=False,
+                          reasons=["this record cannot be replayed"] + pre["reasons"])
+    out = rec.get("output") if isinstance(rec.get("output"), dict) else {}
+    if out.get("kind") not in ("still", "movie", "frame_series", None):
+        return Comparison("cannot_check", str(record_path), "", comparable=False,
+                          reasons=[f"output kind {out.get('kind')!r} is not replayed here (PNG stills and the first frame of movies)"])
+    sidecar = _sidecar_for(found, record_path)
+    if sidecar is None:
+        return Comparison("cannot_check", str(record_path), "", comparable=False,
+                          reasons=["the record is only embedded in its export; replay needs the .hfrec sidecar beside it "
+                                   "(a copy of the record in a file named <export>.hfrec)"])
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    loaded = studio.invoke("sessionLoad", path=str(sidecar.resolve()), window="this", range=(frames == "range"))
+    notes = [n for n in loaded.get("notes") or [] if isinstance(n, str)]
+    width, height = out.get("width"), out.get("height")
+    long_side = max(width, height) if isinstance(width, int) and isinstance(height, int) else None
+    target = out_dir / (Path(out.get("file_name") or sidecar.name[:-len(".hfrec")]).stem + "-replay.png")
+    args: dict[str, Any] = {"path": str(target.resolve())}
+    if long_side:
+        args["long_side"] = long_side
+    studio.invoke("exportStill", **args)
+    result = verify(sidecar, target, tolerance=tolerance,
+                    diff_out=(out_dir / (target.stem + "-diff.png")) if diff else None)
+    result.reasons = notes + result.reasons
+    if frames == "range":
+        result.reasons.append("the whole range was loaded, but only its first frame was judged: judging every frame "
+                              "needs a Studio verb that exports a frame series, which does not exist yet")
+        if result.verdict == "identical":
+            result.reasons.append("identical for the first frame only")
+    elif pre["frames"] > 1:
+        result.reasons.append(f"1 of {pre['frames']} frames checked (the first)")
+    result.reasons = list(dict.fromkeys(result.reasons))
+    return result
+
+
+def _sidecar_for(found: dict, record_path: Path) -> Path | None:
+    where = found.get("found_in") or {}
+    if where.get("kind") == "sidecar" and isinstance(where.get("path"), str):
+        return Path(where["path"])
+    return None
+
+
 # ---- command line ---------------------------------------------------------------------------
 
 
@@ -582,6 +711,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("replay", type=Path)
     p.add_argument("--tolerance", type=int, default=None)
     p.add_argument("--diff", type=Path, default=None)
+    p.add_argument("--json", action="store_true")
+    p = sub.add_parser("run", help="replay a record in an isolated Studio and judge the picture")
+    p.add_argument("record", type=Path, help="the .hfrec sidecar")
+    p.add_argument("--out", type=Path, required=True, help="folder for the replayed PNG and difference image")
+    p.add_argument("--launch", nargs=argparse.REMAINDER, required=True, metavar="COMMAND",
+                   help='what starts Studio, with {home}, e.g. --launch java -Duser.home={home} -jar HFStudio.jar')
+    p.add_argument("--range", action="store_true", help="load every frame of a movie, not the first")
+    p.add_argument("--tolerance", type=int, default=None)
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("preflight", help="what a record says about replaying it")
     p.add_argument("record", type=Path)
@@ -610,7 +747,14 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  {r}")
             print(f"Default scope: {pre['scope']} ({pre['frames']} frame(s)); pixel digest: {'yes' if pre['has_digest'] else 'no'}")
         return 0 if pre["can_replay"] else 1
-    if ns.cmd == "compare":
+    if ns.cmd == "run":
+        home = isolated_home()
+        proc, studio = launch_studio(ns.launch, home)
+        try:
+            result = reproduce(ns.record, ns.out, studio, frames="range" if ns.range else "one", tolerance=ns.tolerance)
+        finally:
+            proc.terminate()
+    elif ns.cmd == "compare":
         result = compare(ns.original, ns.replay, tolerance=ns.tolerance, diff_out=ns.diff)
     else:
         result = verify(ns.record, ns.replay, tolerance=ns.tolerance, diff_out=ns.diff)
