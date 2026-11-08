@@ -52,7 +52,7 @@ RECORD_UNREADABLE = -32011   # record.read: the file named is a sidecar that is 
 # Methods slow enough that answering them in order would stall the app; none of
 # them writes to the index, except that template.latest and template.refresh queue
 # jobs, through the writer's lock as download.enqueue does.
-BACKGROUND = frozenset({"archive.search", "library.thumbnail", "dataset.cadences", "record.read", "record.report",
+BACKGROUND = frozenset({"archive.search", "library.thumbnail", "dataset.cadences", "record.read", "record.report", "record.digest", "record.verify",
                         "template.latest", "template.refresh"})
 
 # Old names, kept so a client written against them keeps working; each answers
@@ -125,6 +125,8 @@ API: dict[str, tuple[str, str]] = {
     "record.read": ("path", "The processing record of an exported image or movie, with rows ready to show."),
     "record.report": ("path, format='text', full=False", "A processing record as readable text: a report, a methods paragraph, LaTeX or a Python script."),
     "record.resolve": ("record", "Look a record's sources up in the library by SHA-256; groups the missing by dataset."),
+    "record.digest": ("path", "The hfpix/1 pixel digest and the content digest of a PNG export (hfrecord 1.1, output.pixel_sha256)."),
+    "record.verify": ("record, replay, tolerance=None", "Judge a replayed PNG against an export's record: identical, equivalent, different or cannot_check, with difference metrics."),
     "settings.get": ("", "HelioFITS Core's settings (jsoc_email, vso_mirrors, ...)."),
     "settings.set": ("key, value=None", "Set a setting; a null value removes it."),
     "search": ("query, source='fido', bins=240", "Old name of archive.search; answers the same."),
@@ -245,6 +247,8 @@ class Server:
             "record.read": self.record_read,
             "record.report": self.record_report,
             "record.resolve": self.record_resolve,
+            "record.digest": self.record_digest,
+            "record.verify": self.record_verify,
             "archive.search": self.search,
         }
         for old, new in ALIASES.items():
@@ -467,6 +471,28 @@ class Server:
             raise RpcError(RECORD_UNSUPPORTED, str(exc))
         except hfrecord.RecordError as exc:
             raise RpcError(INVALID_PARAMS, str(exc))
+
+    def record_digest(self, path: str) -> dict:
+        """record.digest: reads the PNG only."""
+        from .. import reproduce
+        try:
+            return reproduce.digests(path)
+        except FileNotFoundError as exc:
+            raise RpcError(INVALID_PARAMS, str(exc))
+        except (ValueError, OSError) as exc:
+            raise RpcError(RECORD_UNREADABLE, str(exc))
+
+    def record_verify(self, record: str, replay: str, tolerance: int | None = None) -> dict:
+        """record.verify: the record (sidecar or export) and the replayed PNG; writes nothing."""
+        from .. import reproduce
+        try:
+            return reproduce.verify(record, replay, tolerance=tolerance).to_dict()
+        except hfrecord.UnsupportedRecord as exc:
+            raise RpcError(RECORD_UNSUPPORTED, str(exc))
+        except FileNotFoundError as exc:
+            raise RpcError(INVALID_PARAMS, str(exc))
+        except (hfrecord.RecordError, ValueError, OSError) as exc:
+            raise RpcError(RECORD_UNREADABLE, str(exc))
 
     def dataset_get(self, dataset_uid: str | None = None, dataset_key: str | None = None) -> dict | None:
         try:

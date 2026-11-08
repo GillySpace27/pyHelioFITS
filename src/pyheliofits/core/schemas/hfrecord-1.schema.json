@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://gilly.space/heliosoftware/spec/hfrecord-1.schema.json",
-  "title": "HelioFITS processing record, format 1.0",
-  "description": "Per-layer processing record for an export: sources by SHA-256, ordered steps with parameters, and the producer's own scene for a rebuild. It is the detailed companion of the suite provenance format (heliosoftware/spec/provenance.md): an export writes both, and this record never holds a path on the person's computer, a user name or a machine id. Readers ignore keys they do not know; writers only add keys within a major version (suite rule 5). An embedded copy describes the file as it was written; image editors may strip it. Only a sidecar's output.sha256 proves the pixels are the ones described.",
+  "title": "HelioFITS processing record, format 1.1",
+  "description": "Per-layer processing record for an export: sources by SHA-256, ordered steps with parameters, and the producer's own scene for a rebuild. It is the detailed companion of the suite provenance format (heliosoftware/spec/provenance.md): an export writes both, and this record never holds a path on the person's computer, a user name or a machine id. Readers ignore keys they do not know; writers only add keys within a major version (suite rule 5). An embedded copy describes the file as it was written; image editors may strip it. Only a sidecar's output.sha256 proves the pixels are the ones described. Format 1.1 (2026-11-08) adds the keys a replay needs: environment, output.pixel_sha256, output.content_sha256, output.frame_digests, inputs_external, reproducibility and companions. Every 1.0 record is a valid 1.1 record.",
   "type": "object",
   "required": [
     "hfrecord",
@@ -127,6 +127,33 @@
         "display_referred": {
           "type": "boolean",
           "description": "True when pixel values are rendered colours, not measured quantities."
+        },
+        "pixel_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "SHA-256 of the canonical pixel stream hfpix/1 (docs/reproduce.md): the ASCII header 'hfpix/1 <width> <height> <channels> <bit_depth>\\n' then every sample, row-major and channel-interleaved, as a big-endian unsigned integer of bit_depth bits. The identity of the picture: two exports of one scene share it while their files differ (record_id, created). For a movie, the digest of the first frame; every frame is in frame_digests."
+        },
+        "content_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "SHA-256 of the export file with its ancillary metadata removed (PNG: only IHDR, PLTE, IDAT and IEND kept; EXR: without string attributes). Equal when the same encoder wrote the same pixels. Null where the container has no such reduction (movies)."
+        },
+        "frame_digests": {
+          "type": "array",
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "description": "Movies and series: the hfpix/1 digest of each output frame before encoding, in output order. Encoded movie bytes depend on the encoder build; these do not."
         }
       }
     },
@@ -315,6 +342,216 @@
             "null"
           ],
           "description": "For a movie or series: the index of the frame shown."
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "description": "Where the export was made, so a replay can say why pixels differ. Never a hostname, user name or path.",
+      "properties": {
+        "os": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            },
+            "arch": {
+              "type": "string"
+            }
+          }
+        },
+        "jvm": {
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "string"
+            },
+            "vendor": {
+              "type": "string"
+            }
+          }
+        },
+        "gpu": {
+          "type": "object",
+          "description": "The GL strings of the renderer that drew the export (GL_VENDOR, GL_RENDERER, GL_VERSION, GL_SHADING_LANGUAGE_VERSION).",
+          "properties": {
+            "vendor": {
+              "type": "string"
+            },
+            "renderer": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            },
+            "glsl": {
+              "type": "string"
+            }
+          }
+        },
+        "display": {
+          "type": "object",
+          "properties": {
+            "dither": {
+              "type": "boolean",
+              "description": "Whether the shader dithered before the colour-table lookup. The dither is a hash of the pixel coordinate, so it repeats exactly at the same size."
+            },
+            "high_bit_depth_capture": {
+              "type": "boolean"
+            },
+            "pixel_ratio": {
+              "type": "number"
+            },
+            "msaa": {
+              "type": "integer",
+              "description": "Multisample count of the capture framebuffer, 0 or 1 for none."
+            }
+          }
+        },
+        "core": {
+          "type": "object",
+          "description": "The HelioFITS Core that identified the sources.",
+          "properties": {
+            "version": {
+              "type": "string"
+            },
+            "commit": {
+              "type": "string"
+            },
+            "python": {
+              "type": "string"
+            }
+          }
+        },
+        "ffmpeg": {
+          "type": "object",
+          "description": "Movies only.",
+          "properties": {
+            "version": {
+              "type": "string"
+            },
+            "encoder": {
+              "type": "string"
+            },
+            "arguments": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "inputs_external": {
+      "type": "array",
+      "description": "Inputs other than the layers' source files that shaped the picture, each pinned or declared. A replay without them is not exact.",
+      "items": {
+        "type": "object",
+        "required": [
+          "kind",
+          "name"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "star_catalog",
+              "model",
+              "body_ephemeris",
+              "overlay_feed",
+              "background",
+              "colour_table",
+              "font",
+              "other"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "source_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pinned": {
+            "type": "boolean",
+            "description": "True when the version or hash fixes the input; false when it was declared only (a live feed)."
+          },
+          "caveat": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "reproducibility": {
+      "type": "object",
+      "description": "The writer's own verdict on whether this record can be replayed exactly, decided at export time.",
+      "required": [
+        "exact_replay_possible"
+      ],
+      "properties": {
+        "exact_replay_possible": {
+          "type": "boolean"
+        },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Why not, one plain sentence each (dirty build, Helioviewer layer, scene changed during export, a source still unhashed, an unpinned external input, dither on)."
+        },
+        "replay_scope": {
+          "enum": [
+            "one",
+            "range"
+          ],
+          "description": "What a replay should fetch by default: one timestamp (the default when absent) or the whole range. Set to range only when the export is meaningful as a whole."
+        },
+        "frames_pending": {
+          "type": "integer",
+          "description": "Sources whose hash was not known when the record was written."
+        }
+      }
+    },
+    "companions": {
+      "type": "object",
+      "description": "Files written beside the export by the same export, named and hashed so a reader can match them.",
+      "properties": {
+        "data_archive": {
+          "type": "object",
+          "description": "The hfstudio-session-data zip (Bundle source data with export).",
+          "properties": {
+            "file_name": {
+              "type": "string"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "size": {
+              "type": "integer"
+            },
+            "scope": {
+              "enum": [
+                "one",
+                "range"
+              ]
+            }
+          }
         }
       }
     }

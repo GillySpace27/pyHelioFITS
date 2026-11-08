@@ -148,6 +148,15 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument("file", type=Path, help="the exported file or its .hfrec (or older .hfrec.json) sidecar")
     q.add_argument("--format", choices=["text", "methods", "tex", "python", "json"], default="text")
     q.add_argument("--full", action="store_true", help="list every source file, not the first and the last")
+    q = rsub.add_parser("digest", help="the hfpix/1 pixel digest and content digest of a PNG export")
+    q.add_argument("file", type=Path, help="a PNG still or frame")
+    q = rsub.add_parser("verify", help="judge a replayed PNG against an export's record: identical, equivalent or different")
+    q.add_argument("record", type=Path, help="the .hfrec sidecar or the original export")
+    q.add_argument("replay", type=Path, help="the replayed PNG")
+    q.add_argument("--tolerance", type=int, default=None, help="largest allowed difference in levels for 'equivalent' (measured, never assumed)")
+    q.add_argument("--diff", type=Path, default=None, help="write the difference image here")
+    q = rsub.add_parser("preflight", help="what a record says about replaying it, before anything is loaded")
+    q.add_argument("file", type=Path, help="the exported file or its .hfrec sidecar")
     q = rsub.add_parser("migrate", help="rename .hfrec.json sidecars to .hfrec (shows the plan unless --yes)")
     q.add_argument("paths", nargs="+", type=Path, help="sidecar files or folders (searched recursively)")
     q.add_argument("--yes", action="store_true", help="do the renames; without it, only show them")
@@ -794,6 +803,8 @@ def _record_show(ns, out: "Output") -> int:
         out.show(rows, lambda r: "\n".join(f"{x['status']}: {x['from']} -> {x['to']}" for x in r)
                  or "No .hfrec.json sidecars found.")
         return PROBLEM if any(x["status"].startswith("error") for x in rows) else OK
+    if ns.record_cmd in ("digest", "verify", "preflight"):
+        return _record_reproduce(ns, out)
     from . import report as hfreport
     try:
         found = hfrecord.read(ns.file)
@@ -809,6 +820,38 @@ def _record_show(ns, out: "Output") -> int:
     else:
         sys.stdout.write(hfreport.render(found["record"], ns.format, full=ns.full))
     return OK
+
+
+def _record_reproduce(ns, out: "Output") -> int:
+    from . import record as hfrecord
+    from .. import reproduce
+    try:
+        if ns.record_cmd == "digest":
+            d = reproduce.digests(ns.file)
+            out.show(d, lambda d: f"{d['pixel_sha256']}  pixel (hfpix/1, {d['width']}x{d['height']}x{d['channels']}, "
+                                  f"{d['bit_depth']}-bit)\n{d['content_sha256']}  content (image chunks only)\n{d['sha256']}  file")
+            return OK
+        if ns.record_cmd == "preflight":
+            found = hfrecord.read(ns.file)
+            if not found.get("found"):
+                return _fail(USAGE, f"no processing record for {ns.file}")
+            pre = reproduce.preflight(found["record"])
+            out.show(pre, _preflight_text)
+            return OK if pre["can_replay"] else PROBLEM
+        result = reproduce.verify(ns.record, ns.replay, tolerance=ns.tolerance, diff_out=ns.diff)
+    except (hfrecord.RecordError, OSError, ValueError) as exc:
+        return _fail(USAGE, str(exc))
+    out.show(result.to_dict(), lambda _: result.text().rstrip("\n"))
+    return OK if result.verdict in ("identical", "equivalent") else PROBLEM
+
+
+def _preflight_text(pre: dict) -> str:
+    head = ("Exact replay possible" if pre["exact"] else
+            "Replay possible, not exact" if pre["can_replay"] else "Cannot replay")
+    lines = [head] + [f"  {r}" for r in pre["reasons"]]
+    lines.append(f"Default scope: {pre['scope']} ({pre['frames']} frame(s)); pixel digest: "
+                 + ("yes" if pre["has_digest"] else "no"))
+    return "\n".join(lines)
 
 
 def _view_text(r: dict) -> str:

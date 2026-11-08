@@ -90,6 +90,13 @@ with examples, error codes and how several clients share one library, is
 [docs/api.md](https://github.com/GillySpace27/pyHelioFITS/blob/main/docs/api.md). To only read a library, open its index as
 [docs/reader-contract.md](https://github.com/GillySpace27/pyHelioFITS/blob/main/docs/reader-contract.md) describes.
 
+## Reproducing an export
+
+`hfcore record digest FILE.png` prints the `hfpix/1` pixel digest a format 1.1 record stores, and
+`hfcore record verify RECORD REPLAY.png` judges a replayed picture against its record (identical,
+equivalent within a measured tolerance, or different, with what differs and why). See
+[docs/reproduce.md](https://github.com/GillySpace27/pyHelioFITS/blob/main/docs/reproduce.md).
+
 ## Tests
 
     pip install -e .[test] && pytest

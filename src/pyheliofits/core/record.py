@@ -825,11 +825,9 @@ def display(record: dict) -> dict:
     head = " ".join(str(producer.get(k)) for k in ("program", "version") if producer.get(k))
     build = ", ".join(f"{label} {producer[k]}" for k, label in (("build_id", "build"), ("commit", "commit"))
                       if producer.get(k))
-    rebuild = []
-    if producer.get("dirty"):
-        rebuild.append("made by a build with uncommitted changes")
-    if any((layer.get("source_spec") or {}).get("kind") == "helioviewer_api" for layer in layers_in):
-        rebuild.append("a Helioviewer layer cannot promise the same pixels")
+    rebuild = replay_reasons(record)
+    environment = record.get("environment") if isinstance(record.get("environment"), dict) else {}
+    reproducibility = record.get("reproducibility") if isinstance(record.get("reproducibility"), dict) else {}
     return {
         "summary": record.get("summary") if isinstance(record.get("summary"), str) else generated_summary(record),
         "producer": head + (f" ({build})" if build else ""),
@@ -849,8 +847,71 @@ def display(record: dict) -> dict:
         "heliad_view": record.get("heliad_view") if isinstance(record.get("heliad_view"), dict) else None,
         "snapshot": _pairs(record.get("snapshot")),
         "not_guaranteed_to_rebuild": rebuild,
+        # hfrecord 1.1 (docs/reproduce.md): flattened "gpu.renderer"-style pairs, and the writer's own verdict
+        "environment": _flat_pairs(environment),
+        "reproducibility": {
+            "exact": not rebuild,
+            "reasons": rebuild,
+            "scope": reproducibility.get("replay_scope") or "one",
+            "pixel_sha256": _s(output.get("pixel_sha256")),
+            "frame_digests": len(output["frame_digests"]) if isinstance(output.get("frame_digests"), list) else 0,
+        },
         "studio": master,
     }
+
+
+def replay_reasons(record: dict) -> list[str]:
+    """Why an exact replay of this record is not promised, one sentence each; empty when nothing
+    in the record argues against it. Read from the record alone (hfrecord 1.0 and 1.1 keys): the
+    writer's own reproducibility.reasons first, then what the reader can see for itself."""
+    producer = record.get("producer") if isinstance(record.get("producer"), dict) else {}
+    layers = [x for x in record.get("layers") or [] if isinstance(x, dict)]
+    rep = record.get("reproducibility") if isinstance(record.get("reproducibility"), dict) else {}
+    snapshot = record.get("snapshot") if isinstance(record.get("snapshot"), dict) else {}
+    reasons: list[str] = [r for r in rep.get("reasons") or [] if isinstance(r, str)]
+    if rep.get("exact_replay_possible") is False and not reasons:
+        reasons.append("the writer marked this record as not exactly reproducible")
+
+    def add(text: str) -> None:
+        if text not in reasons:
+            reasons.append(text)
+
+    if record.get("legacy"):
+        add("a legacy record converted from Studio's older provenance block, with no sources by hash")
+    if producer.get("dirty"):
+        add("made by a build with uncommitted changes")
+    if any((layer.get("source_spec") or {}).get("kind") == "helioviewer_api" for layer in layers):
+        add("a Helioviewer layer cannot promise the same pixels")
+    if snapshot.get("changed_during_export"):
+        add("the scene changed while the export ran")
+    pending = sum(layer.get("files_pending", 0) for layer in layers if isinstance(layer.get("files_pending"), int))
+    if not pending and isinstance(rep.get("frames_pending"), int):
+        pending = rep["frames_pending"]
+    if pending:
+        add(f"{pending} source file(s) were not yet identified by hash when the record was written")
+    for layer in layers:
+        if "source_count" in layer and not layer.get("sources"):
+            add("a shortened record: sources are counted, not listed (read the sidecar instead)")
+            break
+    for item in record.get("inputs_external") or []:
+        if isinstance(item, dict) and item.get("pinned") is False:
+            add(f"an external input is not pinned: {item.get('kind', 'input')} {item.get('name', '')}".rstrip())
+    display_ = record.get("environment") if isinstance(record.get("environment"), dict) else {}
+    disp = display_.get("display") if isinstance(display_.get("display"), dict) else {}
+    if disp.get("dither") is True and disp.get("high_bit_depth_capture") is not True:
+        add("dither was on: the pattern repeats at the same output size but not at another")
+    return reasons
+
+
+def _flat_pairs(obj: dict, prefix: str = "") -> list[dict]:
+    rows: list[dict] = []
+    for key, value in obj.items():
+        name = f"{prefix}{key}"
+        if isinstance(value, dict):
+            rows.extend(_flat_pairs(value, name + "."))
+        else:
+            rows.append({"key": name, "value": _text(value)})
+    return rows
 
 
 def read(path: str | Path) -> dict:
