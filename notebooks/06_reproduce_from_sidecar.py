@@ -75,7 +75,9 @@ else:
 # (`sessionLoad`), exports a still at the recorded size and judges it against the record's digest.
 #
 # A movie replays its **first frame** unless you pass `frames="range"`, which loads the whole
-# series (and fetches all its data); only the first frame is judged for now.
+# series (and fetches all its data) and judges every frame against the per-frame digests in the
+# record. Use `range` to judge a movie: on one test movie `frames="one"` came back `different`
+# where `range` came back `identical`, and the cause is not yet known.
 
 # %%
 LAUNCH = ["java", "-Duser.home={home}", "-jar", "HFStudio.jar"]  # change to how you start Studio
