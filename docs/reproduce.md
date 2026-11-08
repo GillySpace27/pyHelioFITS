@@ -93,11 +93,48 @@ PNG decoding uses Pillow when installed (`pip install "pyheliofits[reproduce]"`)
 decoder otherwise, which handles non-interlaced 8- and 16-bit PNGs and is slow on large frames
 with Average or Paeth filtering.
 
+## Replaying in Studio
+
+`reproduce.reproduce(record, out_dir, studio)` replays a record and judges the picture:
+
+1. preflight the record (a record with no scene, or only embedded in its export, is `cannot_check`
+   with the reason);
+2. `sessionLoad` the sidecar with `window="this"`: Studio rebuilds the scene from
+   `native.studio_session`, finds local files again in `companions.data_archive`, and loads one frame
+   of a movie unless `frames="range"`;
+3. `exportStill` at the recorded long side;
+4. `verify` the new PNG against the record, with the `tolerance` you pass (none is assumed).
+
+`sessionLoad` replaces the scene on screen, so the Studio it drives must be a scratch one. Helpers:
+
+```python
+from pyheliofits import reproduce
+
+home = reproduce.isolated_home()                       # scratch home with the local API on
+proc, studio = reproduce.launch_studio(                # {home} goes where Studio takes user.home
+    ["java", "-Duser.home={home}", "-jar", "HFStudio.jar"], home)
+try:
+    result = reproduce.reproduce("figure.png.hfrec", "replay/", studio, tolerance=None)
+finally:
+    proc.terminate()
+print(result.text())
+```
+
+or `python -m pyheliofits.reproduce run figure.png.hfrec --out replay/ --launch java -Duser.home={home} -jar HFStudio.jar`.
+Nothing is guessed about how Studio is installed: the launch command is yours, and it must carry
+`{home}`. Not run against a real Studio yet (the test uses `FakeStudio`); the scratch-home settings
+path (`<home>/HFStudio/Settings/user.properties`) is read from Studio's `Directories.java` and
+`Settings.java`, not tried.
+
+Limits today: the exported size follows `long_side`, so a record whose aspect Studio's export cannot
+reproduce comes back `cannot_check`; `frames="range"` loads every frame but judges only the first,
+because there is no Studio verb that exports a frame series; the bundled `studio-commands.json` copy
+predates `sessionLoad`, so use a running Studio's own list (the default) or refresh the copy once
+Studio #218 is released.
+
 ## Not here yet
 
-* `reproduce()`: resolve sources (`record.resolve`), launch an isolated Studio, load the scene
-  through its `sessionLoad` command, export at the recorded size, then `verify`. One timestamp by
-  default, the whole range with `frames="range"`.
-* EXR frames and movies: Studio digests frames before encoding; this reader opens PNGs only.
+* EXR frames and movies' encoded bytes: Studio digests frames before encoding; this reader opens PNGs only.
+* A frame-series export verb in Studio, to judge every frame of a range.
 * The tolerance table: measured by replaying a golden set on two renderers (release gate
   `release/replay.sh`, companion of `release/parity.sh`).

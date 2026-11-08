@@ -233,3 +233,116 @@ def test_cli_digest_verify_and_preflight(tmp_path, capsys):
     assert data["verdict"] == "different" and data["metrics"]["differing_pixels"] == 1
     assert main(["record", "preflight", str(side)]) == 0
     assert "Exact replay possible" in capsys.readouterr().out
+
+
+# ---- the driver ----------------------------------------------------------------------------------
+
+SESSION_LOAD = {
+    "name": "sessionLoad", "description": "test copy of Studio's sessionLoad", "x-effect": "destructive",
+    "inputSchema": {"type": "object", "additionalProperties": False, "required": ["path"], "properties": {
+        "path": {"type": "string"}, "range": {"type": "boolean"}, "window": {"enum": ["this", "new"]}}},
+    "outputSchema": {"type": "object"},
+}
+
+
+def _replay_fixture(tmp_path, arr, **output):
+    png = reproduce.write_png(tmp_path / "figure.png", arr)
+    rec = example()
+    rec["hfrecord"] = "1.1"
+    rec["output"].update({"file_name": "figure.png", "width": arr.shape[1], "height": arr.shape[0],
+                          "pixel_sha256": reproduce.digests(png)["pixel_sha256"], **output})
+    side = tmp_path / "figure.png.hfrec"
+    side.write_text(json.dumps(rec), encoding="utf-8")
+    return png, side
+
+
+def _fake(replayed: np.ndarray, notes=()):
+    from pyheliofits.studio import Studio
+    from pyheliofits.testing import FakeStudio
+
+    def load(a):
+        return {"path": a["path"], "window": a.get("window", "this"), "notes": list(notes)}
+
+    def still(a):
+        reproduce.write_png(a["path"], replayed)
+        return {"path": a["path"]}
+
+    fake = FakeStudio(handlers={"sessionLoad": load, "exportStill": still})
+    fake.tools["sessionLoad"] = SESSION_LOAD
+    return fake, Studio
+
+
+def test_reproduce_drives_studio_and_judges_the_picture(tmp_path):
+    arr = rgba()
+    png, side = _replay_fixture(tmp_path, arr)
+    png.unlink()  # only the record's digest is left to judge by
+    fake, Studio = _fake(arr, notes=["2 files found in the data archive"])
+    with fake as f:
+        studio = Studio(json.loads(f.endpoint_file(tmp_path / "api.json").read_text()))
+        r = reproduce.reproduce(side, tmp_path / "replay", studio)
+    assert r.verdict == "identical"
+    assert "2 files found in the data archive" in r.reasons
+    names = [c[0] for c in fake.calls]
+    assert names == ["sessionLoad", "exportStill"]
+    load = fake.calls[0][1]
+    assert load["window"] == "this" and load["range"] is False and load["path"].endswith("figure.png.hfrec")
+    assert fake.calls[1][1]["long_side"] == 32  # the long side of 24 x 32
+    assert (tmp_path / "replay" / "figure-replay.png").is_file()
+
+
+def test_reproduce_reports_a_different_picture_and_a_size_the_export_cannot_match(tmp_path):
+    arr = rgba()
+    png, side = _replay_fixture(tmp_path, arr)
+    changed = arr.copy()
+    changed[0, 0, 0] ^= 0x20
+    fake, Studio = _fake(changed)
+    with fake as f:
+        studio = Studio(json.loads(f.endpoint_file(tmp_path / "api.json").read_text()))
+        r = reproduce.reproduce(side, tmp_path / "replay", studio, tolerance=0)
+        assert r.verdict == "different" and r.metrics["differing_pixels"] == 1 and r.difference_image
+        r = reproduce.reproduce(side, tmp_path / "replay", studio, tolerance=0x20)
+        assert r.verdict == "equivalent"
+    fake, Studio = _fake(rgba(shape=(10, 10, 4)))
+    with fake as f:
+        studio = Studio(json.loads(f.endpoint_file(tmp_path / "api2.json").read_text()))
+        r = reproduce.reproduce(side, tmp_path / "replay2", studio)
+    assert r.verdict == "cannot_check" and not r.comparable
+
+
+def test_reproduce_movie_range_and_refusals(tmp_path):
+    arr = rgba()
+    png, side = _replay_fixture(tmp_path, arr, kind="movie", frames=12)
+    fake, Studio = _fake(arr)
+    with fake as f:
+        studio = Studio(json.loads(f.endpoint_file(tmp_path / "api.json").read_text()))
+        one = reproduce.reproduce(side, tmp_path / "one", studio)
+        rng = reproduce.reproduce(side, tmp_path / "range", studio, frames="range")
+        with pytest.raises(ValueError):
+            reproduce.reproduce(side, tmp_path / "x", studio, frames="all")
+    assert one.verdict == "identical" and "1 of 12 frames checked (the first)" in one.reasons
+    assert [c[1].get("range") for c in fake.calls if c[0] == "sessionLoad"] == [False, True]
+    assert rng.verdict == "identical" and any("first frame only" in x for x in rng.reasons)
+    # a record that only lives inside its export cannot be handed to Studio as a file
+    from pyheliofits.core import record as hfr
+    embedded = tmp_path / "embedded.png"
+    chunk = json.dumps(json.loads(side.read_text())).encode()
+    import struct, zlib
+    data = png.read_bytes()
+    body = b"hfrecord\0" + chunk
+    text = struct.pack(">I", len(body)) + b"tEXt" + body + struct.pack(">I", zlib.crc32(b"tEXt" + body))
+    embedded.write_bytes(data[:-12] + text + data[-12:])
+    assert hfr.read(embedded)["found"]
+    fake, Studio = _fake(arr)
+    with fake as f:
+        studio = Studio(json.loads(f.endpoint_file(tmp_path / "api3.json").read_text()))
+        r = reproduce.reproduce(embedded, tmp_path / "emb", studio)
+    assert r.verdict == "cannot_check" and any("sidecar" in x for x in r.reasons)
+    assert fake.calls == []
+
+
+def test_isolated_home_and_launch_command_guard(tmp_path):
+    home = reproduce.isolated_home(tmp_path / "home")
+    props = (home / "HFStudio" / "Settings" / "user.properties").read_text()
+    assert "api.enabled=true" in props and "api.confirmDestructive=false" in props
+    with pytest.raises(ValueError, match=r"\{home\}"):
+        reproduce.launch_studio(["java", "-jar", "HFStudio.jar"], tmp_path / "h2")
