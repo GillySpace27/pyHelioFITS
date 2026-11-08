@@ -1,0 +1,30 @@
+cff-version: 1.2.0
+message: >-
+  If you use pyHelioFITS in your research, please cite the version you used.
+  Each release has its own Zenodo DOI once the Zenodo integration has archived it.
+type: software
+title: pyHelioFITS
+version: 0.1.0
+abstract: >-
+  pyHelioFITS is the Python side of the HelioFITS Suite, installed as the
+  pyheliofits package. It holds HelioFITS Core (the hfcore solar-data library:
+  find data, download it and keep it in one indexed library), a client for a
+  running HelioFITS Studio, the library's cache verbs for scripts and
+  notebooks, a reader and replayer for Studio's export records (hfrecord), and
+  an MCP server (heliofits-mcp) that exposes them to an LLM client.
+authors:
+  - given-names: Chris R.
+    family-names: Gilly
+    orcid: "https://orcid.org/0000-0003-0021-9056"
+    affiliation: NorthWest Research Associates
+    email: gilly@nwra.com
+repository-code: "https://github.com/GillySpace27/pyHelioFITS"
+url: "https://gilly.space"
+license: MPL-2.0
+keywords:
+  - solar physics
+  - heliophysics
+  - FITS
+  - data management
+  - reproducibility
+  - MCP
