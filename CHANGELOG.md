@@ -2,7 +2,7 @@
 
 Versions follow `pyproject.toml`. The dates are release dates.
 
-## 0.1.0 (unreleased, first PyPI release)
+## 0.1.0 (2026-11-08, first PyPI release)
 
 The first release under the name `pyheliofits` (import `pyheliofits`, commands `hfcore` and
 `heliofits-mcp`). The code was developed as the core of the HelioFITS Cache Manager before this.
