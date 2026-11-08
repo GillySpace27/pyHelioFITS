@@ -1397,6 +1397,24 @@
         "type": "object",
         "properties": {}
       },
+      "name": "activityWindow",
+      "description": "A live record of what Studio does: commands from scripts and assistants, downloads, disk, Core's output, memory and the log (also: click the footer's lights)",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
       "name": "studySaveView",
       "description": "Add the view on screen to the Study table as a new row",
       "annotations": {
@@ -2307,7 +2325,7 @@
         "type": "object",
         "properties": {
           "filter": {
-            "description": "The filter",
+            "description": "The filter; with chain, the first of them, at full strength",
             "type": "string",
             "enum": [
               "none",
@@ -2315,6 +2333,32 @@
               "wow",
               "rhef"
             ]
+          },
+          "chain": {
+            "maxItems": 3,
+            "description": "Filters applied after filter, in series, replacing any chain the layer has; [] clears it. Each stage mixes its output with its input: (1 - strength) * input + strength * filtered. At most 3 filters in all, filter included (the jhv.filterChain.maxStages setting, 2 to 4). Ignored when filter is none.",
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "properties": {
+                "filter": {
+                  "type": "string",
+                  "enum": [
+                    "mgn",
+                    "wow",
+                    "rhef"
+                  ]
+                },
+                "strength": {
+                  "maximum": 1,
+                  "description": "Default 1",
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": ["filter"]
+            }
           },
           "layer_id": {
             "description": "From layerAdd or layerList",
@@ -2328,7 +2372,7 @@
         "required": ["layer_id"]
       },
       "name": "filterSet",
-      "description": "Set a layer's image filter and its FITS display parameters",
+      "description": "Set a layer's image filter (optionally chained with more filters, each with a strength) and its FITS display parameters",
       "annotations": {
         "destructiveHint": false,
         "readOnlyHint": false
@@ -2527,6 +2571,10 @@
             "description": "Pixels on the long side; omit for the export size in the settings",
             "type": "integer",
             "minimum": 16
+          },
+          "bundle_data": {
+            "description": "Write the local source files beside the export as <export>.data.zip (a still: its frames and what they depend on; a movie: the layers' files). Omit to follow Bundle source data with export in the Record panel",
+            "type": "boolean"
           }
         },
         "required": ["path"]
@@ -2559,6 +2607,10 @@
             "description": "Pixels on the long side; omit for the export size in the settings",
             "type": "integer",
             "minimum": 16
+          },
+          "bundle_data": {
+            "description": "Write the local source files beside the export as <export>.data.zip (a still: its frames and what they depend on; a movie: the layers' files). Omit to follow Bundle source data with export in the Record panel",
+            "type": "boolean"
           }
         },
         "required": ["path"]
@@ -2790,6 +2842,91 @@
         "readOnlyHint": false
       },
       "x-effect": "write"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "driving": {"type": [
+            "object",
+            "null"
+          ]},
+          "memory": {"type": [
+            "object",
+            "null"
+          ]},
+          "next_seq": {"type": "integer"},
+          "events": {"type": "array"}
+        }
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "since_seq": {
+            "description": "Return events after this one; 0 (the default) for all still held, up to 5000",
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "maximum": 5000,
+            "description": "At most this many events; default 500",
+            "type": "integer",
+            "minimum": 1
+          },
+          "kinds": {
+            "description": "Only these kinds; default all",
+            "type": "array",
+            "items": {"enum": [
+              "cmd",
+              "cpu",
+              "disk",
+              "net",
+              "mem",
+              "core",
+              "log"
+            ]}
+          }
+        },
+        "required": []
+      },
+      "name": "activityLog",
+      "description": "Read Studio's activity record: commands from scripts and assistants with their answers and timings, downloads, disk, HelioFITS Core's output, memory changes and log lines, oldest first, after since_seq",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "read"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {"light": {
+          "description": "Show only this kind of line; default all",
+          "enum": [
+            "cmd",
+            "cpu",
+            "disk",
+            "net",
+            "mem",
+            "core",
+            "log"
+          ]
+        }},
+        "required": []
+      },
+      "name": "activityShow",
+      "description": "Open the Activity window, on one kind of line if light is given, so the person can watch what Studio does",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
     },
     {
       "outputSchema": {

@@ -75,3 +75,25 @@ def test_cache_runs_a_queued_job_to_the_end(tmp_path, monkeypatch):
     query = {"start": "2025-09-21T16:00:00", "end": "2025-09-21T17:00:00", "instrument": "AIA", "wavelength": 193.0}
     assert cache.download_enqueue(query=query) == {"job_id": 7, "status": "done"} and ran == [1]
     assert cache.call("download.enqueue", _wait=False, query=query)["status"] == "queued"
+
+
+def test_client_header_names_the_caller(fake):
+    from pyheliofits import __version__
+
+    def last(**kw):
+        Studio(**kw).seek_frame(frame=0)
+        return fake.clients[-1]  # the call itself comes after the command list the client fetches first
+
+    assert last() == f"pyheliofits/{__version__}"
+    assert last(client="my-script/2") == "my-script/2"
+    odd = last(client="caf\u00e9\n/1")
+    assert odd.isascii() and "\n" not in odd
+
+
+def test_activity_log_through_the_client(fake):
+    s = Studio()
+    s.seek_frame(frame=0)
+    s.seek_frame(frame=1)
+    out = s.activity_log()
+    assert [e["text"] for e in out["events"]] == ["> seekFrame", "> seekFrame"]
+    assert s.activity_log(since_seq=out["next_seq"])["events"] == []

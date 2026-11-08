@@ -47,6 +47,16 @@ def test_call_studio_and_cache(fake):
     assert bad.is_error and "invalid-arguments" in bad.content[0].text
 
 
+def test_studio_is_told_which_mcp_client_is_calling(fake):
+    async def go():
+        async with Client(hmcp.build(Studio())) as c:
+            await c.call_tool("studio_seekTime", {"time": "2024-05-10T12:00"})
+    anyio.run(go)
+    from pyheliofits import __version__
+    header = fake.clients[-1]
+    assert header.startswith(f"heliofits-mcp/{__version__}"), header  # Studio colours its glow by this prefix
+
+
 def test_read_only_hides_writers(fake):
     async def go():
         async with Client(hmcp.build(Studio(), read_only=True)) as c:

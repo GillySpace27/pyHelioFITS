@@ -47,6 +47,7 @@ class FakeStudio:
         self.handlers = {**self._data_verbs(), **(handlers or {})}
         self.confirm = confirm
         self.calls: list[tuple[str, dict]] = []
+        self.clients: list[str | None] = []  # the X-HFS-Client header of each call, as Studio's footer would show it
         self.token = secrets.token_hex(16)
         outer = self
 
@@ -60,6 +61,7 @@ class FakeStudio:
                     self.end_headers()
                     return
                 req = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                outer.clients.append(self.headers.get("X-HFS-Client"))
                 body = json.dumps(outer._answer(req)).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
@@ -157,7 +159,18 @@ class FakeStudio:
                 L["current"] = min(a["frame"], len(L["times"]) - 1)
             return {}
 
-        return {"layerAdd": layer_add, "layerList": layer_list, "layerRemove": layer_remove,
+        def activity_log(a):
+            # What Studio's activityLog returns, from this fake's own calls: one line per command.
+            kinds = a.get("kinds")
+            events = [{"seq": i + 1, "time": "2026-01-01T00:00:00Z", "kind": "cmd", "source": "FakeStudio", "text": f"> {n}"}
+                      for i, (n, _) in enumerate(self.calls) if n != "activityLog"]
+            events = [e for e in events if e["seq"] > a.get("since_seq", 0)][: a.get("limit", 500)]
+            if kinds is not None and "cmd" not in kinds:
+                events = []
+            return {"events": events, "next_seq": events[-1]["seq"] if events else a.get("since_seq", 0),
+                    "driving": None, "memory": None}
+
+        return {"activityLog": activity_log, "layerAdd": layer_add, "layerList": layer_list, "layerRemove": layer_remove,
                 "layerReload": lambda a: describe(need(a)), "filterSet": filter_set,
                 "viewSet": view_set, "viewGet": lambda a: dict(self.view), "frameGet": frame_get,
                 "previewRender": preview, "exportStill": still, "exportMovie": movie,

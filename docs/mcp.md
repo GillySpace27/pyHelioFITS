@@ -21,6 +21,16 @@ same protocol for tests and for trying notebooks without Studio.
 `pyheliofits/data/studio-commands.json` is a copy of Studio's `docs/commands.json`, used when Studio
 is not running. The client uses a running Studio's own list when there is one.
 
+## Who Studio shows as driving it
+
+Every call carries an `X-HFS-Client` header. `Studio()` sends `pyheliofits/<version>` (change it with
+`Studio(client="my-tool/1")`); `heliofits-mcp` sends `heliofits-mcp/<version>; <the MCP client's own
+name>` (for example `Claude Desktop`). Studio shows it in the footer ("Driven by Claude Desktop via
+heliofits-mcp: layerAdd") and colours the window's edge glow by it: orange for the MCP server, blue
+for a Python script, green for anything else. The header decides nothing but that display.
+`Studio().activity_log(since_seq=0, kinds=None, limit=500)` (tool `studio_activityLog`) reads back
+what Studio did: each command with its answer and time, downloads, Core's output, memory changes.
+
 ## MCP tools
 
 `studio_<command>` for each Studio command, `cache_<method>` for each Core method (dots become
