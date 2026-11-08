@@ -30,8 +30,8 @@ The four verdicts of a comparison (the same four Studio shows; JSON values are l
 |---|---|
 | `identical` | equal `hfpix/1` digests |
 | `equivalent` | pixels differ by at most the tolerance given, and one was given |
-| `different` | beyond the tolerance, no tolerance given, or sizes differ. If both environments are known and equal, the report says so: that is a bug or a hidden input, not the GPU |
-| `cannot_check` | nothing to compare against: no digest in the record and no original beside it, or no record. Whether an exact replay was ever promised is `preflight`'s answer, a separate question |
+| `different` | beyond the tolerance, or no tolerance given. If both environments are known and equal, the report says so: that is a bug or a hidden input, not the GPU |
+| `cannot_check` | nothing to compare against (no digest in the record and no original beside it, or no record), or the sizes differ, which is the replay's export at fault rather than the picture. Whether an exact replay was ever promised is `preflight`'s answer, a separate question |
 
 ## Format 1.1 keys
 

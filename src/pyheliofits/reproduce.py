@@ -13,11 +13,11 @@ Four verdicts:
 * ``identical``: the digests are equal.
 * ``equivalent``: the pixels differ by at most ``tolerance`` levels, and a tolerance was given.
   Nothing here invents a tolerance; it has to come from measurement on named hardware.
-* ``different``: the pixels differ beyond the tolerance, or the sizes differ. When the two
-  environments are known to be the same, the report says so: that is a bug or a hidden input,
-  not a GPU difference.
+* ``different``: the pixels differ beyond the tolerance. When the two environments are known to
+  be the same, the report says so: that is a bug or a hidden input, not a GPU difference.
 * ``cannot_check``: nothing to compare against (no digest in the record and no original beside
-  it, or no record at all). Whether a replay was ever promised exact is ``preflight``'s answer,
+  it, or no record at all), or the two images differ in size, channels or bit depth, which is a
+  fault of the replay's export rather than of the picture. Whether a replay was ever promised exact is ``preflight``'s answer,
   a separate question from how a given replay turned out.
 
 The four names are the ones HelioFITS Studio shows (Identical, Equivalent, Different, Cannot
@@ -443,6 +443,8 @@ def compare(original: str | Path, replay: str | Path, *, tolerance: int | None =
     result.metrics = metrics
     result.comparable = comparable
     if not comparable:
+        # A size mismatch is the replay's export, not the picture: the same rule Studio applies.
+        result.verdict = "cannot_check"
         result.reasons.append("the two images differ in size, channels or bit depth, so pixels were not compared")
         return result
     if tolerance is not None and metrics["within_tolerance"]:
@@ -494,6 +496,7 @@ def verify(record_path: str | Path, replay: str | Path, *, tolerance: int | None
             w, h = out.get("width"), out.get("height")
             if isinstance(w, int) and isinstance(h, int) and (w, h) != (image.width, image.height):
                 result.comparable = False
+                result.verdict = "cannot_check"
                 result.reasons.append(f"the record says {w}x{h} and the replay is {image.width}x{image.height}")
     else:
         return Comparison("cannot_check", str(record_path), str(replay), comparable=False,

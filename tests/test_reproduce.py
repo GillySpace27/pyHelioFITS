@@ -114,7 +114,7 @@ def test_compare_refuses_to_guess_across_sizes_and_flags_same_environment(tmp_pa
     a = reproduce.write_png(tmp_path / "a.png", rgba())
     b = reproduce.write_png(tmp_path / "b.png", rgba(shape=(24, 30, 4)))
     r = reproduce.compare(a, b, tolerance=255)
-    assert r.verdict == "different" and not r.comparable
+    assert r.verdict == "cannot_check" and not r.comparable  # a size mismatch is the replay's export, not the picture
     c = reproduce.write_png(tmp_path / "c.png", rgba(seed=2))
     env = {"gpu": {"renderer": "Apple M2"}, "display": {"dither": False}, "producer": {"commit": "abc"}}
     r = reproduce.compare(a, c, original_environment=env, replay_environment=copy.deepcopy(env))
