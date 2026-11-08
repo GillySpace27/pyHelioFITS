@@ -83,3 +83,12 @@ def test_cme_height_time_front_moves_out(fake, tmp_path):
     rows = list(csv.DictReader(open(tmp_path / "hfs-out/cme/example_height_time.csv")))
     heights = [float(r["front_rsun"]) for r in rows]
     assert len(heights) == 5 and heights == sorted(heights) and heights[-1] > heights[0]
+
+
+def test_reproduce_from_sidecar_compares_two_exports_and_skips_the_replay(fake, monkeypatch, capsys):
+    monkeypatch.delenv("HFREC", raising=False)
+    run("06_reproduce_from_sidecar.py")
+    out = capsys.readouterr().out
+    assert "identical" in out and "Set HFREC" in out
+    assert [n for n, _ in fake.calls].count("exportStill") == 2
+    assert "sessionLoad" not in [n for n, _ in fake.calls]
