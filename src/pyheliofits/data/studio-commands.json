@@ -317,6 +317,24 @@
         "type": "object",
         "properties": {}
       },
+      "name": "zoomTimelineFit",
+      "description": "Set the timeline window to the time bounds of the loaded layers",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": false
+      },
+      "x-effect": "write"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
       "name": "zoomIn",
       "description": "Zoom In",
       "annotations": {
@@ -445,6 +463,78 @@
       },
       "name": "present",
       "description": "Presentation mode: output only, fullscreen (Esc to leave)",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "identifyUnderCursor",
+      "description": "Identify Under Cursor",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": false
+      },
+      "x-effect": "write"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "identifyTooltip",
+      "description": "Identify Tooltip",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": false
+      },
+      "x-effect": "write"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "identifyStars",
+      "description": "Identify Stars",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": false
+      },
+      "x-effect": "write"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "identifyFindBody",
+      "description": "Find Body...",
       "annotations": {
         "destructiveHint": false,
         "readOnlyHint": true
@@ -894,7 +984,7 @@
         "properties": {}
       },
       "name": "reportBug",
-      "description": "Report Bug/Request Feature",
+      "description": "Open the GitHub Page",
       "annotations": {
         "destructiveHint": false,
         "readOnlyHint": true
@@ -1235,6 +1325,96 @@
         "type": "object",
         "properties": {}
       },
+      "name": "openExportRecord",
+      "description": "Read an export's processing record (.hfrec) as a report; copy it as a methods paragraph or LaTeX, or save a Python script",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "migrateSidecars",
+      "description": "Rename the older .hfrec.json export records in a folder and its subfolders to .hfrec and add a preview to those without one, after a count to confirm; never replaces a .hfrec",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": false
+      },
+      "x-effect": "write"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "study",
+      "description": "What a scene exports: a table of views to export as a set (projection, lambda, field of view, layers), and study templates to start one from",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "taskManager",
+      "description": "What is downloading, loading or computing, and the export queue (also: click the footer's spinner)",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "studySaveView",
+      "description": "Add the view on screen to the Study table as a new row",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
       "name": "searchControls",
       "description": "Find any command or control by name and run it or show where it is",
       "annotations": {
@@ -1397,6 +1577,42 @@
         "type": "object",
         "properties": {}
       },
+      "name": "tourManagerWindows",
+      "description": "Guided tour: The manager windows",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "tourRearrangingTheInterface",
+      "description": "Guided tour: Rearranging the interface",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
       "name": "showPlayback",
       "description": "Open the Playback and Recording section, wherever it is docked",
       "annotations": {
@@ -1471,6 +1687,384 @@
       },
       "name": "templates",
       "description": "Manage scene templates: open, duplicate, rename, edit, share, set as startup or retire",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "toolbarManager",
+      "description": "Choose which tools are on the toolbar and in what order (unlocks the panels first when they are locked)",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "cacheManager",
+      "description": "What is on disk, in Studio's cache and the FITS library: load, reveal, import, verify or delete",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "modelManager",
+      "description": "Spacecraft models to download, preview and add to the scene at their real positions",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "themeManager",
+      "description": "Pick, customize and save interface themes (View > Theme is the quick picker)",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "keybindingsManager",
+      "description": "Every command with its keybinding: search, change or reset (opens Settings on the Keybindings tab)",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "foldLeftPanel1",
+      "description": "Fold or show section 1 of the left sidebar, the one numbered 1; moving a section changes its number",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "foldLeftPanel2",
+      "description": "Fold or show section 2 of the left sidebar, the one numbered 2; moving a section changes its number",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "foldLeftPanel3",
+      "description": "Fold or show section 3 of the left sidebar, the one numbered 3; moving a section changes its number",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "foldLeftPanel4",
+      "description": "Fold or show section 4 of the left sidebar, the one numbered 4; moving a section changes its number",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "foldLeftPanel5",
+      "description": "Fold or show section 5 of the left sidebar, the one numbered 5; moving a section changes its number",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "foldLeftPanel6",
+      "description": "Fold or show section 6 of the left sidebar, the one numbered 6; moving a section changes its number",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "foldLeftPanel7",
+      "description": "Fold or show section 7 of the left sidebar, the one numbered 7; moving a section changes its number",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "foldLeftPanel8",
+      "description": "Fold or show section 8 of the left sidebar, the one numbered 8; moving a section changes its number",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "foldRightPanel1",
+      "description": "Fold or show section 1 of the right sidebar, the one numbered 1; moving a section changes its number",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "foldRightPanel2",
+      "description": "Fold or show section 2 of the right sidebar, the one numbered 2; moving a section changes its number",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "foldRightPanel3",
+      "description": "Fold or show section 3 of the right sidebar, the one numbered 3; moving a section changes its number",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "foldRightPanel4",
+      "description": "Fold or show section 4 of the right sidebar, the one numbered 4; moving a section changes its number",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "foldRightPanel5",
+      "description": "Fold or show section 5 of the right sidebar, the one numbered 5; moving a section changes its number",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "foldRightPanel6",
+      "description": "Fold or show section 6 of the right sidebar, the one numbered 6; moving a section changes its number",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "foldRightPanel7",
+      "description": "Fold or show section 7 of the right sidebar, the one numbered 7; moving a section changes its number",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "ui"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {}
+      },
+      "name": "foldRightPanel8",
+      "description": "Fold or show section 8 of the right sidebar, the one numbered 8; moving a section changes its number",
       "annotations": {
         "destructiveHint": false,
         "readOnlyHint": true
@@ -1877,6 +2471,48 @@
     {
       "outputSchema": {
         "type": "object",
+        "properties": {
+          "path": {"type": "string"},
+          "notes": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "window": {"type": "string"}
+        }
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "path": {
+            "description": "The .jhv, .data.zip or .hfrec to load",
+            "type": "string"
+          },
+          "range": {
+            "description": "A movie record: load every frame, not the one checked",
+            "type": "boolean"
+          },
+          "window": {
+            "description": "Where to load it; a record defaults to new, anything else to this",
+            "enum": [
+              "this",
+              "new"
+            ]
+          }
+        },
+        "required": ["path"]
+      },
+      "name": "sessionLoad",
+      "description": "Load a scene from a session file (.jhv), a session data archive (.data.zip) or an export's processing record (.hfrec); a record opens in a new window by default and checks its picture against the record's, one frame of a movie unless range",
+      "annotations": {
+        "destructiveHint": true,
+        "readOnlyHint": false
+      },
+      "x-effect": "destructive"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
         "properties": {"path": {"type": "string"}}
       },
       "inputSchema": {
@@ -1929,6 +2565,226 @@
       },
       "name": "exportMovie",
       "description": "Export one loop of the loaded frames as a movie in the format the settings choose, with its processing record beside it",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": false
+      },
+      "x-effect": "write"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "observer": {"type": "object"},
+          "matches": {"type": "array"}
+        }
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "observer": {
+            "description": "A SPICE observer such as EARTH, SOHO, STEREO AHEAD, SOLO or PSP; omit for the active image layer's own observer",
+            "type": "string"
+          },
+          "tx_deg": {
+            "description": "Helioprojective longitude Tx in degrees",
+            "type": "number"
+          },
+          "ty_deg": {
+            "description": "Helioprojective latitude Ty in degrees",
+            "type": "number"
+          },
+          "tolerance_deg": {
+            "description": "Extra radius in degrees; default 0",
+            "type": "number",
+            "minimum": 0
+          },
+          "time": {
+            "description": "UTC time, ISO 8601; omit for the active image layer's frame (or the displayed time when no layer is loaded)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tx_deg",
+          "ty_deg"
+        ]
+      },
+      "name": "identifyAt",
+      "description": "Name the Sun, Moon and planets at a helioprojective direction, as an observer sees them",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "read"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "distance_au": {"type": "number"},
+          "tx_deg": {"type": "number"},
+          "elongation_deg": {"type": "number"},
+          "in_field": {"type": "boolean"},
+          "ty_deg": {"type": "number"}
+        }
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "observer": {
+            "description": "A SPICE observer such as EARTH, SOHO, STEREO AHEAD, SOLO or PSP; omit for the active image layer's own observer",
+            "type": "string"
+          },
+          "time": {
+            "description": "UTC time, ISO 8601; omit for the active image layer's frame (or the displayed time when no layer is loaded)",
+            "type": "string"
+          },
+          "body": {
+            "description": "Sun, Mercury, Venus, Earth, Moon, Mars, Jupiter, Saturn, Uranus, Neptune or Pluto",
+            "type": "string"
+          }
+        },
+        "required": ["body"]
+      },
+      "name": "identifyLocate",
+      "description": "Where a body is in an observer's sky: helioprojective Tx and Ty, distance, elongation, and whether the active layer's field holds it",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "read"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "bodies": {"type": "object"},
+          "days": {"type": "object"}
+        }
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "observer": {
+            "description": "A SPICE observer; default EARTH",
+            "type": "string"
+          },
+          "inner_deg": {
+            "type": "number",
+            "minimum": 0
+          },
+          "half_width_deg": {
+            "description": "0 for no square cut",
+            "type": "number",
+            "minimum": 0
+          },
+          "field": {
+            "description": "punch: a 46.08 degree half-width square; layer: the active image layer's own field; custom: inner_deg, outer_deg and half_width_deg. Default punch",
+            "type": "string",
+            "enum": [
+              "punch",
+              "layer",
+              "custom"
+            ]
+          },
+          "outer_deg": {
+            "type": "number",
+            "minimum": 0
+          },
+          "start": {
+            "description": "UTC start, ISO 8601",
+            "type": "string"
+          },
+          "end": {
+            "description": "UTC end, ISO 8601",
+            "type": "string"
+          },
+          "step_minutes": {
+            "description": "Sampling step; edges are refined to a minute. Default 60",
+            "type": "number",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ]
+      },
+      "name": "identifyInField",
+      "description": "When each body is in a field of view over a time range, by body and by UTC day: find dates with or without the Moon",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": true
+      },
+      "x-effect": "read"
+    },
+    {
+      "outputSchema": {"type": "object"},
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "star_names_bayer": {"type": "boolean"},
+          "tolerance_pixels": {
+            "type": "number",
+            "minimum": 0
+          },
+          "earth_observer_uncertainty_km": {
+            "type": "number",
+            "minimum": 0
+          },
+          "tooltip_dwell_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "light_time": {"type": "boolean"},
+          "tooltip": {"type": "boolean"},
+          "star_max_magnitude": {"type": "number"},
+          "pluto": {"type": "boolean"},
+          "stars": {"type": "boolean"},
+          "star_names_iau": {"type": "boolean"},
+          "enabled": {"type": "boolean"}
+        }
+      },
+      "name": "identifySet",
+      "description": "Turn the cursor identifier and its tooltip and stars on or off, and set its tolerances; answers with every setting",
+      "annotations": {
+        "destructiveHint": false,
+        "readOnlyHint": false
+      },
+      "x-effect": "write"
+    },
+    {
+      "outputSchema": {
+        "type": "object",
+        "properties": {"pins": {
+          "type": "array",
+          "items": {"type": "string"}
+        }}
+      },
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "pinned": {
+            "description": "true pins, false unpins; omit to toggle",
+            "type": "boolean"
+          },
+          "clear": {
+            "description": "true removes every pin first",
+            "type": "boolean"
+          },
+          "body": {
+            "description": "Sun, Mercury, Venus, Earth, Moon, Mars, Jupiter, Saturn, Uranus, Neptune or Pluto; omit to list",
+            "type": "string"
+          }
+        }
+      },
+      "name": "identifyPin",
+      "description": "Pin a body's label to the view, or unpin it, or list the pins; pins follow their body and are saved with the session",
       "annotations": {
         "destructiveHint": false,
         "readOnlyHint": false

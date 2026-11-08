@@ -122,15 +122,19 @@ print(result.text())
 
 or `python -m pyheliofits.reproduce run figure.png.hfrec --out replay/ --launch java -Duser.home={home} -jar HFStudio.jar`.
 Nothing is guessed about how Studio is installed: the launch command is yours, and it must carry
-`{home}`. Not run against a real Studio yet (the test uses `FakeStudio`); the scratch-home settings
-path (`<home>/HFStudio/Settings/user.properties`) is read from Studio's `Directories.java` and
-`Settings.java`, not tried.
+`{home}`. The unit tests use `FakeStudio`. It was also run against a real Studio on 2026-11-08
+(Studio master c516f5c71 plus one reader fix, macOS arm64, Apple M4 Max): a still of the bundled
+AIA 171 test image, exported from one scratch home and replayed from its `.hfrec` in another, came
+back `identical`, from `reproduce()` and from the `run` command. That is one machine and one GPU;
+it says nothing about another renderer, and no cross-GPU tolerance has been measured. The scratch
+home layout (`<home>/HFStudio/Settings/user.properties`, endpoint `<home>/HFStudio/api.json`) was
+confirmed by that run: the instance read its settings, wrote its endpoint there, and left the real
+`~/HFStudio` alone.
 
 Limits today: the exported size follows `long_side`, so a record whose aspect Studio's export cannot
 reproduce comes back `cannot_check`; `frames="range"` loads every frame but judges only the first,
-because there is no Studio verb that exports a frame series; the bundled `studio-commands.json` copy
-predates `sessionLoad`, so use a running Studio's own list (the default) or refresh the copy once
-Studio #218 is released.
+because there is no Studio verb that exports a frame series. Movies were not replayed in that run,
+only a still.
 
 ## Not here yet
 
