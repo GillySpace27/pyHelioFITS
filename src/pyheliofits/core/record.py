@@ -953,6 +953,40 @@ _FILE_SQL = (
     "WHERE f.sha256 = ?")
 
 
+def locate(conn: sqlite3.Connection, root: Path, hashes: list[str]) -> dict:
+    """Where a library holds each file of the given SHA-256s: {sha256: row}.
+
+    Row: status (in_library | superseded | missing | invalid), path (absolute, the file as stored),
+    relpath (relative to the library root), file_id, observation_id, dataset_key and, when a newer
+    version is current, current {relpath, version}. A rejected observation is reported like any
+    other, with rejected set to the reason. Reads the index only; nothing is opened or changed.
+    """
+    rejected_ok = db.has_table(conn, "rejections")
+    out: dict[str, dict] = {}
+    for sha in hashes:
+        row = {"status": "invalid", "path": None, "relpath": None, "file_id": None, "observation_id": None,
+               "dataset_key": None, "rejected": None, "current": None}
+        out[sha] = row
+        if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{64}", sha):
+            continue
+        hit = conn.execute(_FILE_SQL, (sha,)).fetchone()
+        if hit is None:
+            row["status"] = "missing"
+            continue
+        current = hit["current_file_id"]
+        row.update(status="in_library" if current == hit["file_id"] else "superseded",
+                   path=str(Path(root) / hit["relpath"]), relpath=hit["relpath"], file_id=hit["file_id"],
+                   observation_id=hit["observation_id"], dataset_key=hit["dataset_key"])
+        if current is not None and current != hit["file_id"]:
+            cur = conn.execute("SELECT relpath, version FROM files WHERE id = ?", (current,)).fetchone()
+            row["current"] = dict(cur) if cur else None
+        if rejected_ok:
+            r = conn.execute("SELECT reason FROM rejections WHERE observation_id = ?",
+                             (hit["observation_id"],)).fetchone()
+            row["rejected"] = r["reason"] if r else None
+    return out
+
+
 def resolve(conn: sqlite3.Connection, record: dict) -> dict:
     """Every source of a record looked up in the index by SHA-256.
 

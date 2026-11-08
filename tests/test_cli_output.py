@@ -94,3 +94,11 @@ def test_version_is_the_installed_one(capsys):
         cli.main(["--version"])
     assert exit_.value.code == 0
     assert capsys.readouterr().out.strip() == f"hfcore {__version__}"
+
+
+def test_record_locate_prints_where_and_exits_1_for_a_missing_file(filled, capsys):
+    sha = filled.reader.execute("SELECT sha256 FROM files").fetchone()[0]
+    code, out, _ = run(capsys, "--library", str(filled.root), "--json", "record", "locate", sha)
+    assert code == 0 and json.loads(out)[sha]["status"] == "in_library"
+    code, out, _ = run(capsys, "--library", str(filled.root), "record", "locate", sha, "0" * 64)
+    assert code == 1 and "in_library" in out and "missing" in out

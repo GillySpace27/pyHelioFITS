@@ -125,6 +125,7 @@ API: dict[str, tuple[str, str]] = {
     "record.read": ("path", "The processing record of an exported image or movie, with rows ready to show."),
     "record.report": ("path, format='text', full=False", "A processing record as readable text: a report, a methods paragraph, LaTeX or a Python script."),
     "record.resolve": ("record", "Look a record's sources up in the library by SHA-256; groups the missing by dataset."),
+    "record.locate": ("sha256", "Where the library holds each file of a list of SHA-256s: status, absolute path, relpath, ids, and the current version when superseded."),
     "record.digest": ("path", "The hfpix/1 pixel digest and the content digest of a PNG export (hfrecord 1.1, output.pixel_sha256)."),
     "record.verify": ("record, replay, tolerance=None", "Judge a replayed PNG against an export's record: identical, equivalent, different or cannot_check, with difference metrics."),
     "settings.get": ("", "HelioFITS Core's settings (jsoc_email, vso_mirrors, ...)."),
@@ -247,6 +248,7 @@ class Server:
             "record.read": self.record_read,
             "record.report": self.record_report,
             "record.resolve": self.record_resolve,
+            "record.locate": self.record_locate,
             "record.digest": self.record_digest,
             "record.verify": self.record_verify,
             "archive.search": self.search,
@@ -471,6 +473,14 @@ class Server:
             raise RpcError(RECORD_UNSUPPORTED, str(exc))
         except hfrecord.RecordError as exc:
             raise RpcError(INVALID_PARAMS, str(exc))
+
+    def record_locate(self, sha256: list) -> dict:
+        """record.locate: index lookups only; the files are not opened."""
+        if isinstance(sha256, str):
+            sha256 = [sha256]
+        if not isinstance(sha256, list) or not all(isinstance(x, str) for x in sha256):
+            raise RpcError(INVALID_PARAMS, "sha256 is a list of SHA-256 hex strings")
+        return hfrecord.locate(self.lib.reader, self.lib.root, sha256)
 
     def record_digest(self, path: str) -> dict:
         """record.digest: reads the PNG only."""

@@ -800,6 +800,17 @@ replay is not promised, and whether a difference can be the GPU's at all.
 Without the original file beside the sidecar, a format 1.1 record is judged by its stored
 `output.pixel_sha256` alone (no metrics); a format 1.0 record without its export cannot be judged.
 
+### `record.locate`
+
+Params: `sha256`, a list of SHA-256 hex digests (one string is accepted). Reads the index only. Answers
+`{sha256: row}` where `status` is `in_library` (the observation's current file), `superseded` (kept,
+but a newer version is current; `current` names it), `missing` or `invalid` (not 64 hex digits).
+Found rows carry `path` (absolute, the file as stored), `relpath` (relative to the library root),
+`file_id`, `observation_id`, `dataset_key` and `rejected` (the reason, when set aside). It is
+`record.resolve` for a caller that has hashes and no record.
+
+    {"jsonrpc":"2.0","id":5,"method":"record.locate","params":{"sha256":["d04c04b87c45deb7f8cd4dc9925ab483881867e4bf9f92e11d2d54649db991cd"]}}
+
 ## Notifications
 
 Sent without an `id`, to every client of the core.
@@ -860,6 +871,7 @@ library does not have, or no library; 3 the library is locked by another core th
 | `hfcore versions OBSERVATION_ID` | `library.versions` |
 | `hfcore checks FILE_ID` | `library.checks` |
 | `hfcore record show FILE [--format F] [--full]` | `record.report` |
+| `hfcore record locate SHA256 ...` | `record.locate` |
 | `hfcore record digest FILE.png` | `record.digest` |
 | `hfcore record verify RECORD REPLAY.png [--tolerance N] [--diff OUT.png]` | `record.verify` |
 | `hfcore record preflight FILE` | `record.read`, the reproducibility rows of its view |
