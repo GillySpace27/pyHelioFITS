@@ -22,8 +22,9 @@ from pyheliofits.core.rpc import RECORD_UNSUPPORTED, Server
 from conftest import aia_header, punch_header, write_fits
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "example-studio-connect-still.hfrec.json"
-# sha256 of the design folder's hfrecord-1.schema.json (2026-10-22): the copy must stay byte for byte.
-SCHEMA_SHA256 = "523a4aa539d14a5056cf13c992636f5aa0c1d5c199093baa7839a478ba588fa2"
+# sha256 of the canonical hfrecord-1.schema.json (format 1.1, 2026-11-08). This package holds the canonical
+# copy since the report and preview keys; Studio's docs/spec copy must be refreshed from it byte for byte.
+SCHEMA_SHA256 = "a30e27dca6dc5856903e40c1e1d738393c5d047d8987f5b206b9b052153f33d5"
 
 
 def example() -> dict:
@@ -68,7 +69,7 @@ def studio_session() -> dict:
 # ---- the schema and versions ---------------------------------------------------------------
 
 
-def test_schema_is_the_design_copy_byte_for_byte():
+def test_schema_is_the_canonical_copy_byte_for_byte():
     assert hashlib.sha256(record.SCHEMA_PATH.read_bytes()).hexdigest() == SCHEMA_SHA256
 
 

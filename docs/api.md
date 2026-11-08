@@ -676,7 +676,8 @@ result has gained `"action": "dataset"`).
 
 ## Processing record methods
 
-A processing record (format `hfrecord` 1.x, schema in `src/pyheliofits/core/schemas/hfrecord-1.schema.json`)
+A processing record (format `hfrecord` 1.x, schema in `src/pyheliofits/core/schemas/hfrecord-1.schema.json`, the
+replay keys of 1.1 in [reproduce.md](reproduce.md))
 says what made an exported image or movie: each layer's dataset, its source files by SHA-256, and
 the steps applied to them in order. HelioFITS Studio writes it beside the export
 (`<export file name>.hfrec`, the complete copy; the older `.hfrec.json` name is read too) and inside it where the container takes one. These
@@ -772,6 +773,33 @@ through the dataset's own query). For one it does not, `fetch` is `download.enqu
 inferred from the record's dataset fields (`inferred: true`), or null with a `reason` when the
 record names no instrument or no times. Send `fetch.method` with `fetch.params` to fetch.
 
+### `record.digest`
+
+Params: `path`, a PNG still or frame. Answers in the background. Decodes the picture and answers
+its two digests of hfrecord 1.1 ([reproduce.md](reproduce.md)): `pixel_sha256`, the `hfpix/1`
+digest of the samples, which two exports of one scene share while their files differ; and
+`content_sha256`, the file with every ancillary chunk removed. Also `sha256` of the whole file,
+`width`, `height`, `channels` and `bit_depth`.
+
+    {"jsonrpc":"2.0","id":3,"method":"record.digest","params":{"path":"/Users/you/Exports/connect.png"}}
+
+### `record.verify`
+
+Params: `record`, the `.hfrec` sidecar or the original export; `replay`, the replayed PNG;
+`tolerance`, the largest difference in levels that still counts as `equivalent` (`None`, the
+default, allows only `identical`; a tolerance is something measured on named hardware, never
+assumed). Answers in the background; writes nothing. The `verdict` is `identical` (equal
+`hfpix/1` digests), `equivalent`, `different` or `cannot_replay`, with `metrics` (largest, mean
+and 99.9th-percentile difference, differing pixel count and fraction, first differing pixel),
+`environment.differences` between the record's `environment` block and the replay's own sidecar
+when it has one, and `reasons`, the sentences a person needs: the record's own reasons an exact
+replay is not promised, and whether a difference can be the GPU's at all.
+
+    {"jsonrpc":"2.0","id":4,"method":"record.verify","params":{"record":"figure.png.hfrec","replay":"replay/figure.png","tolerance":2}}
+
+Without the original file beside the sidecar, a format 1.1 record is judged by its stored
+`output.pixel_sha256` alone (no metrics); a format 1.0 record without its export cannot be judged.
+
 ## Notifications
 
 Sent without an `id`, to every client of the core.
@@ -832,6 +860,9 @@ library does not have, or no library; 3 the library is locked by another core th
 | `hfcore versions OBSERVATION_ID` | `library.versions` |
 | `hfcore checks FILE_ID` | `library.checks` |
 | `hfcore record show FILE [--format F] [--full]` | `record.report` |
+| `hfcore record digest FILE.png` | `record.digest` |
+| `hfcore record verify RECORD REPLAY.png [--tolerance N] [--diff OUT.png]` | `record.verify` |
+| `hfcore record preflight FILE` | `record.read`, the reproducibility rows of its view |
 | `hfcore record migrate PATH ... [--yes]` | (none: renames files, so it is not an API method) |
 | `hfcore coverage [--start T] [--end T] [--bins N] [--dataset KEY ...]` | `library.coverage` |
 | `hfcore collisions` | `library.collisions` |

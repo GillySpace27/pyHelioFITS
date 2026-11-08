@@ -36,6 +36,7 @@ Issues = "https://github.com/GillySpace27/pyHelioFITS/issues"
 archives = ["sunpy[net]>=6", "drms"]
 mcp = ["mcp>=2"]
 parity = ["sunpy[map]>=6"]
+reproduce = ["pillow"]
 test = ["pytest", "jsonschema"]
 
 [project.scripts]
