@@ -479,7 +479,8 @@ def verify(record_path: str | Path, replay: str | Path, *, tolerance: int | None
     replay_env = _environment_of(replay)
     original_env = {**(rec.get("environment") or {}), "producer": rec.get("producer") or {}}
     export = _export_file(found, record_path)
-    if export is not None and export.is_file():
+    if export is not None and _is_png(export):
+        # not a movie or other container: those are judged by the record's digest below
         result = compare(export, replay, tolerance=tolerance, original_environment=original_env,
                          replay_environment=replay_env, diff_out=diff_out)
         if isinstance(expected, str) and result.original_digest != expected:
@@ -492,13 +493,21 @@ def verify(record_path: str | Path, replay: str | Path, *, tolerance: int | None
                             expected, digest, tolerance=tolerance)
         result.environment = compare_environments(original_env, replay_env)
         if digest != expected:
-            result.reasons.append("the original file was not found beside the record, so only the digests were "
+            result.reasons.append("the original is not a PNG beside the record (missing, or a movie), so only the digests were "
                                   "compared and no difference metrics are available")
             w, h = out.get("width"), out.get("height")
             if isinstance(w, int) and isinstance(h, int) and (w, h) != (image.width, image.height):
                 result.comparable = False
                 result.verdict = "cannot_check"
                 result.reasons.append(f"the record says {w}x{h} and the replay is {image.width}x{image.height}")
+            bits = out.get("bit_depth")
+            if isinstance(bits, int) and bits != image.bit_depth:
+                # Found replaying a movie: its frames are 8-bit, Studio's still export is 16-bit. The digests
+                # cannot be equal, which says nothing about the picture.
+                result.comparable = False
+                result.verdict = "cannot_check"
+                result.reasons.append(f"the record's pixels are {bits}-bit and the replay's are {image.bit_depth}-bit, "
+                                      "so the digests cannot be compared")
     else:
         return Comparison("cannot_check", str(record_path), str(replay), comparable=False,
                           reasons=["the record has no pixel digest (format 1.0) and the export is not beside it"]
@@ -520,6 +529,14 @@ def _export_file(found: dict, record_path: str | Path) -> Path | None:
         if name.endswith(suffix):
             return p.with_name(name[:-len(suffix)])
     return p if p.suffix.lower() == ".png" else None
+
+
+def _is_png(path: Path) -> bool:
+    try:
+        with open(path, "rb") as fh:
+            return fh.read(8) == _PNG_SIGNATURE
+    except OSError:
+        return False
 
 
 def _environment_of(path: str | Path) -> dict | None:
@@ -635,8 +652,10 @@ def reproduce(record_path: str | Path, out_dir: str | Path, studio, *, frames: s
     recorded long side; ``verify`` the new PNG against the record. ``tolerance`` is the largest
     difference in levels that counts as ``equivalent`` (none is assumed).
 
-    ``frames="range"`` loads every frame but cannot judge them yet: that needs a Studio verb
-    that exports a frame series, and the result says so (``cannot_check``).
+    A movie or series record with ``output.frame_digests`` is replayed with ``exportMovie`` instead
+    of ``exportStill`` (a still is always 16-bit, a movie's frames are often 8-bit): the replay's own
+    record carries its own frame digests, compared one by one. ``frames="range"`` judges every frame,
+    ``"one"`` the first; no tolerance applies to digests.
     """
     if frames not in ("one", "range"):
         raise ValueError('frames is "one" (the default) or "range"')
@@ -665,6 +684,8 @@ def reproduce(record_path: str | Path, out_dir: str | Path, studio, *, frames: s
     notes = [n for n in loaded.get("notes") or [] if isinstance(n, str)]
     width, height = out.get("width"), out.get("height")
     long_side = max(width, height) if isinstance(width, int) and isinstance(height, int) else None
+    if out.get("kind") in ("movie", "frame_series") and isinstance(out.get("frame_digests"), list) and out["frame_digests"]:
+        return _reproduce_movie(studio, sidecar, rec, pre, out, out_dir, frames, notes, long_side, tolerance)
     target = out_dir / (Path(out.get("file_name") or sidecar.name[:-len(".hfrec")]).stem + "-replay.png")
     args: dict[str, Any] = {"path": str(target.resolve())}
     if long_side:
@@ -675,11 +696,74 @@ def reproduce(record_path: str | Path, out_dir: str | Path, studio, *, frames: s
     result.reasons = notes + result.reasons
     if frames == "range":
         result.reasons.append("the whole range was loaded, but only its first frame was judged: judging every frame "
-                              "needs a Studio verb that exports a frame series, which does not exist yet")
+                              "needs the record's frame_digests, which this record does not carry")
         if result.verdict == "identical":
             result.reasons.append("identical for the first frame only")
     elif pre["frames"] > 1:
         result.reasons.append(f"1 of {pre['frames']} frames checked (the first)")
+    result.reasons = list(dict.fromkeys(result.reasons))
+    return result
+
+
+def _reproduce_movie(studio, sidecar: Path, rec: dict, pre: dict, out: dict, out_dir: Path, frames: str,
+                     notes: list[str], long_side: int | None, tolerance: int | None = None) -> Comparison:
+    """Judge a movie record frame by frame. A still export is always 16-bit and a movie's frames are
+    often 8-bit, so a frame cannot be re-exported as a still and compared; instead the replay exports
+    its own movie, whose record carries its own ``output.frame_digests``, taken before encoding. Those are
+    compared with the original's, one by one. The encoded bytes are never compared (lossy, and the
+    encoder's business). Pixels are not compared either, so no tolerance applies."""
+    suffix = Path(out.get("file_name") or "movie.mp4").suffix or ".mp4"
+    target = out_dir / (Path(out.get("file_name") or sidecar.name[:-len(".hfrec")]).stem + "-replay" + suffix)
+    args: dict[str, Any] = {"path": str(target.resolve())}
+    if long_side:
+        args["long_side"] = long_side
+    studio.invoke("exportMovie", **args)
+    replay_sidecar = target.with_name(target.name + ".hfrec")
+    try:
+        found = hfrecord.read(replay_sidecar)
+    except (hfrecord.RecordError, OSError):
+        found = {"found": False}  # Studio wrote no record beside the replayed movie
+    original_env = {**(rec.get("environment") or {}), "producer": rec.get("producer") or {}}
+    result = Comparison("cannot_check", str(sidecar), str(target), comparable=False)
+    result.reasons = list(notes)
+    replay_rec = found.get("record") if found.get("found") else None
+    rout = replay_rec.get("output") if isinstance(replay_rec, dict) and isinstance(replay_rec.get("output"), dict) else {}
+    original, replay = out["frame_digests"], rout.get("frame_digests")
+    if not isinstance(replay, list) or not replay:
+        result.reasons.append("the replayed movie's record has no frame digests, so nothing could be compared")
+        result.reasons.extend(pre["reasons"])
+        return result
+    result.environment = compare_environments(original_env, {**(replay_rec.get("environment") or {}),
+                                                              "producer": replay_rec.get("producer") or {}})
+    for key in ("width", "height", "bit_depth"):
+        if out.get(key) != rout.get(key):
+            result.reasons.append(f"the replayed movie's {key} is {rout.get(key)} and the record's is {out.get(key)}, "
+                                  "so its frames cannot be compared")
+            result.reasons.extend(pre["reasons"])
+            return result
+    count = 1 if frames == "one" else len(original)
+    if frames == "range" and len(replay) != len(original):
+        result.reasons.append(f"the replay has {len(replay)} frames and the record {len(original)}, so they were not compared")
+        result.reasons.extend(pre["reasons"])
+        return result
+    compared = list(zip(original[:count], replay[:count]))
+    differing = [i for i, (a, b) in enumerate(compared) if a != b]
+    result.comparable = True
+    result.original_digest, result.replay_digest = original[0], replay[0]
+    result.metrics = {"frames": {"original": len(original), "replay": len(replay), "compared": len(compared),
+                                 "identical": len(compared) - len(differing), "differing": differing}}
+    result.verdict = "different" if differing else "identical"
+    result.reasons.append(f"{len(compared) - len(differing)} of {len(compared)} frame(s) identical by pixel digest "
+                          "(taken before encoding; the encoded file is not compared)")
+    if differing:
+        result.reasons.append("differing frame index(es): " + ", ".join(str(i) for i in differing))
+        if result.environment.get("compared") and not result.environment["differences"]:
+            result.reasons.append("the environments are the same, so this difference is a bug or a hidden input, not the GPU")
+    if frames == "one" and len(original) > 1:
+        result.reasons.append(f"1 of {len(original)} frames checked (the first)")
+    if tolerance is not None and differing:
+        result.reasons.append("no tolerance was applied: movie frames are compared by digest, not by pixels")
+    result.reasons.extend(pre["reasons"])
     result.reasons = list(dict.fromkeys(result.reasons))
     return result
 

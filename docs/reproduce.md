@@ -102,8 +102,14 @@ with Average or Paeth filtering.
 2. `sessionLoad` the sidecar with `window="this"`: Studio rebuilds the scene from
    `native.studio_session`, finds local files again in `companions.data_archive`, and loads one frame
    of a movie unless `frames="range"`;
-3. `exportStill` at the recorded long side;
-4. `verify` the new PNG against the record, with the `tolerance` you pass (none is assumed).
+3. a still: `exportStill` at the recorded long side, then `verify` the new PNG against the record, with
+   the `tolerance` you pass (none is assumed). A movie or series record that carries
+   `output.frame_digests`: `exportMovie` at the recorded long side instead. A still export is always
+   16-bit and a movie's frames are often 8-bit, so a frame cannot be re-exported as a still and compared.
+   The replayed movie's own record carries its own `frame_digests` (taken before encoding), and those
+   are compared with the original's one by one: `frames="range"` judges every frame, `frames="one"` the
+   first. The encoded file is never compared and no tolerance applies (digests, not pixels). If the
+   depth, size or frame count differs, the verdict is `cannot_check`, with the reason.
 
 `sessionLoad` replaces the scene on screen, so the Studio it drives must be a scratch one. Helpers:
 
@@ -123,7 +129,7 @@ print(result.text())
 or `python -m pyheliofits.reproduce run figure.png.hfrec --out replay/ --launch java -Duser.home={home} -jar HFStudio.jar`.
 Nothing is guessed about how Studio is installed: the launch command is yours, and it must carry
 `{home}`. The unit tests use `FakeStudio`. It was also run against a real Studio on 2026-11-08
-(Studio master c516f5c71 plus one reader fix, macOS arm64, Apple M4 Max): a still of the bundled
+(Studio master c516f5c71 plus a reader fix, macOS arm64, Apple M4 Max): a still of the bundled
 AIA 171 test image, exported from one scratch home and replayed from its `.hfrec` in another, came
 back `identical`, from `reproduce()` and from the `run` command. That is one machine and one GPU;
 it says nothing about another renderer, and no cross-GPU tolerance has been measured. The scratch
@@ -131,14 +137,26 @@ home layout (`<home>/HFStudio/Settings/user.properties`, endpoint `<home>/HFStud
 confirmed by that run: the instance read its settings, wrote its endpoint there, and left the real
 `~/HFStudio` alone.
 
+A movie was replayed the same day (4 consecutive SDO AIA 193 frames from the local library, H.264 8-bit,
+512 x 512). With a camera zoom set by hand, `frames="range"` came back `identical` for 4 of 4 frames. Two things
+the run showed, one fixed and one not:
+
+* Fixed (Studio, `ImageLayer`): with "Reset the view when a layer loads" on, which is the default, loading a
+  session or a record reset the camera, so a saved zoom of 2 came back as 1 and every frame differed. Layers
+  restored from a session no longer reset the view.
+* Open: `frames="one"` (Studio loads only the first output frame) came back `different` on the same record
+  that `range` judged `identical`, with the camera, time and file the same. The cause is not known. Use
+  `frames="range"` to judge a movie until it is.
+* The first movie export of the run had a zoom the later runs of the same script did not (camera width 1.48
+  against 2.57 solar radii); the cause was not found, and its replay is `different` even with the reset off.
+
 Limits today: the exported size follows `long_side`, so a record whose aspect Studio's export cannot
-reproduce comes back `cannot_check`; `frames="range"` loads every frame but judges only the first,
-because there is no Studio verb that exports a frame series. Movies were not replayed in that run,
-only a still.
+reproduce comes back `cannot_check`. Movie replay uses the video format the scratch Studio's settings
+choose (H.264 by default); a record made in a deep format comes back `cannot_check` against an 8-bit replay.
+All of this is one machine and one GPU; no cross-GPU tolerance has been measured.
 
 ## Not here yet
 
 * EXR frames and movies' encoded bytes: Studio digests frames before encoding; this reader opens PNGs only.
-* A frame-series export verb in Studio, to judge every frame of a range.
 * The tolerance table: measured by replaying a golden set on two renderers (release gate
   `release/replay.sh`, companion of `release/parity.sh`).

@@ -131,7 +131,7 @@ def _sidecar(tmp_path: Path, arr: np.ndarray, **output) -> tuple[Path, Path]:
     png = reproduce.write_png(tmp_path / "figure.png", arr)
     rec = example()
     rec["output"].update({"file_name": "figure.png", "sha256": hashlib.sha256(png.read_bytes()).hexdigest(),
-                          "width": arr.shape[1], "height": arr.shape[0], **output})
+                          "width": arr.shape[1], "height": arr.shape[0], "bit_depth": 8, **output})
     side = tmp_path / "figure.png.hfrec"
     side.write_text(json.dumps(rec), encoding="utf-8")
     return png, side
@@ -249,7 +249,7 @@ def _replay_fixture(tmp_path, arr, **output):
     png = reproduce.write_png(tmp_path / "figure.png", arr)
     rec = example()
     rec["hfrecord"] = "1.1"
-    rec["output"].update({"file_name": "figure.png", "width": arr.shape[1], "height": arr.shape[0],
+    rec["output"].update({"file_name": "figure.png", "width": arr.shape[1], "height": arr.shape[0], "bit_depth": 8,
                           "pixel_sha256": reproduce.digests(png)["pixel_sha256"], **output})
     side = tmp_path / "figure.png.hfrec"
     side.write_text(json.dumps(rec), encoding="utf-8")
@@ -338,6 +338,127 @@ def test_reproduce_movie_range_and_refusals(tmp_path):
         r = reproduce.reproduce(embedded, tmp_path / "emb", studio)
     assert r.verdict == "cannot_check" and any("sidecar" in x for x in r.reasons)
     assert fake.calls == []
+
+
+def test_a_movie_beside_its_record_is_not_read_as_a_picture(tmp_path):
+    # Found replaying a real Studio movie: movie.mp4 sits beside movie.mp4.hfrec, and verify used to
+    # open it as a PNG and crash. A lossy movie cannot be compared pixel for pixel; the record's
+    # frame digest is what judges the replayed first frame.
+    arr = rgba()
+    png = reproduce.write_png(tmp_path / "first.png", arr)
+    digest = reproduce.digests(png)["pixel_sha256"]
+    rec = example()
+    rec["hfrecord"] = "1.1"
+    rec["output"].update({"kind": "movie", "frames": 4, "file_name": "movie.mp4", "media_type": "video/mp4",
+                          "width": arr.shape[1], "height": arr.shape[0], "bit_depth": 8, "pixel_sha256": digest,
+                          "frame_digests": [digest, "1" * 64, "2" * 64, "3" * 64]})
+    side = tmp_path / "movie.mp4.hfrec"
+    side.write_text(json.dumps(rec), encoding="utf-8")
+    (tmp_path / "movie.mp4").write_bytes(b"\x00\x00\x00\x20ftypisom not a PNG")
+    r = reproduce.verify(side, png)
+    assert r.verdict == "identical" and r.original_digest == digest
+    # and a 16-bit replay of 8-bit frames says it cannot compare, not that the picture differs
+    r = reproduce.verify(side, _png16(tmp_path / "deep.png", arr))
+    assert r.verdict == "cannot_check" and any("8-bit" in x and "16-bit" in x for x in r.reasons)
+
+
+def _png16(path: Path, arr: np.ndarray) -> Path:
+    import struct
+    import zlib
+    h, w, c = arr.shape
+    deep = (arr.astype(">u2") * 257)
+    rows = b"".join(b"\x00" + deep[y].tobytes() for y in range(h))
+
+    def chunk(kind: bytes, body: bytes) -> bytes:
+        return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body) & 0xFFFFFFFF)
+
+    path.write_bytes(reproduce._PNG_SIGNATURE + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 16, {1: 0, 3: 2, 4: 6}[c], 0, 0, 0))
+                     + chunk(b"IDAT", zlib.compress(rows, 6)) + chunk(b"IEND", b""))
+    return path
+
+
+def _movie_fake(tmp_path, replay_digests, **replay_output):
+    """A Studio whose exportMovie writes a replay record carrying ``replay_digests`` beside the movie."""
+    from pyheliofits.studio import Studio
+    from pyheliofits.testing import FakeStudio
+
+    def movie(a):
+        rec = example()
+        rec["hfrecord"] = "1.1"
+        rec["output"].update({"kind": "movie", "frames": len(replay_digests), "file_name": Path(a["path"]).name,
+                              "width": 32, "height": 24, "bit_depth": 8, "frame_digests": replay_digests,
+                              "pixel_sha256": replay_digests[0], **replay_output})
+        Path(a["path"] + ".hfrec").write_text(json.dumps(rec), encoding="utf-8")
+        return {"path": a["path"], "frames": len(replay_digests)}
+
+    fake = FakeStudio(handlers={"sessionLoad": lambda a: {"path": a["path"], "window": "this", "notes": []},
+                                "exportMovie": movie})
+    fake.tools["sessionLoad"] = SESSION_LOAD
+    return fake, Studio
+
+
+def _movie_record(tmp_path, digests):
+    rec = example()
+    rec["hfrecord"] = "1.1"
+    rec["output"].update({"kind": "movie", "frames": len(digests), "file_name": "movie.mp4", "media_type": "video/mp4",
+                          "width": 32, "height": 24, "bit_depth": 8, "pixel_sha256": digests[0], "frame_digests": digests})
+    side = tmp_path / "movie.mp4.hfrec"
+    side.write_text(json.dumps(rec), encoding="utf-8")
+    return side
+
+
+def test_a_movie_record_is_judged_frame_by_frame_from_the_replays_own_record(tmp_path):
+    # Found replaying a real Studio movie: a still export is 16-bit and the frames are 8-bit, so a frame
+    # cannot be re-exported as a still. The replay exports its own movie and its record's digests are compared.
+    good = [f"{i:x}" * 64 for i in range(4)]
+    side = _movie_record(tmp_path, good)
+    fake, Studio = _movie_fake(tmp_path, good)
+    with fake as f:
+        studio = Studio(json.loads(f.endpoint_file(tmp_path / "api.json").read_text()))
+        rng = reproduce.reproduce(side, tmp_path / "range", studio, frames="range")
+        one = reproduce.reproduce(side, tmp_path / "one", studio)
+    assert rng.verdict == "identical" and rng.metrics["frames"] == {"original": 4, "replay": 4, "compared": 4, "identical": 4, "differing": []}
+    assert one.verdict == "identical" and one.metrics["frames"]["compared"] == 1 and "1 of 4 frames checked (the first)" in one.reasons
+    assert [c[0] for c in fake.calls] == ["sessionLoad", "exportMovie", "sessionLoad", "exportMovie"]
+    assert fake.calls[1][1]["long_side"] == 32
+    # one frame differs: the first is fine, so "one" stays identical and "range" says which frame
+    bad = list(good)
+    bad[2] = "e" * 64
+    fake, Studio = _movie_fake(tmp_path, bad)
+    with fake as f:
+        studio = Studio(json.loads(f.endpoint_file(tmp_path / "api2.json").read_text()))
+        rng = reproduce.reproduce(side, tmp_path / "range2", studio, frames="range")
+        one = reproduce.reproduce(side, tmp_path / "one2", studio)
+        tol = reproduce.reproduce(side, tmp_path / "range3", studio, frames="range", tolerance=5)
+    assert rng.verdict == "different" and rng.metrics["frames"]["differing"] == [2]
+    assert any("differing frame index(es): 2" in x for x in rng.reasons)
+    assert one.verdict == "identical"
+    assert tol.verdict == "different" and any("no tolerance was applied" in x for x in tol.reasons)
+
+
+def test_a_movie_replay_that_cannot_be_compared_says_so(tmp_path):
+    good = [f"{i:x}" * 64 for i in range(4)]
+    side = _movie_record(tmp_path, good)
+    cases = [
+        (good, {"bit_depth": 16}, "bit_depth"),
+        (good, {"width": 64}, "width"),
+        (good[:3], {}, "3 frames"),
+    ]
+    for n, (digests, extra, word) in enumerate(cases):
+        fake, Studio = _movie_fake(tmp_path, digests, **extra)
+        with fake as f:
+            studio = Studio(json.loads(f.endpoint_file(tmp_path / f"api{n}.json").read_text()))
+            r = reproduce.reproduce(side, tmp_path / f"c{n}", studio, frames="range")
+        assert r.verdict == "cannot_check" and not r.comparable and any(word in x for x in r.reasons), (word, r.reasons)
+    # Studio wrote no record beside the replayed movie
+    from pyheliofits.studio import Studio
+    from pyheliofits.testing import FakeStudio
+    fake = FakeStudio(handlers={"sessionLoad": lambda a: {"path": a["path"], "window": "this", "notes": []}})
+    fake.tools["sessionLoad"] = SESSION_LOAD
+    with fake as f:
+        studio = Studio(json.loads(f.endpoint_file(tmp_path / "api9.json").read_text()))
+        r = reproduce.reproduce(side, tmp_path / "c9", studio)
+    assert r.verdict == "cannot_check" and any("no frame digests" in x for x in r.reasons)
 
 
 def test_isolated_home_and_launch_command_guard(tmp_path):
