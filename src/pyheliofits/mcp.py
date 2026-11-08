@@ -26,6 +26,7 @@ from pyheliofits.core import rpc
 
 from . import cache
 from .errors import CommandError, StudioNotRunning
+from .core import __version__
 from .studio import Studio, bundled_commands
 
 CACHE_READ = frozenset({
@@ -100,6 +101,7 @@ def build(studio: Studio | None = None, read_only: bool = False, include_ui: boo
             return _fail(f"unknown tool {params.name}")
         target, _ = entry
         args = params.arguments or {}
+        _name_client(studio, ctx)
         try:
             if params.name.startswith("studio_"):
                 result = await anyio.to_thread.run_sync(lambda: studio.invoke(target, **args))
@@ -111,6 +113,18 @@ def build(studio: Studio | None = None, read_only: bool = False, include_ui: boo
                                     structured_content=result if isinstance(result, dict) else {"result": result})
 
     return Server("pyheliofits", version="0.1.0", on_list_tools=list_tools, on_call_tool=call_tool)
+
+
+def _name_client(studio: Studio, ctx) -> None:
+    """Tell Studio which MCP client is calling, so its footer reads "Driven by Claude Desktop via
+    heliofits-mcp" and the glow takes the assistant's colour. Best effort: a client that sent no
+    name is just "heliofits-mcp"."""
+    try:
+        info = ctx.session.client_params.client_info
+        name = f"{info.name} {info.version}".strip() if info else ""
+    except AttributeError:
+        name = ""
+    studio.client = f"heliofits-mcp/{__version__}" + (f"; {name}" if name else "")
 
 
 def _fail(text: str) -> types.CallToolResult:

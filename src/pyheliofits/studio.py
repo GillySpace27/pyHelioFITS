@@ -20,6 +20,7 @@ from typing import Any
 
 import jsonschema
 
+from .core import __version__
 from .errors import CommandError, StudioNotRunning
 
 ENDPOINT_ENV = "HFSTUDIO_API"
@@ -37,14 +38,22 @@ def bundled_commands() -> list[dict]:
     return json.loads(text)["tools"]
 
 
+def _header_safe(text: str) -> str:
+    """An HTTP header value: printable ASCII only (an MCP client may name itself with anything)."""
+    return "".join(c if 32 <= ord(c) < 127 else "?" for c in text)[:120]
+
+
 def snake(name: str) -> str:
     return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
 
 
 class Studio:
-    def __init__(self, endpoint: dict | None = None, timeout: float = 600.0):
+    def __init__(self, endpoint: dict | None = None, timeout: float = 600.0, client: str | None = None):
         self._endpoint = endpoint
         self.timeout = timeout
+        # Who Studio shows as driving it (footer chip, window glow colour): the X-HFS-Client header.
+        # heliofits-mcp sets "heliofits-mcp/<version>; <MCP client name>".
+        self.client = client or f"pyheliofits/{__version__}"
         self._tools: dict[str, dict] | None = None
 
     # connection ----------------------------------------------------------------------------
@@ -65,7 +74,8 @@ class Studio:
         body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params or {}}).encode()
         req = urllib.request.Request(
             f"http://127.0.0.1:{ep['port']}/rpc", data=body, method="POST",
-            headers={"Content-Type": "application/json", "Authorization": f"Bearer {ep['token']}"})
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {ep['token']}",
+                     "X-HFS-Client": _header_safe(self.client)})
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as r:
                 reply = json.loads(r.read())
