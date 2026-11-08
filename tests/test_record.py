@@ -397,3 +397,27 @@ def test_rpc_methods(lib, stocked, tmp_path):
                                              "params": {"record": bad}}))
     assert refused["error"]["code"] == RECORD_UNSUPPORTED
     server._pool.shutdown()
+
+
+def test_locate_finds_files_by_hash(lib, stocked):
+    aia = _sha(lib, stocked["aia"].relpath)
+    old = _sha(lib, stocked["punch_old"].relpath)
+    new = _sha(lib, stocked["punch_new"].relpath)
+    out = record.locate(lib.reader, lib.root, [aia, old, new, "0" * 64, "XYZ"])
+    assert out[aia]["status"] == "in_library"
+    assert out[aia]["path"] == str(lib.root / stocked["aia"].relpath)
+    assert out[aia]["relpath"] == stocked["aia"].relpath and out[aia]["file_id"] and out[aia]["observation_id"]
+    assert out[old]["status"] == "superseded" and out[old]["current"]["version"] == "0l"
+    assert out[new]["status"] == "in_library" and out[new]["current"] is None
+    assert out["0" * 64]["status"] == "missing" and out["0" * 64]["path"] is None
+    assert out["XYZ"]["status"] == "invalid"
+
+
+def test_locate_over_the_api(lib, stocked):
+    server = Server(lib, out=io.StringIO())
+    sha = _sha(lib, stocked["aia"].relpath)
+    out = server.handle_line(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "record.locate", "params": {"sha256": sha}}))
+    assert out["result"][sha]["status"] == "in_library"
+    bad = server.handle_line(json.dumps({"jsonrpc": "2.0", "id": 2, "method": "record.locate", "params": {"sha256": [1]}}))
+    assert bad["error"]["code"] == -32602
+    server._pool.shutdown()

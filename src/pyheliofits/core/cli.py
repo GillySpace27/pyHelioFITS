@@ -155,6 +155,8 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument("replay", type=Path, help="the replayed PNG")
     q.add_argument("--tolerance", type=int, default=None, help="largest allowed difference in levels for 'equivalent' (measured, never assumed)")
     q.add_argument("--diff", type=Path, default=None, help="write the difference image here")
+    q = rsub.add_parser("locate", help="where the library holds files, by SHA-256")
+    q.add_argument("sha256", nargs="+", help="one or more SHA-256 hex digests")
     q = rsub.add_parser("preflight", help="what a record says about replaying it, before anything is loaded")
     q.add_argument("file", type=Path, help="the exported file or its .hfrec sidecar")
     q = rsub.add_parser("migrate", help="rename .hfrec.json sidecars to .hfrec (shows the plan unless --yes)")
@@ -803,6 +805,17 @@ def _record_show(ns, out: "Output") -> int:
         out.show(rows, lambda r: "\n".join(f"{x['status']}: {x['from']} -> {x['to']}" for x in r)
                  or "No .hfrec.json sidecars found.")
         return PROBLEM if any(x["status"].startswith("error") for x in rows) else OK
+    if ns.record_cmd == "locate":
+        try:
+            lib = Library.open(ns.library, readonly=True)
+        except FileNotFoundError as exc:
+            return _fail(USAGE, str(exc))
+        try:
+            rows = hfrecord.locate(lib.reader, lib.root, ns.sha256)
+        finally:
+            lib.close()
+        out.show(rows, lambda r: "\n".join(f"{k[:12]}  {v['status']:<11} {v['path'] or ''}" for k, v in r.items()))
+        return PROBLEM if any(v["status"] != "in_library" for v in rows.values()) else OK
     if ns.record_cmd in ("digest", "verify", "preflight"):
         return _record_reproduce(ns, out)
     from . import report as hfreport

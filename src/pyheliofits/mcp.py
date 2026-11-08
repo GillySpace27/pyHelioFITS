@@ -33,7 +33,7 @@ CACHE_READ = frozenset({
     "library.versions", "library.collisions", "library.rejected", "dataset.get", "dataset.resolve",
     "dataset.query", "dataset.cadences", "library.coverage", "download.list", "download.get",
     "archive.search", "link.parse", "view.members", "view.list", "record.read", "record.resolve",
-    "record.digest", "record.verify", "settings.get"})
+    "record.digest", "record.verify", "record.locate", "settings.get"})
 CACHE_DESTRUCTIVE = frozenset({"library.reject", "library.unreject", "library.refetch", "download.cancel",
                                "settings.set"})
 
