@@ -24,14 +24,14 @@ order (grey, grey+alpha, RGB or RGBA; a palette image is expanded to RGB or RGBA
 a big-endian unsigned integer of `bit_depth` bits (8 or 16). The same picture gives the same digest
 from a PNG, from Studio's frame buffer before encoding, or from any decoder.
 
-The four verdicts of a comparison:
+The four verdicts of a comparison (the same four Studio shows; JSON values are lower case):
 
 | verdict | meaning |
 |---|---|
 | `identical` | equal `hfpix/1` digests |
 | `equivalent` | pixels differ by at most the tolerance given, and one was given |
 | `different` | beyond the tolerance, no tolerance given, or sizes differ. If both environments are known and equal, the report says so: that is a bug or a hidden input, not the GPU |
-| `cannot_replay` | the record (or the files at hand) do not allow a judgement |
+| `cannot_check` | nothing to compare against: no digest in the record and no original beside it, or no record. Whether an exact replay was ever promised is `preflight`'s answer, a separate question |
 
 ## Format 1.1 keys
 

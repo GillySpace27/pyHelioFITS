@@ -16,8 +16,12 @@ Four verdicts:
 * ``different``: the pixels differ beyond the tolerance, or the sizes differ. When the two
   environments are known to be the same, the report says so: that is a bug or a hidden input,
   not a GPU difference.
-* ``cannot_replay``: the record itself says an exact replay is not possible, or lacks what a
-  comparison needs (``preflight``).
+* ``cannot_check``: nothing to compare against (no digest in the record and no original beside
+  it, or no record at all). Whether a replay was ever promised exact is ``preflight``'s answer,
+  a separate question from how a given replay turned out.
+
+The four names are the ones HelioFITS Studio shows (Identical, Equivalent, Different, Cannot
+check); the JSON values are lower case with an underscore.
 
 PNG reading uses Pillow when it is installed (``pip install "pyheliofits[reproduce]"``) and a
 small pure-Python decoder otherwise, which is correct for the non-interlaced grey, RGB and RGBA
@@ -45,7 +49,7 @@ import numpy as np
 from .core import record as hfrecord
 
 DIGEST_FORMAT = "hfpix/1"
-VERDICTS = ("identical", "equivalent", "different", "cannot_replay")
+VERDICTS = ("identical", "equivalent", "different", "cannot_check")
 
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 # The chunks that carry the picture; everything else is ancillary and left out of content_sha256.
@@ -458,12 +462,12 @@ def verify(record_path: str | Path, replay: str | Path, *, tolerance: int | None
 
     With ``output.pixel_sha256`` in the record (format 1.1), the replay's digest is compared to it
     and the original file is not needed. Without it, the export beside the sidecar is read and
-    compared pixel by pixel; when that file is missing too, the verdict is ``cannot_replay``.
+    compared pixel by pixel; when that file is missing too, the verdict is ``cannot_check``.
     The replay's own sidecar, when it has one, supplies its environment for the report.
     """
     found = hfrecord.read(record_path)
     if not found.get("found"):
-        return Comparison("cannot_replay", str(record_path), str(replay),
+        return Comparison("cannot_check", str(record_path), str(replay),
                           reasons=[f"no processing record for {record_path}"], comparable=False)
     rec = found["record"]
     pre = preflight(rec)
@@ -492,7 +496,7 @@ def verify(record_path: str | Path, replay: str | Path, *, tolerance: int | None
                 result.comparable = False
                 result.reasons.append(f"the record says {w}x{h} and the replay is {image.width}x{image.height}")
     else:
-        return Comparison("cannot_replay", str(record_path), str(replay), comparable=False,
+        return Comparison("cannot_check", str(record_path), str(replay), comparable=False,
                           reasons=["the record has no pixel digest (format 1.0) and the export is not beside it"]
                           + pre["reasons"])
     result.reasons.extend(pre["reasons"])

@@ -126,7 +126,7 @@ API: dict[str, tuple[str, str]] = {
     "record.report": ("path, format='text', full=False", "A processing record as readable text: a report, a methods paragraph, LaTeX or a Python script."),
     "record.resolve": ("record", "Look a record's sources up in the library by SHA-256; groups the missing by dataset."),
     "record.digest": ("path", "The hfpix/1 pixel digest and the content digest of a PNG export (hfrecord 1.1, output.pixel_sha256)."),
-    "record.verify": ("record, replay, tolerance=None", "Judge a replayed PNG against an export's record: identical, equivalent, different or cannot_replay, with difference metrics."),
+    "record.verify": ("record, replay, tolerance=None", "Judge a replayed PNG against an export's record: identical, equivalent, different or cannot_check, with difference metrics."),
     "settings.get": ("", "HelioFITS Core's settings (jsoc_email, vso_mirrors, ...)."),
     "settings.set": ("key, value=None", "Set a setting; a null value removes it."),
     "search": ("query, source='fido', bins=240", "Old name of archive.search; answers the same."),

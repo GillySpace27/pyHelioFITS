@@ -163,7 +163,7 @@ def test_verify_against_a_record_with_and_without_the_original(tmp_path):
     del rec["output"]["pixel_sha256"]
     rec["hfrecord"] = "1.0"
     side.write_text(json.dumps(rec), encoding="utf-8")
-    assert reproduce.verify(side, replay).verdict == "cannot_replay"
+    assert reproduce.verify(side, replay).verdict == "cannot_check"
 
 
 def test_verify_notices_an_edited_original(tmp_path):

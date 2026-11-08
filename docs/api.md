@@ -789,7 +789,7 @@ Params: `record`, the `.hfrec` sidecar or the original export; `replay`, the rep
 `tolerance`, the largest difference in levels that still counts as `equivalent` (`None`, the
 default, allows only `identical`; a tolerance is something measured on named hardware, never
 assumed). Answers in the background; writes nothing. The `verdict` is `identical` (equal
-`hfpix/1` digests), `equivalent`, `different` or `cannot_replay`, with `metrics` (largest, mean
+`hfpix/1` digests), `equivalent`, `different` or `cannot_check`, with `metrics` (largest, mean
 and 99.9th-percentile difference, differing pixel count and fraction, first differing pixel),
 `environment.differences` between the record's `environment` block and the replay's own sidecar
 when it has one, and `reasons`, the sentences a person needs: the record's own reasons an exact
