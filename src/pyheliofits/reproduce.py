@@ -11,8 +11,14 @@ so a replay can be judged without the original file.
 Four verdicts:
 
 * ``identical``: the digests are equal.
-* ``equivalent``: the pixels differ by at most ``tolerance`` levels, and a tolerance was given.
-  Nothing here invents a tolerance; it has to come from measurement on named hardware.
+* ``equivalent``: the pixels differ, a tolerance was given and every one of its limits holds.
+  A tolerance is either a whole number (the largest difference in native levels) or a
+  ``Tolerance`` profile for renders on different GPUs: rounding noise of ``noise_levels`` may be
+  anywhere, at most ``max_outlier_fraction`` of the pixels may exceed it (edges), no sample may
+  exceed ``max_levels`` and the RMS may not exceed ``max_rms``. A profile never excuses a
+  difference between two environments known to be the same. Every profile states its basis:
+  the built-in ``cross-gpu-provisional`` is assumed, not measured, and says so in each report;
+  ``measure_tolerance`` derives a measured one from real pairs on named hardware.
 * ``different``: the pixels differ beyond the tolerance. When the two environments are known to
   be the same, the report says so: that is a bug or a hidden input, not a GPU difference.
 * ``cannot_check``: nothing to compare against (no digest in the record and no original beside
@@ -297,6 +303,86 @@ def digests(path: str | Path) -> dict:
 # ---- comparison -----------------------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class Tolerance:
+    """Limits under which two renders of one scene on different GPUs count as ``equivalent``.
+
+    All levels are 8-bit levels (1/255 of full scale), so one profile serves 8-bit and 16-bit
+    exports. ``basis`` is ``"measured"`` or ``"assumed"`` and ``source`` says on what.
+    """
+
+    name: str
+    noise_levels: float
+    max_outlier_fraction: float
+    max_levels: float
+    max_rms: float
+    basis: str = "assumed"
+    source: str = ""
+
+    def to_dict(self) -> dict:
+        return {"name": self.name, "noise_levels": self.noise_levels, "max_outlier_fraction": self.max_outlier_fraction,
+                "max_levels": self.max_levels, "max_rms": self.max_rms, "basis": self.basis, "source": self.source}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> Tolerance:
+        return cls(**{k: d[k] for k in ("name", "noise_levels", "max_outlier_fraction", "max_levels", "max_rms")},
+                   basis=d.get("basis", "assumed"), source=d.get("source", ""))
+
+
+# Built-in profiles. The numbers of "cross-gpu-provisional" are ASSUMED (rounding of one 8-bit level
+# anywhere, one pixel in a thousand off by up to 8 levels at edges); no pair of GPUs has been measured.
+PROFILES = {
+    "cross-gpu-provisional": Tolerance("cross-gpu-provisional", noise_levels=1.0, max_outlier_fraction=1e-3,
+                                       max_levels=8.0, max_rms=0.5, basis="assumed",
+                                       source="no hardware measured; replace with measure_tolerance() output"),
+}
+
+
+def resolve_tolerance(tolerance) -> int | Tolerance | None:
+    """A whole number of native levels, a ``Tolerance``, a profile name, a dict or a JSON file of one."""
+    if tolerance is None or isinstance(tolerance, Tolerance):
+        return tolerance
+    if isinstance(tolerance, dict):
+        return Tolerance.from_dict(tolerance)
+    if isinstance(tolerance, (int, np.integer)) and not isinstance(tolerance, bool):
+        return int(tolerance)
+    text = str(tolerance)
+    if text.lstrip("+").isdigit():
+        return int(text)
+    if text in PROFILES:
+        return PROFILES[text]
+    if Path(text).is_file():
+        return Tolerance.from_dict(json.loads(Path(text).read_text("utf-8")))
+    raise ValueError(f"unknown tolerance {text!r}: give a whole number, a profile file or one of {sorted(PROFILES)}")
+
+
+def measure_tolerance(pairs, name: str, source: str, *, margin: float = 1.5, noise_levels: float = 1.0) -> Tolerance:
+    """A measured profile from (original, replay) PNG path pairs rendered on the hardware ``source``
+    names: each limit is the largest value observed times ``margin``."""
+    worst = {"outlier_fraction": 0.0, "max_levels": 0.0, "rms": 0.0}
+    n = 0
+    for original, replay in pairs:
+        metrics, comparable = compare_images(read_image(original), read_image(replay))
+        if not comparable:
+            raise ValueError(f"{original} and {replay} differ in size, channels or bit depth")
+        scale = metrics["levels"] / 255.0
+        per8 = {"outlier_fraction": _outlier_fraction(read_image(original), read_image(replay), noise_levels),
+                "max_levels": metrics["max_abs_diff"] / scale, "rms": metrics["rms_diff"] / scale}
+        worst = {k: max(worst[k], per8[k]) for k in worst}
+        n += 1
+    if not n:
+        raise ValueError("no pairs to measure")
+    return Tolerance(name, noise_levels=noise_levels, max_outlier_fraction=worst["outlier_fraction"] * margin,
+                     max_levels=max(worst["max_levels"] * margin, noise_levels), max_rms=worst["rms"] * margin,
+                     basis="measured", source=f"{source}; {n} pair(s), margin x{margin:g}")
+
+
+def _outlier_fraction(a: Image, b: Image, noise_levels: float) -> float:
+    per_pixel = np.abs(a.samples.astype(np.int64) - b.samples.astype(np.int64)).max(axis=2)
+    limit = noise_levels * ((1 << a.bit_depth) - 1) / 255.0
+    return float(np.count_nonzero(per_pixel > limit)) / per_pixel.size if per_pixel.size else 0.0
+
+
 @dataclass
 class Comparison:
     verdict: str
@@ -305,7 +391,7 @@ class Comparison:
     original_digest: str | None = None
     replay_digest: str | None = None
     comparable: bool = True
-    tolerance: int | None = None
+    tolerance: int | str | Tolerance | None = None
     metrics: dict = field(default_factory=dict)
     environment: dict = field(default_factory=dict)
     reasons: list[str] = field(default_factory=list)
@@ -319,7 +405,7 @@ class Comparison:
             "original_digest": self.original_digest,
             "replay_digest": self.replay_digest,
             "comparable": self.comparable,
-            "tolerance": self.tolerance,
+            "tolerance": self.tolerance.to_dict() if isinstance(self.tolerance, Tolerance) else self.tolerance,
             "metrics": self.metrics,
             "environment": self.environment,
             "reasons": self.reasons,
@@ -343,7 +429,13 @@ class Comparison:
                 if m.get("first_difference"):
                     fd = m["first_difference"]
                     lines.append(f"First difference at row {fd['row']}, column {fd['column']}")
-        if self.tolerance is not None:
+        if isinstance(self.tolerance, Tolerance):
+            t = self.tolerance
+            lines.append(f"Tolerance: profile {t.name} ({t.basis}; {t.source}), in 8-bit levels: noise {t.noise_levels:g}, "
+                         f"at most {100 * t.max_outlier_fraction:g}% of pixels above it, max {t.max_levels:g}, RMS {t.max_rms:g}")
+            for name, c in (m.get("tolerance_checks") or {}).items():
+                lines.append(f"  {name}: {c['value']:.4g} (limit {c['limit']:g}) {'ok' if c['ok'] else 'EXCEEDED'}")
+        elif self.tolerance is not None:
             lines.append(f"Tolerance: {self.tolerance} level(s)")
         if self.environment.get("differences"):
             lines.append("Environment differences:")
@@ -358,12 +450,13 @@ class Comparison:
         return "\n".join(lines) + "\n"
 
 
-def compare_images(a: Image, b: Image, *, tolerance: int | None = None) -> tuple[dict, bool]:
+def compare_images(a: Image, b: Image, *, tolerance: int | str | Tolerance | None = None) -> tuple[dict, bool]:
     """Metrics between two decoded images. The second value says whether they were comparable
     (same size, channels and bit depth)."""
     metrics: dict[str, Any] = {"shape": {"original": list(a.shape), "replay": list(b.shape)}}
     if a.shape != b.shape:
         return metrics, False
+    tolerance = resolve_tolerance(tolerance)
     levels = (1 << a.bit_depth) - 1
     diff = np.abs(a.samples.astype(np.int64) - b.samples.astype(np.int64))
     per_pixel = diff.max(axis=2)
@@ -377,8 +470,22 @@ def compare_images(a: Image, b: Image, *, tolerance: int | None = None) -> tuple
         "p999_abs_diff": int(np.percentile(per_pixel, 99.9)) if per_pixel.size else 0,
         "differing_pixels": differing,
         "differing_fraction": differing / per_pixel.size if per_pixel.size else 0.0,
-        "within_tolerance": None if tolerance is None else bool(diff.max() <= tolerance) if diff.size else True,
+        "rms_diff": float(np.sqrt(np.mean(diff.astype(np.float64) ** 2))) if diff.size else 0.0,
     })
+    if isinstance(tolerance, Tolerance):
+        scale = levels / 255.0
+        outliers = int(np.count_nonzero(per_pixel > tolerance.noise_levels * scale))
+        checks = {
+            "max_levels": (metrics["max_abs_diff"] / scale, tolerance.max_levels),
+            "outlier_fraction": (outliers / per_pixel.size if per_pixel.size else 0.0, tolerance.max_outlier_fraction),
+            "rms": (metrics["rms_diff"] / scale, tolerance.max_rms),
+        }
+        metrics["outlier_pixels"] = outliers
+        metrics["tolerance_checks"] = {k: {"value": float(v), "limit": float(lim), "ok": bool(v <= lim)}
+                                       for k, (v, lim) in checks.items()}
+        metrics["within_tolerance"] = all(c["ok"] for c in metrics["tolerance_checks"].values())
+    else:
+        metrics["within_tolerance"] = None if tolerance is None else bool(metrics["max_abs_diff"] <= tolerance)
     if differing:
         rows, cols = np.nonzero(per_pixel)
         metrics["first_difference"] = {"row": int(rows[0]), "column": int(cols[0])}
@@ -423,15 +530,17 @@ def _dig(obj: dict, path: str):
     return cur
 
 
-def compare(original: str | Path, replay: str | Path, *, tolerance: int | None = None,
+def compare(original: str | Path, replay: str | Path, *, tolerance: int | str | Tolerance | None = None,
             original_environment: dict | None = None, replay_environment: dict | None = None,
             diff_out: str | Path | None = None) -> Comparison:
     """Compare two PNG files and give a verdict.
 
     ``identical`` when the hfpix/1 digests match. Otherwise ``equivalent`` only when a tolerance
-    was given and the largest difference is within it; else ``different``. When both environments
-    are given and equal, a difference is flagged as not explainable by hardware.
+    was given and the difference is within it; else ``different``. When both environments
+    are given and equal, a difference is flagged as not explainable by hardware, and a
+    ``Tolerance`` profile (which exists to absorb hardware differences) does not apply.
     """
+    tolerance = resolve_tolerance(tolerance)
     a = read_image(original)
     b = read_image(replay)
     da, db = pixel_digest(a), pixel_digest(b)
@@ -448,18 +557,23 @@ def compare(original: str | Path, replay: str | Path, *, tolerance: int | None =
         result.verdict = "cannot_check"
         result.reasons.append("the two images differ in size, channels or bit depth, so pixels were not compared")
         return result
-    if tolerance is not None and metrics["within_tolerance"]:
+    same_environment = bool(result.environment.get("compared")) and not result.environment["differences"]
+    if tolerance is not None and metrics["within_tolerance"] and not (same_environment and isinstance(tolerance, Tolerance)):
         result.verdict = "equivalent"
+        if isinstance(tolerance, Tolerance) and tolerance.basis != "measured":
+            result.reasons.append(f"tolerance profile {tolerance.name} is {tolerance.basis}, not measured on named hardware")
     elif tolerance is None:
         result.reasons.append("no tolerance was given; pass one measured on named hardware to allow 'equivalent'")
-    if result.environment.get("compared") and not result.environment["differences"]:
+    elif metrics["within_tolerance"]:
+        result.reasons.append(f"within profile {tolerance.name}, but a hardware tolerance does not apply to one environment")
+    if same_environment:
         result.reasons.append("the environments are the same, so this difference is a bug or a hidden input, not the GPU")
     if diff_out is not None:
         result.difference_image = str(write_png(diff_out, difference_image(a, b)))
     return result
 
 
-def verify(record_path: str | Path, replay: str | Path, *, tolerance: int | None = None,
+def verify(record_path: str | Path, replay: str | Path, *, tolerance: int | str | Tolerance | None = None,
            diff_out: str | Path | None = None) -> Comparison:
     """Judge a replayed PNG against a record.
 
@@ -643,7 +757,7 @@ def launch_studio(command: list[str], home: str | Path, *, timeout: float = 120.
 
 
 def reproduce(record_path: str | Path, out_dir: str | Path, studio, *, frames: str = "one",
-              tolerance: int | None = None, diff: bool = True) -> Comparison:
+              tolerance: int | str | Tolerance | None = None, diff: bool = True) -> Comparison:
     """Replay an export from its record in an isolated Studio, then judge the picture.
 
     ``studio`` is a ``pyheliofits.studio.Studio`` client of an instance you can lose the session
@@ -706,7 +820,7 @@ def reproduce(record_path: str | Path, out_dir: str | Path, studio, *, frames: s
 
 
 def _reproduce_movie(studio, sidecar: Path, rec: dict, pre: dict, out: dict, out_dir: Path, frames: str,
-                     notes: list[str], long_side: int | None, tolerance: int | None = None) -> Comparison:
+                     notes: list[str], long_side: int | None, tolerance: int | str | Tolerance | None = None) -> Comparison:
     """Judge a movie record frame by frame. A still export is always 16-bit and a movie's frames are
     often 8-bit, so a frame cannot be re-exported as a still and compared; instead the replay exports
     its own movie, whose record carries its own ``output.frame_digests``, taken before encoding. Those are
@@ -787,13 +901,13 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("compare", help="compare two PNGs")
     p.add_argument("original", type=Path)
     p.add_argument("replay", type=Path)
-    p.add_argument("--tolerance", type=int, default=None, help="largest allowed difference in levels for 'equivalent'")
+    p.add_argument("--tolerance", type=resolve_tolerance, default=None, help="for 'equivalent': largest difference in levels, a profile name (cross-gpu-provisional) or a profile JSON file")
     p.add_argument("--diff", type=Path, default=None, help="write the difference image here")
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("verify", help="judge a replayed PNG against an export's record")
     p.add_argument("record", type=Path, help="the .hfrec sidecar or the original export")
     p.add_argument("replay", type=Path)
-    p.add_argument("--tolerance", type=int, default=None)
+    p.add_argument("--tolerance", type=resolve_tolerance, default=None)
     p.add_argument("--diff", type=Path, default=None)
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("run", help="replay a record in an isolated Studio and judge the picture")
@@ -802,7 +916,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--launch", nargs=argparse.REMAINDER, required=True, metavar="COMMAND",
                    help='what starts Studio, with {home}, e.g. --launch java -Duser.home={home} -jar HFStudio.jar')
     p.add_argument("--range", action="store_true", help="load every frame of a movie, not the first")
-    p.add_argument("--tolerance", type=int, default=None)
+    p.add_argument("--tolerance", type=resolve_tolerance, default=None)
     p.add_argument("--json", action="store_true")
     p = sub.add_parser("preflight", help="what a record says about replaying it")
     p.add_argument("record", type=Path)

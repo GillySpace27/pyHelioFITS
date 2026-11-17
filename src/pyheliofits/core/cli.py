@@ -153,7 +153,7 @@ def build_parser() -> argparse.ArgumentParser:
     q = rsub.add_parser("verify", help="judge a replayed PNG against an export's record: identical, equivalent or different")
     q.add_argument("record", type=Path, help="the .hfrec sidecar or the original export")
     q.add_argument("replay", type=Path, help="the replayed PNG")
-    q.add_argument("--tolerance", type=int, default=None, help="largest allowed difference in levels for 'equivalent' (measured, never assumed)")
+    q.add_argument("--tolerance", default=None, help="for 'equivalent': largest difference in levels, a profile name (cross-gpu-provisional, assumed) or a measured profile JSON file")
     q.add_argument("--diff", type=Path, default=None, help="write the difference image here")
     q = rsub.add_parser("locate", help="where the library holds files, by SHA-256")
     q.add_argument("sha256", nargs="+", help="one or more SHA-256 hex digests")
