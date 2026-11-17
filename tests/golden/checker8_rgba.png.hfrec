@@ -1,0 +1,748 @@
+{
+ "caveats": [
+  "RHEF output (the PUNCH layer) is a visualization, not a calibrated radiance.",
+  "Display-referred render: pixel values are colours, not measured quantities."
+ ],
+ "citations": [
+  "M\u00fcller et al. (2017), Astronomy & Astrophysics, https://doi.org/10.1051/0004-6361/201730893",
+  "Gilly & Cranmer (2025), Solar Physics, https://doi.org/10.1007/s11207-025-02578-x"
+ ],
+ "created": "2026-10-22T00:00:00Z",
+ "hfrecord": "1.1",
+ "layers": [
+  {
+   "dataset": {
+    "dataset_key": "punch/wfi+nfi-mosaic/-/cam/3/530",
+    "detector": null,
+    "instrument": "WFI+NFI Mosaic",
+    "label": "PUNCH WFI+NFI Mosaic 530 \u00c5 CAM L3",
+    "level": "3",
+    "observatory": "PUNCH",
+    "product": "CAM",
+    "wavelength": 530.0
+   },
+   "enabled": true,
+   "id": "00000000-0000-4000-8000-000000000003",
+   "name": "PUNCH WFI+NFI Mosaic 530 \u00c5 CAM L3",
+   "native": {
+    "className": "org.helioviewer.jhv.layers.ImageLayer",
+    "data": {
+     "filter": "RHEF",
+     "imageParams": {
+      "alpha": 1000,
+      "beta": 0.015625,
+      "blend": 1,
+      "brightOffset": 0,
+      "brightScale": 1,
+      "clippingMax": 500,
+      "clippingMin": -500,
+      "clippingMode": "Percentile05",
+      "color": {
+       "blue": true,
+       "green": true,
+       "red": true
+      },
+      "colorbar": false,
+      "differenceMode": "None",
+      "enhanced": 0,
+      "gamma": 0.45454545454545453,
+      "innerMask": 0,
+      "invert": false,
+      "lut": "PUNCH",
+      "opacity": 1,
+      "outerMask": null,
+      "plane": 0,
+      "scalingMode": "Gamma",
+      "sectorCenter": 0,
+      "sectorWidth": 0,
+      "sharpen": 0,
+      "slitLeft": 0,
+      "slitRight": 1,
+      "upsilonHigh": 0.4,
+      "upsilonLow": 0.6
+     },
+     "uris": [
+      "file:~/HeliadLibrary/store/punch/wfi+nfi-mosaic/cam/3/530/2025/09/21/PUNCH_L3_CAM_20250921203200_v0l_ec8c0ee013a3.fits"
+     ]
+    },
+    "enabled": true,
+    "id": "00000000-0000-4000-8000-000000000003",
+    "name": "PUNCH WFI+NFI Mosaic 530 \u00c5 CAM L3"
+   },
+   "source_set_sha256": "78e80238e1904da69c2b3fbcc7fb0f748a60c706c009a9b3a892815e308f91ba",
+   "source_spec": {
+    "kind": "heliad_library"
+   },
+   "sources": [
+    {
+     "date_obs": "2025-09-21T20:32:00.000",
+     "file_version": "0l",
+     "heliad_obs_key": "punch/wfi+nfi-mosaic/-/cam/3/530|2025-09-21T20:32:00.000",
+     "in_library": true,
+     "original_name": "PUNCH_L3_CAM_20250921203200_v0l_ec8c0ee013a3.fits",
+     "sha256": "ff137546539262b73c8de8a056fd8aef56304a87673d93edcfb8436dcaaefbaa",
+     "size": 25283520,
+     "source_url": null
+    }
+   ],
+   "steps": [
+    {
+     "op": "select_plane",
+     "params": {
+      "plane": 0
+     },
+     "stage": "decode"
+    },
+    {
+     "caveat": "Percentile05 ignores clippingMin/Max; the bounds Studio computed for this frame go in resolved (Studio fills them at export; left null here).",
+     "op": "clip",
+     "params": {
+      "clippingMax": 500,
+      "clippingMin": -500,
+      "clippingMode": "Percentile05"
+     },
+     "resolved": {
+      "high": null,
+      "low": null
+     },
+     "stage": "decode"
+    },
+    {
+     "algorithm": "Gamma",
+     "op": "stretch",
+     "params": {
+      "gamma": 0.45454545454545453,
+      "scalingMode": "Gamma"
+     },
+     "stage": "decode"
+    },
+    {
+     "algorithm": "RHEF",
+     "caveat": "not a calibrated radiance",
+     "citation": "Gilly & Cranmer (2025), Solar Physics, https://doi.org/10.1007/s11207-025-02578-x",
+     "implementation": "hfstudio-java",
+     "op": "image_filter",
+     "params": {
+      "filter": "RHEF"
+     },
+     "stage": "cpu",
+     "stamp": "RHEF oRHEF-2.0 via hfstudio-java <version>; upsilon=0.6,0.4; deviations=RANK-N1,POS-ONLY,FP16,MIN-BIN,GEOM-PX,UPS-EXT,DTYPE-IN"
+    },
+    {
+     "op": "levels",
+     "params": {
+      "brightOffset": 0,
+      "brightScale": 1
+     },
+     "stage": "gpu"
+    },
+    {
+     "op": "radial_gain",
+     "params": {
+      "enhanced": 0
+     },
+     "stage": "gpu"
+    },
+    {
+     "op": "difference",
+     "params": {
+      "differenceMode": "None"
+     },
+     "stage": "gpu"
+    },
+    {
+     "op": "sharpen",
+     "params": {
+      "sharpen": 0
+     },
+     "stage": "gpu"
+    },
+    {
+     "algorithm": "RHEF",
+     "citation": "Gilly & Cranmer (2025), Eq. 2 (as cited in imageCommon.frag)",
+     "implementation": "hfstudio-glsl",
+     "op": "rhef_upsilon",
+     "params": {
+      "upsilonHigh": 0.4,
+      "upsilonLow": 0.6
+     },
+     "stage": "gpu"
+    },
+    {
+     "op": "colormap",
+     "params": {
+      "invert": false,
+      "lut": "PUNCH"
+     },
+     "stage": "gpu"
+    },
+    {
+     "op": "channel_mask",
+     "params": {
+      "color": {
+       "blue": true,
+       "green": true,
+       "red": true
+      }
+     },
+     "stage": "gpu"
+    },
+    {
+     "op": "geometric_mask",
+     "params": {
+      "innerMask": 0,
+      "outerMask": null,
+      "sectorCenter": 0,
+      "sectorWidth": 0,
+      "slitLeft": 0,
+      "slitRight": 1
+     },
+     "stage": "gpu"
+    },
+    {
+     "op": "opacity_blend",
+     "params": {
+      "blend": 1,
+      "opacity": 1
+     },
+     "stage": "gpu"
+    }
+   ]
+  },
+  {
+   "dataset": {
+    "dataset_key": "proba-3/aspiics/-/-/3/5508",
+    "detector": null,
+    "instrument": "ASPIICS",
+    "label": "Proba-3 ASPIICS 5508 \u00c5 L3",
+    "level": "3",
+    "observatory": "Proba-3",
+    "product": null,
+    "wavelength": 5508.0
+   },
+   "enabled": true,
+   "id": "00000000-0000-4000-8000-000000000002",
+   "name": "Proba-3 ASPIICS 5508 \u00c5 L3",
+   "native": {
+    "className": "org.helioviewer.jhv.layers.ImageLayer",
+    "data": {
+     "filter": "None",
+     "imageParams": {
+      "alpha": 1000,
+      "beta": 0.015625,
+      "blend": 1,
+      "brightOffset": 0,
+      "brightScale": 1,
+      "clippingMax": 500,
+      "clippingMin": -500,
+      "clippingMode": "Percentile05",
+      "color": {
+       "blue": true,
+       "green": true,
+       "red": true
+      },
+      "colorbar": false,
+      "differenceMode": "None",
+      "enhanced": 0,
+      "gamma": 0.45454545454545453,
+      "innerMask": 0,
+      "invert": false,
+      "lut": "ASPIICS WBF",
+      "opacity": 1,
+      "outerMask": null,
+      "plane": 0,
+      "scalingMode": "Gamma",
+      "sectorCenter": 0,
+      "sectorWidth": 0,
+      "sharpen": 0,
+      "slitLeft": 0,
+      "slitRight": 1,
+      "upsilonHigh": 0.4,
+      "upsilonLow": 0.6
+     },
+     "uris": [
+      "file:~/HeliadLibrary/store/proba-3/aspiics/3/5511/2025/09/21/aspiics_bt_l3_20250921T203111_163040370004_v03.fits"
+     ]
+    },
+    "enabled": true,
+    "id": "00000000-0000-4000-8000-000000000002",
+    "name": "Proba-3 ASPIICS 5508 \u00c5 L3"
+   },
+   "source_set_sha256": "7abcedb1a6eafaf96159d5d80a1963f5d1d4d6155e4be0fda0e6b90cd7313380",
+   "source_spec": {
+    "kind": "heliad_library"
+   },
+   "sources": [
+    {
+     "date_obs": "2025-09-21T20:31:11.394",
+     "file_version": "03",
+     "heliad_obs_key": "proba-3/aspiics/-/-/3/5508|seq:163040370004",
+     "in_library": true,
+     "original_name": "aspiics_bt_l3_20250921T203111_163040370004_v03.fits",
+     "sha256": "a419e5b7a07655c77fcdafc39e76a08a370a9eb438a6792642003597d1277d7b",
+     "size": 16793280,
+     "source_url": null
+    }
+   ],
+   "steps": [
+    {
+     "op": "select_plane",
+     "params": {
+      "plane": 0
+     },
+     "stage": "decode"
+    },
+    {
+     "caveat": "Percentile05 ignores clippingMin/Max; the bounds Studio computed for this frame go in resolved (Studio fills them at export; left null here).",
+     "op": "clip",
+     "params": {
+      "clippingMax": 500,
+      "clippingMin": -500,
+      "clippingMode": "Percentile05"
+     },
+     "resolved": {
+      "high": null,
+      "low": null
+     },
+     "stage": "decode"
+    },
+    {
+     "algorithm": "Gamma",
+     "op": "stretch",
+     "params": {
+      "gamma": 0.45454545454545453,
+      "scalingMode": "Gamma"
+     },
+     "stage": "decode"
+    },
+    {
+     "op": "levels",
+     "params": {
+      "brightOffset": 0,
+      "brightScale": 1
+     },
+     "stage": "gpu"
+    },
+    {
+     "op": "radial_gain",
+     "params": {
+      "enhanced": 0
+     },
+     "stage": "gpu"
+    },
+    {
+     "op": "difference",
+     "params": {
+      "differenceMode": "None"
+     },
+     "stage": "gpu"
+    },
+    {
+     "op": "sharpen",
+     "params": {
+      "sharpen": 0
+     },
+     "stage": "gpu"
+    },
+    {
+     "op": "colormap",
+     "params": {
+      "invert": false,
+      "lut": "ASPIICS WBF"
+     },
+     "stage": "gpu"
+    },
+    {
+     "op": "channel_mask",
+     "params": {
+      "color": {
+       "blue": true,
+       "green": true,
+       "red": true
+      }
+     },
+     "stage": "gpu"
+    },
+    {
+     "op": "geometric_mask",
+     "params": {
+      "innerMask": 0,
+      "outerMask": null,
+      "sectorCenter": 0,
+      "sectorWidth": 0,
+      "slitLeft": 0,
+      "slitRight": 1
+     },
+     "stage": "gpu"
+    },
+    {
+     "op": "opacity_blend",
+     "params": {
+      "blend": 1,
+      "opacity": 1
+     },
+     "stage": "gpu"
+    }
+   ]
+  },
+  {
+   "dataset": {
+    "dataset_key": "sdo/aia/-/-/1/193",
+    "detector": null,
+    "instrument": "AIA",
+    "label": "SDO AIA 193 \u00c5 L1",
+    "level": "1",
+    "observatory": "SDO",
+    "product": null,
+    "wavelength": 193.0
+   },
+   "enabled": true,
+   "id": "00000000-0000-4000-8000-000000000001",
+   "name": "SDO AIA 193 \u00c5 L1",
+   "native": {
+    "className": "org.helioviewer.jhv.layers.ImageLayer",
+    "data": {
+     "filter": "None",
+     "imageParams": {
+      "alpha": 1000,
+      "beta": 0.015625,
+      "blend": 1,
+      "brightOffset": 0,
+      "brightScale": 1,
+      "clippingMax": 500,
+      "clippingMin": -500,
+      "clippingMode": "Percentile05",
+      "color": {
+       "blue": true,
+       "green": true,
+       "red": true
+      },
+      "colorbar": false,
+      "differenceMode": "None",
+      "enhanced": 0,
+      "gamma": 0.45454545454545453,
+      "innerMask": 0,
+      "invert": false,
+      "lut": "SDO-AIA 193 \u00c5",
+      "opacity": 1,
+      "outerMask": null,
+      "plane": 0,
+      "scalingMode": "Gamma",
+      "sectorCenter": 0,
+      "sectorWidth": 0,
+      "sharpen": 0,
+      "slitLeft": 0,
+      "slitRight": 1,
+      "upsilonHigh": 0.4,
+      "upsilonLow": 0.6
+     },
+     "uris": [
+      "file:~/HeliadLibrary/store/sdo/aia/1/193/2025/09/21/aia.lev1.193A_2025_09_21T20_32_04.84Z.image_lev1.fits"
+     ]
+    },
+    "enabled": true,
+    "id": "00000000-0000-4000-8000-000000000001",
+    "master": true,
+    "name": "SDO AIA 193 \u00c5 L1"
+   },
+   "source_set_sha256": "e5deb2ba6016fdc7150bd2097548d811ea16884d02438b0b9e74b652db718dae",
+   "source_spec": {
+    "kind": "heliad_library"
+   },
+   "sources": [
+    {
+     "date_obs": "2025-09-21T20:32:04.840",
+     "file_version": null,
+     "heliad_obs_key": "sdo/aia/-/-/1/193|2025-09-21T20:32:04.840",
+     "in_library": true,
+     "original_name": "aia.lev1.193A_2025_09_21T20_32_04.84Z.image_lev1.fits",
+     "sha256": "1f09abb6d92765c94ff670d3c36460589beeaeb99abcbcdb9c9e7b7f9d727f04",
+     "size": 12009600,
+     "source_url": null
+    }
+   ],
+   "steps": [
+    {
+     "op": "select_plane",
+     "params": {
+      "plane": 0
+     },
+     "stage": "decode"
+    },
+    {
+     "caveat": "Percentile05 ignores clippingMin/Max; the bounds Studio computed for this frame go in resolved (Studio fills them at export; left null here).",
+     "op": "clip",
+     "params": {
+      "clippingMax": 500,
+      "clippingMin": -500,
+      "clippingMode": "Percentile05"
+     },
+     "resolved": {
+      "high": null,
+      "low": null
+     },
+     "stage": "decode"
+    },
+    {
+     "algorithm": "Gamma",
+     "op": "stretch",
+     "params": {
+      "gamma": 0.45454545454545453,
+      "scalingMode": "Gamma"
+     },
+     "stage": "decode"
+    },
+    {
+     "op": "levels",
+     "params": {
+      "brightOffset": 0,
+      "brightScale": 1
+     },
+     "stage": "gpu"
+    },
+    {
+     "op": "radial_gain",
+     "params": {
+      "enhanced": 0
+     },
+     "stage": "gpu"
+    },
+    {
+     "op": "difference",
+     "params": {
+      "differenceMode": "None"
+     },
+     "stage": "gpu"
+    },
+    {
+     "op": "sharpen",
+     "params": {
+      "sharpen": 0
+     },
+     "stage": "gpu"
+    },
+    {
+     "op": "colormap",
+     "params": {
+      "invert": false,
+      "lut": "SDO-AIA 193 \u00c5"
+     },
+     "stage": "gpu"
+    },
+    {
+     "op": "channel_mask",
+     "params": {
+      "color": {
+       "blue": true,
+       "green": true,
+       "red": true
+      }
+     },
+     "stage": "gpu"
+    },
+    {
+     "op": "geometric_mask",
+     "params": {
+      "innerMask": 0,
+      "outerMask": null,
+      "sectorCenter": 0,
+      "sectorWidth": 0,
+      "slitLeft": 0,
+      "slitRight": 1
+     },
+     "stage": "gpu"
+    },
+    {
+     "op": "opacity_blend",
+     "params": {
+      "blend": 1,
+      "opacity": 1
+     },
+     "stage": "gpu"
+    }
+   ]
+  }
+ ],
+ "native": {
+  "studio_session": {
+   "org.helioviewer.jhv.state": {
+    "_elided": "layers, annotations, playback, recording, automation, plugins: written in full by State.snapshot()",
+    "imageLayers": [
+     {
+      "className": "org.helioviewer.jhv.layers.ImageLayer",
+      "data": {
+       "filter": "RHEF",
+       "imageParams": {
+        "alpha": 1000,
+        "beta": 0.015625,
+        "blend": 1,
+        "brightOffset": 0,
+        "brightScale": 1,
+        "clippingMax": 500,
+        "clippingMin": -500,
+        "clippingMode": "Percentile05",
+        "color": {
+         "blue": true,
+         "green": true,
+         "red": true
+        },
+        "colorbar": false,
+        "differenceMode": "None",
+        "enhanced": 0,
+        "gamma": 0.45454545454545453,
+        "innerMask": 0,
+        "invert": false,
+        "lut": "PUNCH",
+        "opacity": 1,
+        "outerMask": null,
+        "plane": 0,
+        "scalingMode": "Gamma",
+        "sectorCenter": 0,
+        "sectorWidth": 0,
+        "sharpen": 0,
+        "slitLeft": 0,
+        "slitRight": 1,
+        "upsilonHigh": 0.4,
+        "upsilonLow": 0.6
+       },
+       "uris": [
+        "file:~/HeliadLibrary/store/punch/wfi+nfi-mosaic/cam/3/530/2025/09/21/PUNCH_L3_CAM_20250921203200_v0l_ec8c0ee013a3.fits"
+       ]
+      },
+      "enabled": true,
+      "id": "00000000-0000-4000-8000-000000000003",
+      "name": "PUNCH WFI+NFI Mosaic 530 \u00c5 CAM L3"
+     },
+     {
+      "className": "org.helioviewer.jhv.layers.ImageLayer",
+      "data": {
+       "filter": "None",
+       "imageParams": {
+        "alpha": 1000,
+        "beta": 0.015625,
+        "blend": 1,
+        "brightOffset": 0,
+        "brightScale": 1,
+        "clippingMax": 500,
+        "clippingMin": -500,
+        "clippingMode": "Percentile05",
+        "color": {
+         "blue": true,
+         "green": true,
+         "red": true
+        },
+        "colorbar": false,
+        "differenceMode": "None",
+        "enhanced": 0,
+        "gamma": 0.45454545454545453,
+        "innerMask": 0,
+        "invert": false,
+        "lut": "ASPIICS WBF",
+        "opacity": 1,
+        "outerMask": null,
+        "plane": 0,
+        "scalingMode": "Gamma",
+        "sectorCenter": 0,
+        "sectorWidth": 0,
+        "sharpen": 0,
+        "slitLeft": 0,
+        "slitRight": 1,
+        "upsilonHigh": 0.4,
+        "upsilonLow": 0.6
+       },
+       "uris": [
+        "file:~/HeliadLibrary/store/proba-3/aspiics/3/5511/2025/09/21/aspiics_bt_l3_20250921T203111_163040370004_v03.fits"
+       ]
+      },
+      "enabled": true,
+      "id": "00000000-0000-4000-8000-000000000002",
+      "name": "Proba-3 ASPIICS 5508 \u00c5 L3"
+     },
+     {
+      "className": "org.helioviewer.jhv.layers.ImageLayer",
+      "data": {
+       "filter": "None",
+       "imageParams": {
+        "alpha": 1000,
+        "beta": 0.015625,
+        "blend": 1,
+        "brightOffset": 0,
+        "brightScale": 1,
+        "clippingMax": 500,
+        "clippingMin": -500,
+        "clippingMode": "Percentile05",
+        "color": {
+         "blue": true,
+         "green": true,
+         "red": true
+        },
+        "colorbar": false,
+        "differenceMode": "None",
+        "enhanced": 0,
+        "gamma": 0.45454545454545453,
+        "innerMask": 0,
+        "invert": false,
+        "lut": "SDO-AIA 193 \u00c5",
+        "opacity": 1,
+        "outerMask": null,
+        "plane": 0,
+        "scalingMode": "Gamma",
+        "sectorCenter": 0,
+        "sectorWidth": 0,
+        "sharpen": 0,
+        "slitLeft": 0,
+        "slitRight": 1,
+        "upsilonHigh": 0.4,
+        "upsilonLow": 0.6
+       },
+       "uris": [
+        "file:~/HeliadLibrary/store/sdo/aia/1/193/2025/09/21/aia.lev1.193A_2025_09_21T20_32_04.84Z.image_lev1.fits"
+       ]
+      },
+      "enabled": true,
+      "id": "00000000-0000-4000-8000-000000000001",
+      "master": true,
+      "name": "SDO AIA 193 \u00c5 L1"
+     }
+    ],
+    "time": "2025-09-21T20:32:00"
+   }
+  }
+ },
+ "output": {
+  "bit_depth": 8,
+  "colorspace": "sRGB",
+  "display_referred": true,
+  "file_name": "checker8_rgba.png",
+  "height": 32,
+  "kind": "still",
+  "media_type": "image/png",
+  "pixel_sha256": "ac1961e444a4e400be66c219e4aa9ac0dfdfb0eaefb55a03c9d564a61e5e7266",
+  "sha256": "df9d5cb22a4fedfd9fd555a58ebaefa4964e530afff2544c36593a299210edd3",
+  "width": 48
+ },
+ "producer": {
+  "build_id": "<AppInfo.buildId()>",
+  "commit": "<AppInfo.commit()>",
+  "dirty": false,
+  "program": "HelioFITS Studio",
+  "stamp": "<AppInfo.stamp()>",
+  "version": "<VERSION>"
+ },
+ "reader_compat": 1,
+ "record_id": "00000000-0000-4000-8000-000000000000",
+ "scene": {
+  "camera_width": null,
+  "overlays": [],
+  "projection": "<Display.mode>",
+  "time": "2025-09-21T20:32:00Z",
+  "viewpoint": {
+   "location": "Earth"
+  }
+ },
+ "snapshot": {
+  "changed_during_export": false,
+  "taken": "export_start"
+ },
+ "summary": "HelioFITS Studio <version>, still at 2025-09-21T20:32:00Z.\n1. PUNCH WFI+NFI Mosaic 530 nm CAM L3: 1 frame, RHEF, LUT PUNCH (RHEF output is a visualization, not a calibrated radiance)\n2. Proba-3 ASPIICS 550.8 nm L3: 1 frame, no filter, LUT ASPIICS WBF\n3. SDO AIA 193 \u00c5 L1: 1 frame, no filter, LUT SDO-AIA 193 \u00c5\nCite: M\u00fcller et al. (2017); Gilly & Cranmer (2025)."
+}
