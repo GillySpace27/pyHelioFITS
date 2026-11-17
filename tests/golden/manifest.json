@@ -1,0 +1,14 @@
+{
+ "checker8_rgba": {
+  "pixel_sha256": "ac1961e444a4e400be66c219e4aa9ac0dfdfb0eaefb55a03c9d564a61e5e7266"
+ },
+ "disk16_rgb": {
+  "pixel_sha256": "f2cab5d6f9bf02e43b70feafce524d4d46cb701295a3ab15dea6fbd383b96110"
+ },
+ "gradient8_rgb": {
+  "pixel_sha256": "ea0bfe8ee36880626cd6a20426a8f5cfe8de2b26c696d1bff000657f0b6b6d78"
+ },
+ "ramp16_gray": {
+  "pixel_sha256": "e835e19a74ac9e0cb4ae2c6003e2573318241618a40c9a5e5b2289529282f8f9"
+ }
+}
