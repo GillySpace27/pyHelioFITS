@@ -29,7 +29,7 @@ The four verdicts of a comparison (the same four Studio shows; JSON values are l
 | verdict | meaning |
 |---|---|
 | `identical` | equal `hfpix/1` digests |
-| `equivalent` | pixels differ by at most the tolerance given, and one was given |
+| `equivalent` | pixels differ, a tolerance was given and all of its limits hold (see "Tolerance across GPUs") |
 | `different` | beyond the tolerance, or no tolerance given. If both environments are known and equal, the report says so: that is a bug or a hidden input, not the GPU |
 | `cannot_check` | nothing to compare against (no digest in the record and no original beside it, or no record), or the sizes differ, which is the replay's export at fault rather than the picture. Whether an exact replay was ever promised is `preflight`'s answer, a separate question |
 
@@ -160,3 +160,30 @@ All of this is one machine and one GPU; no cross-GPU tolerance has been measured
 * EXR frames and movies' encoded bytes: Studio digests frames before encoding; this reader opens PNGs only.
 * The tolerance table: measured by replaying a golden set on two renderers (release gate
   `release/replay.sh`, companion of `release/parity.sh`).
+
+## Tolerance across GPUs
+
+Two GPUs do not round alike, so a replay on other hardware is judged by a tolerance profile
+(`reproduce.Tolerance`), in 8-bit levels (1/255 of full scale) for 8-bit and 16-bit exports alike:
+
+| Limit | Meaning | `cross-gpu-provisional` (assumed) |
+|---|---|---|
+| `noise_levels` | a difference this small may be anywhere | 1 |
+| `max_outlier_fraction` | share of pixels allowed above the noise (edges) | 0.001 |
+| `max_levels` | no sample may differ by more | 8 |
+| `max_rms` | RMS difference over all samples | 0.5 |
+
+`equivalent` needs all three checks to hold; the report lists each value beside its limit. A profile
+never applies when both environments are known and equal: that difference stays `different`.
+
+The built-in numbers are **assumed, not measured**, and every report that uses them says so. Replace
+them with a measured profile once two machines have rendered the same records:
+
+```python
+t = reproduce.measure_tolerance([("mac/a.png", "nvidia/a.png"), ...], "apple-m4-vs-rtx", "M4 Max vs RTX 4070", margin=1.5)
+json.dump(t.to_dict(), open("profile.json", "w"))
+```
+
+Pass a profile by name or file anywhere a tolerance goes: `--tolerance cross-gpu-provisional`,
+`--tolerance profile.json`, `tolerance=t`, or `HFS_REPLAY_TOLERANCE` for the live replay gate.
+Movie frames are still compared by digest only.
