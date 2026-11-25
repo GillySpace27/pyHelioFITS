@@ -1,5 +1,10 @@
 # pyHelioFITS
 
+[![CI](https://github.com/GillySpace27/pyHelioFITS/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/GillySpace27/pyHelioFITS/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/pyheliofits)](https://pypi.org/project/pyheliofits/)
+[![Python](https://img.shields.io/pypi/pyversions/pyheliofits)](https://pypi.org/project/pyheliofits/)
+[![License: MPL-2.0](https://img.shields.io/badge/License-MPL--2.0-blue.svg)](https://github.com/GillySpace27/pyHelioFITS/blob/main/LICENSE)
+
 The Python side of the HelioFITS Suite, one package: `pip install pyheliofits`, then `import pyheliofits as hf`.
 
     from pyheliofits import core, studio, cache
